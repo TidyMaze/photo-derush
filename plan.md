@@ -62,3 +62,38 @@ SQLite (feedback + models)
 1. Aesthetic model isn’t retrained per‑user yet (fine‑tune hook exists, not wired).
 2. No GUI; CLI is fine for grown‑ups but your art‑director cousin will whine.
 3. Face/subject weighting: right now a blurry picture of a rare smile still lands in trash.
+
+## TODO
+
+### Features to Implement Next
+
+1. **Duplicate Slayer**
+   - Integrate dHash and FAISS for clustering near-identical images.
+   - Select sharpest/prettiest image in each cluster.
+2. **Blur & Dull Detector**
+   - Add OpenCV-based blur detection (Variance-of-Laplacian).
+   - Integrate NIMA aesthetic scoring (MobileNet-V2 checkpoint).
+3. **Auto-Decision Rules**
+   - Apply default thresholds and support learned rules if model exists.
+4. **Soft Deletes**
+   - Move files to workspace/trash/{duplicates,blurry,dull} instead of deleting.
+   - Implement undo (restore from trash).
+5. **Feedback Loop**
+   - Store user overrides in SQLite.
+   - Nightly/on-demand retrain: StandardScaler ➜ GradientBoostingClassifier.
+   - Update thresholds to 95th percentile of trash images.
+6. **Active Learning**
+   - Implement uncertainty sampling for efficient labeling.
+7. **Typer CLI**
+   - Add commands: ingest, train, uncertain.
+   - Example usage and help output.
+8. **Graceful Degradation**
+   - If Torch or OpenCV missing, degrade features gracefully.
+9. **Testing & Validation**
+    - Add unit and integration tests for all major features.
+
+### Planning
+- Prioritize duplicate detection, then blur/dull analysis.
+- CLI commands should be available early for workflow integration.
+- Feedback loop and active learning can be added after core pipeline is stable.
+- GUI and plugin API are future enhancements.
