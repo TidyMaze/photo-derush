@@ -40,6 +40,7 @@ def show_lightroom_ui(image_paths, directory):
     thumbs = []
     # Set a fixed window size
     root.geometry("1100x500")
+    root.resizable(False, False)
     update_thumbnails(min(10, len(image_paths)))
     slider = Scale(root, from_=1, to=len(image_paths), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=lambda v: update_thumbnails(int(v)))
     slider.set(min(10, len(image_paths)))
