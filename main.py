@@ -53,11 +53,12 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     frame.pack(padx=20, pady=20)
     thumbs = []
     # Set a fixed window size
-    root.geometry("1100x500")
-    root.resizable(False, False)
-    update_thumbnails(min(10, len(image_paths)))
+    root.geometry("1100x900")
+    root.resizable(True, True)
+    default_n = min(100, len(image_paths))
+    update_thumbnails(default_n)
     slider = Scale(root, from_=1, to=len(image_paths), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=lambda v: update_thumbnails(int(v)))
-    slider.set(min(10, len(image_paths)))
+    slider.set(default_n)
     slider.pack(side="left", anchor="sw", padx=20, pady=20)
     root.mainloop()
 
@@ -117,7 +118,9 @@ def duplicate_slayer(image_dir, trash_dir):
         dst = os.path.join(trash_dir, img)
         os.rename(src, dst)
         trashed.append(img)
-    show_lightroom_ui([images[0]], image_dir, trashed_paths=trashed, trashed_dir=trash_dir)
+    # Show up to 100 images (kept + trashed) in the UI
+    all_images = [images[0]] + trashed
+    show_lightroom_ui(all_images[:100], image_dir, trashed_paths=trashed[:99], trashed_dir=trash_dir)
     return kept, [os.path.join(trash_dir, t) for t in trashed]
 
 
@@ -137,7 +140,7 @@ if __name__ == "__main__":
         if non_image_exts:
             print(f"Warning: Non-image extensions detected: {', '.join(non_image_exts)}")
         if len(images) > 0:
-            show_lightroom_ui(images[:10], directory)
+            show_lightroom_ui(images[:100], directory)
         else:
             print("No images found.")
         main_duplicate_detection()
