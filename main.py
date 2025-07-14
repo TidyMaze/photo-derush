@@ -40,10 +40,10 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     import threading
     print(f"[Lightroom UI] Preparing to load {len(image_paths)} images from {directory}.")
     selected_idx = [None]
-    def update_thumbnails_threadsafe(n):
+    def update_thumbnails(n, threaded=False):
         import time
         start = time.time()
-        print(f"[Lightroom UI] update_thumbnails_threadsafe: Start loading {n} images.")
+        print(f"[Lightroom UI] update_thumbnails: Start loading {n} images.")
         image_data = []
         hashes = []
         valid_paths = []
@@ -77,23 +77,21 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                         if j != i:
                             duplicate_indices.add(j)
         print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
-        def update_ui():
+        def update_ui(progressive=False):
             for widget in frame.winfo_children():
                 widget.destroy()
             thumbs.clear()
             for idx, (img, img_name) in enumerate(image_data):
                 tk_img = ImageTk.PhotoImage(img, master=frame)
                 cell_w, cell_h = 160, 160
-                if idx in duplicate_indices:
-                    border_color = "red"
-                else:
-                    border_color = "#444"
+                border_color = "red" if idx in duplicate_indices else "#444"
                 highlight = "#00bfff" if selected_idx[0] == idx else border_color
                 lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid")
                 lbl.image = tk_img
                 lbl.grid(row=idx//5, column=idx%5, padx=5, pady=5)
                 def on_click(event, i=idx, label=lbl):
                     selected_idx[0] = i
+                    print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
                     update_ui()
                 def on_double_click(event, img_path=os.path.join(directory, img_name)):
                     open_full_image(img_path)
@@ -102,86 +100,16 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 thumbs.append(tk_img)
                 frame.update_idletasks()
                 canvas.configure(scrollregion=canvas.bbox("all"))
-        root.after(0, update_ui)
-    def update_thumbnails(n):
-        import time
-        start = time.time()
-        print(f"[Lightroom UI] update_thumbnails: Start loading {n} images.")
-        for widget in frame.winfo_children():
-            widget.destroy()
-        thumbs.clear()
-        hashes = []
-        valid_paths = []
-        for img_name in image_paths[:n]:
-            print(f"[Lightroom UI] Processing image: {img_name}")
-            img_path = os.path.join(directory, img_name)
-            try:
-                dh = compute_dhash(img_path)
-                hash_hex = int(str(dh), 16)
-                hash_bytes = np.array([(hash_hex >> (8 * i)) & 0xFF for i in range(8)], dtype='uint8')[::-1]
-                hashes.append(hash_bytes)
-                valid_paths.append(img_name)
-            except Exception as e:
-                print(f"[Lightroom UI] Error processing {img_name}: {e}")
-                hashes.append(None)
-                valid_paths.append(img_name)
-        print(f"[Lightroom UI] Finished hashing. Time elapsed: {time.time() - start:.2f}s")
-        duplicate_indices = set()
-        if hashes and all(h is not None for h in hashes):
-            hashes_np = np.stack(hashes).astype('uint8')
-            index = faiss.IndexBinaryFlat(64)
-            index.add(hashes_np)
-            for i, h in enumerate(hashes_np):
-                res = index.range_search(h[np.newaxis, :], 5)
-                lims, D, I = res
-                if lims[1] - lims[0] > 1:
-                    for j in I[lims[0]:lims[1]]:
-                        if j != i:
-                            duplicate_indices.add(j)
-        print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
-        selected_indices = set()
-        label_refs = []
-        def update_selection():
-            for idx, lbl in enumerate(label_refs):
-                if idx in selected_indices:
-                    lbl.config(highlightbackground="blue")
-                elif idx in duplicate_indices:
-                    lbl.config(highlightbackground="red")
-                else:
-                    lbl.config(highlightbackground="#444")
-        for img_name in valid_paths:
-            img_path = os.path.join(directory, img_name)
-            try:
-                img = Image.open(img_path)
-                img.thumbnail((150, 150))  # Always load as low-res thumbnail
-                tk_img = ImageTk.PhotoImage(img, master=frame)
-                idx = valid_paths.index(img_name)
-                cell_w, cell_h = 160, 160
-                x = (idx % 5) * cell_w + (cell_w - img.width) // 2
-                y = (idx // 5) * cell_h + (cell_h - img.height) // 2
-                if idx in duplicate_indices:
-                    border_color = "red"
-                else:
-                    border_color = "#444"
-                lbl = Label(frame, image=tk_img, bg="#222", bd=2, relief="solid", highlightbackground=border_color, highlightthickness=2)
-                lbl.image = tk_img
-                lbl.grid(row=idx//5, column=idx%5, padx=5, pady=5)
-                label_refs.append(lbl)
-                def on_click(event, i=idx):
-                    if i in selected_indices:
-                        selected_indices.remove(i)
-                    else:
-                        selected_indices.add(i)
-                    update_selection()
-                def on_double_click(event, img_path=img_path):
-                    open_full_image(img_path)
-                lbl.bind("<Button-1>", on_click)
-                lbl.bind("<Double-Button-1>", on_double_click)
-                thumbs.append(tk_img)
-            except Exception as e:
-                print(f"[Lightroom UI] Error displaying {img_name}: {e}")
-        frame.update_idletasks()
-        canvas.configure(scrollregion=canvas.bbox("all"))
+                if progressive:
+                    frame.update()
+        if threaded:
+            # Schedule progressive UI updates on main thread
+            for i in range(len(image_data)):
+                root.after(i * 10, lambda i=i: update_ui(progressive=True))
+        else:
+            update_ui()
+    # Remove duplicate update_thumbnails definition
+    # ...existing code...
     root = Tk()
     print("[Lightroom UI] Tkinter window created.")
     root.title("Photo Derush - Minimalist Lightroom UI")
@@ -216,7 +144,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     print(f"[Lightroom UI] Loading thumbnails for {default_n} images.")
     def on_slider_change(v):
         print(f"[Lightroom UI] Slider changed: {v}")
-        update_thumbnails(int(v))
+        update_thumbnails(int(v), threaded=False)
     slider = Scale(root, from_=1, to=min(50, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12))
     slider.set(default_n)
     slider.config(command=on_slider_change)
@@ -230,7 +158,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     print("[Lightroom UI] Toolbar and slider packed.")
     # Load thumbnails in a separate thread
     def load_images_thread():
-        update_thumbnails_threadsafe(default_n)
+        update_thumbnails(default_n, threaded=True)
     threading.Thread(target=load_images_thread, daemon=True).start()
     root.mainloop()
     print("[Lightroom UI] Tkinter mainloop exited.")
