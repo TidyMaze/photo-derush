@@ -22,6 +22,7 @@ def is_image_extension(ext):
 
 
 def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None):
+    print(f"[Lightroom UI] Preparing to load {len(image_paths)} images from {directory}.")
     selected_idx = [None]
     def open_full_image(img_path):
         top = Tk()
@@ -49,7 +50,9 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         hashes = []
         valid_paths = []
         for img_name in image_paths[:n]:
+            print(f"[Lightroom UI] Processing image: {img_name}")
             img_path = os.path.join(directory, img_name)
+
             try:
                 dh = compute_dhash(img_path)
                 # Convert dHash to 8 bytes (uint8 array)
@@ -125,10 +128,12 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 hash_lbl = Label(frame, text=img_hash, bg="#800", fg="#fff", font=("Arial", 8))
                 hash_lbl.grid(row=(n+idx)//5, column=(n+idx)%5, padx=10, pady=(110,0))
     root = Tk()
+    print("[Lightroom UI] Tkinter window created.")
     root.title("Photo Derush - Minimalist Lightroom UI")
     root.configure(bg="#222")
     # Add a scrolling panel for images
     canvas = Canvas(root, bg="#222")
+    print("[Lightroom UI] Canvas created.")
     canvas.pack(side="top", fill="both", expand=True)
     scroll_y = Scrollbar(canvas, orient="vertical", command=canvas.yview)
     scroll_y.pack(side="right", fill="y")
@@ -136,6 +141,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     # Frame for images inside canvas
     frame = Frame(canvas, bg="#222")
     frame_id = canvas.create_window((0,0), window=frame, anchor="nw")
+    print("[Lightroom UI] Frame for images created.")
     def on_frame_configure(event):
         canvas.configure(scrollregion=canvas.bbox("all"))
     frame.bind("<Configure>", on_frame_configure)
@@ -156,18 +162,20 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     root.geometry("1100x900")
     root.resizable(True, True)
     default_n = min(50, len(image_paths))
+    print(f"[Lightroom UI] Loading thumbnails for {default_n} images.")
     update_thumbnails(default_n)
     slider = Scale(root, from_=1, to=min(50, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=lambda v: update_thumbnails(int(v)))
     slider.set(default_n)
-    # Add floating toolbar (place above image grid, not at window bottom)
+    print("[Lightroom UI] Slider created.")
     toolbar = Frame(root, bg="#333")
-    # Use absolute placement to ensure toolbar overlays images and is always visible
     toolbar.place(x=0, rely=850, relwidth=1, height=50)
     selector_label = Label(toolbar, text="Number of images:", bg="#333", fg="#fff", font=("Arial", 12))
     selector_label.pack(side="left", padx=10, pady=5)
     slider.pack_forget()
     slider.pack(in_=toolbar, side="left", padx=10, pady=5)
+    print("[Lightroom UI] Toolbar and slider packed.")
     root.mainloop()
+    print("[Lightroom UI] Tkinter mainloop exited.")
 
 
 def compute_dhash(image_path):
@@ -216,17 +224,21 @@ def main_duplicate_detection():
 
 def duplicate_slayer(image_dir, trash_dir):
     images = [f for f in os.listdir(image_dir) if f.endswith('.jpg')]
+    print(f"[Duplicate Slayer] Found {len(images)} images in {image_dir}.")
     if not images:
+        print("[Duplicate Slayer] No images found. Exiting.")
         return [], []
     trashed = []
     kept = [os.path.join(image_dir, images[0])]
     for img in images[1:]:
         src = os.path.join(image_dir, img)
         dst = os.path.join(trash_dir, img)
+        print(f"[Duplicate Slayer] Moving duplicate: {img} -> trash.")
         os.rename(src, dst)
         trashed.append(img)
     # Show up to 50 images (kept + trashed) in the UI
     all_images = [images[0]] + trashed
+    print(f"[Duplicate Slayer] Loading {len(all_images[:50])} images in UI.")
     show_lightroom_ui(all_images[:50], image_dir, trashed_paths=trashed[:49], trashed_dir=trash_dir)
     return kept, [os.path.join(trash_dir, t) for t in trashed]
 
