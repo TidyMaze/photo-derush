@@ -83,10 +83,11 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     slider.set(default_n)
     # Add floating toolbar (place above image grid, not at window bottom)
     toolbar = Frame(root, bg="#333")
-    toolbar.place(relx=0, rely=1.0, relwidth=1, anchor="sw")
+    # Use absolute placement to ensure toolbar overlays images and is always visible
+    toolbar.place(x=0, rely=850, relwidth=1, height=50)
     selector_label = Label(toolbar, text="Number of images:", bg="#333", fg="#fff", font=("Arial", 12))
     selector_label.pack(side="left", padx=10, pady=5)
-    slider.pack_forget()  # Remove slider from previous packing
+    slider.pack_forget()
     slider.pack(in_=toolbar, side="left", padx=10, pady=5)
     root.mainloop()
 
