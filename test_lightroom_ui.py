@@ -60,3 +60,22 @@ def test_thumbnail_low_resolution(monkeypatch):
     import main
     main.show_lightroom_ui(["img1.jpg"], "/tmp")
     assert any(s[0] <= 200 and s[1] <= 200 for s in loaded_sizes), "Images should be loaded in low resolution (thumbnail)"
+
+def test_images_displayed_after_window_opens(monkeypatch):
+    displayed = []
+    class DummyImage:
+        def thumbnail(self, size): pass
+    class DummyPhotoImage:
+        def __init__(self, img, master=None): pass
+    class DummyLabel:
+        def __init__(self, frame, image=None, bg=None, bd=None, relief=None):
+            displayed.append(True)
+        def grid(self, **kwargs): pass
+        def bind(self, event, handler): pass
+        def config(self, **kwargs): pass
+    monkeypatch.setattr("PIL.Image.open", lambda path: DummyImage())
+    monkeypatch.setattr("PIL.ImageTk.PhotoImage", DummyPhotoImage)
+    monkeypatch.setattr("tkinter.Label", DummyLabel)
+    import main
+    main.show_lightroom_ui(["img1.jpg", "img2.jpg"], "/tmp")
+    assert displayed, "Images should be displayed in the UI after window opens"

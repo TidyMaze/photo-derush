@@ -37,8 +37,71 @@ def open_full_image(img_path):
     top.mainloop()
 
 def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None):
+    import threading
     print(f"[Lightroom UI] Preparing to load {len(image_paths)} images from {directory}.")
     selected_idx = [None]
+    def update_thumbnails_threadsafe(n):
+        import time
+        start = time.time()
+        print(f"[Lightroom UI] update_thumbnails_threadsafe: Start loading {n} images.")
+        image_data = []
+        hashes = []
+        valid_paths = []
+        for img_name in image_paths[:n]:
+            print(f"[Lightroom UI] Processing image: {img_name}")
+            img_path = os.path.join(directory, img_name)
+            try:
+                dh = compute_dhash(img_path)
+                hash_hex = int(str(dh), 16)
+                hash_bytes = np.array([(hash_hex >> (8 * i)) & 0xFF for i in range(8)], dtype='uint8')[::-1]
+                hashes.append(hash_bytes)
+                valid_paths.append(img_name)
+                img = Image.open(img_path)
+                img.thumbnail((150, 150))
+                image_data.append((img, img_name))
+            except Exception as e:
+                print(f"[Lightroom UI] Error processing {img_name}: {e}")
+                hashes.append(None)
+                valid_paths.append(img_name)
+        print(f"[Lightroom UI] Finished hashing. Time elapsed: {time.time() - start:.2f}s")
+        duplicate_indices = set()
+        if hashes and all(h is not None for h in hashes):
+            hashes_np = np.stack(hashes).astype('uint8')
+            index = faiss.IndexBinaryFlat(64)
+            index.add(hashes_np)
+            for i, h in enumerate(hashes_np):
+                res = index.range_search(h[np.newaxis, :], 5)
+                lims, D, I = res
+                if lims[1] - lims[0] > 1:
+                    for j in I[lims[0]:lims[1]]:
+                        if j != i:
+                            duplicate_indices.add(j)
+        print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
+        def update_ui():
+            for widget in frame.winfo_children():
+                widget.destroy()
+            thumbs.clear()
+            for idx, (img, img_name) in enumerate(image_data):
+                tk_img = ImageTk.PhotoImage(img, master=frame)
+                cell_w, cell_h = 160, 160
+                if idx in duplicate_indices:
+                    border_color = "red"
+                else:
+                    border_color = "#444"
+                lbl = Label(frame, image=tk_img, bg="#222", bd=2, relief="solid")
+                lbl.image = tk_img
+                lbl.grid(row=idx//5, column=idx%5, padx=5, pady=5)
+                def on_click(event, i=idx, label=lbl):
+                    selected_idx[0] = i
+                    label.config(bg="#555")
+                def on_double_click(event, img_path=os.path.join(directory, img_name)):
+                    open_full_image(img_path)
+                lbl.bind("<Button-1>", on_click)
+                lbl.bind("<Double-Button-1>", on_double_click)
+                thumbs.append(tk_img)
+            frame.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        root.after(0, update_ui)
     def update_thumbnails(n):
         import time
         start = time.time()
@@ -136,8 +199,10 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     root.resizable(True, True)
     default_n = min(50, len(image_paths))
     print(f"[Lightroom UI] Loading thumbnails for {default_n} images.")
-    update_thumbnails(default_n)
-    slider = Scale(root, from_=1, to=min(50, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=lambda v: update_thumbnails(int(v)))
+    def on_slider_change(v):
+        print(f"[Lightroom UI] Slider changed: {v}")
+        update_thumbnails(int(v))
+    slider = Scale(root, from_=1, to=min(50, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=on_slider_change)
     slider.set(default_n)
     print("[Lightroom UI] Slider created.")
     toolbar = Frame(root, bg="#333")
@@ -147,6 +212,10 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     slider.pack_forget()
     slider.pack(in_=toolbar, side="left", padx=10, pady=5)
     print("[Lightroom UI] Toolbar and slider packed.")
+    # Load thumbnails in a separate thread
+    def load_images_thread():
+        update_thumbnails_threadsafe(default_n)
+    threading.Thread(target=load_images_thread, daemon=True).start()
     root.mainloop()
     print("[Lightroom UI] Tkinter mainloop exited.")
 
