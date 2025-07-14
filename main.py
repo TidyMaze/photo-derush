@@ -1,5 +1,5 @@
 import os
-from tkinter import Tk, Frame, Label, Scale, HORIZONTAL
+from tkinter import Tk, Frame, Label, Scale, HORIZONTAL, Canvas, Scrollbar
 from PIL import Image, ImageTk
 import imagehash
 import faiss
@@ -49,8 +49,30 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     root = Tk()
     root.title("Photo Derush - Minimalist Lightroom UI")
     root.configure(bg="#222")
-    frame = Frame(root, bg="#222")
-    frame.pack(padx=20, pady=20)
+    # Add a scrolling panel for images
+    canvas = Canvas(root, bg="#222")
+    canvas.pack(side="top", fill="both", expand=True)
+    scroll_y = Scrollbar(canvas, orient="vertical", command=canvas.yview)
+    scroll_y.pack(side="right", fill="y")
+    canvas.configure(yscrollcommand=scroll_y.set)
+    # Frame for images inside canvas
+    frame = Frame(canvas, bg="#222")
+    frame_id = canvas.create_window((0,0), window=frame, anchor="nw")
+    def on_frame_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+    frame.bind("<Configure>", on_frame_configure)
+    def _on_mousewheel(event):
+        # macOS and Windows: event.delta, Linux: event.num
+        if hasattr(event, 'delta'):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif event.num == 4:
+            canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            canvas.yview_scroll(1, "units")
+    canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    canvas.bind_all("<Button-4>", _on_mousewheel)
+    canvas.bind_all("<Button-5>", _on_mousewheel)
+    canvas.bind_all("<Shift-MouseWheel>", _on_mousewheel)
     thumbs = []
     # Set a fixed window size
     root.geometry("1100x900")
@@ -59,7 +81,13 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     update_thumbnails(default_n)
     slider = Scale(root, from_=1, to=len(image_paths), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=lambda v: update_thumbnails(int(v)))
     slider.set(default_n)
-    slider.pack(side="left", anchor="sw", padx=20, pady=20)
+    # Add floating toolbar (place above image grid, not at window bottom)
+    toolbar = Frame(root, bg="#333")
+    toolbar.place(relx=0, rely=1.0, relwidth=1, anchor="sw")
+    selector_label = Label(toolbar, text="Number of images:", bg="#333", fg="#fff", font=("Arial", 12))
+    selector_label.pack(side="left", padx=10, pady=5)
+    slider.pack_forget()  # Remove slider from previous packing
+    slider.pack(in_=toolbar, side="left", padx=10, pady=5)
     root.mainloop()
 
 
