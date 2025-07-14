@@ -202,8 +202,9 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     def on_slider_change(v):
         print(f"[Lightroom UI] Slider changed: {v}")
         update_thumbnails(int(v))
-    slider = Scale(root, from_=1, to=min(50, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=on_slider_change)
+    slider = Scale(root, from_=1, to=min(50, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12))
     slider.set(default_n)
+    slider.config(command=on_slider_change)
     print("[Lightroom UI] Slider created.")
     toolbar = Frame(root, bg="#333")
     toolbar.place(x=0, rely=850, relwidth=1, height=50)
