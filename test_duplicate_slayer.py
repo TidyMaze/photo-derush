@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 from main import duplicate_slayer
+import numpy as np
 
 def test_duplicate_slayer_removes_duplicates_and_keeps_best(tmp_path):
     # Setup: create 3 near-identical images (simulate with same content)
@@ -26,3 +27,8 @@ def test_duplicate_slayer_removes_duplicates_and_keeps_best(tmp_path):
     for k in kept:
         assert os.path.exists(k)
 
+def test_hashes_are_uint8():
+    hash_bytes = np.array([1,2,3,4,5,6,7,8], dtype='uint8')
+    hashes = [hash_bytes for _ in range(10)]
+    hashes_np = np.stack(hashes)
+    assert hashes_np.dtype == np.uint8, "hashes_np should be uint8 for FAISS"

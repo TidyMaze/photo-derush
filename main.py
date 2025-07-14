@@ -45,6 +45,33 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         for widget in frame.winfo_children():
             widget.destroy()
         thumbs.clear()
+        # Cluster duplicates using dHash + FAISS
+        hashes = []
+        valid_paths = []
+        for img_name in image_paths[:n]:
+            img_path = os.path.join(directory, img_name)
+            try:
+                dh = compute_dhash(img_path)
+                # Convert dHash to 8 bytes (uint8 array)
+                hash_hex = int(str(dh), 16)
+                hash_bytes = np.array([(hash_hex >> (8 * i)) & 0xFF for i in range(8)], dtype='uint8')[::-1]
+                hashes.append(hash_bytes)
+                valid_paths.append(img_name)
+            except Exception:
+                hashes.append(None)
+                valid_paths.append(img_name)
+        duplicate_indices = set()
+        if hashes and all(h is not None for h in hashes):
+            hashes_np = np.stack(hashes).astype('uint8')
+            index = faiss.IndexBinaryFlat(64)
+            index.add(hashes_np)
+            for i, h in enumerate(hashes_np):
+                res = index.range_search(h[np.newaxis, :], 5)
+                lims, D, I = res
+                if lims[1] - lims[0] > 1:
+                    for j in I[lims[0]:lims[1]]:
+                        if j != i:
+                            duplicate_indices.add(j)
         # Display kept images
         for idx, img_name in enumerate(image_paths[:n]):
             img_path = os.path.join(directory, img_name)
@@ -62,6 +89,11 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                     w.config(highlightbackground="#FFD700" if w == event.widget else "#222", highlightthickness=2 if w == event.widget else 0)
             def on_double_click(event, i=idx, img_path=img_path):
                 open_full_image(img_path)
+            # Add duplicate logo if image is a duplicate
+            logo = None
+            if idx in duplicate_indices:
+                logo = Label(frame, text="⧉", bg="#222", fg="#FF4444", font=("Arial", 24))
+                logo.grid(row=idx//5, column=idx%5, padx=10, pady=(10,80), sticky="ne")
             lbl = Label(frame, image=tk_img, bg="#222", highlightthickness=0)
             lbl.grid(row=idx//5, column=idx%5, padx=10, pady=10)
             lbl.bind("<Button-1>", on_click)
@@ -123,9 +155,9 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     # Set a fixed window size
     root.geometry("1100x900")
     root.resizable(True, True)
-    default_n = min(100, len(image_paths))
+    default_n = min(50, len(image_paths))
     update_thumbnails(default_n)
-    slider = Scale(root, from_=1, to=len(image_paths), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=lambda v: update_thumbnails(int(v)))
+    slider = Scale(root, from_=1, to=min(50, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=lambda v: update_thumbnails(int(v)))
     slider.set(default_n)
     # Add floating toolbar (place above image grid, not at window bottom)
     toolbar = Frame(root, bg="#333")
