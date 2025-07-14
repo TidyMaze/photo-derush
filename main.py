@@ -1,5 +1,5 @@
 import os
-from tkinter import Tk, Frame, Label, PhotoImage, Canvas
+from tkinter import Tk, Frame, Label, Scale, HORIZONTAL
 from PIL import Image, ImageTk
 
 
@@ -19,20 +19,31 @@ def is_image_extension(ext):
 
 
 def show_lightroom_ui(image_paths, directory):
+    def update_thumbnails(n):
+        for widget in frame.winfo_children():
+            widget.destroy()
+        thumbs.clear()
+        for idx, img_name in enumerate(image_paths[:n]):
+            img_path = os.path.join(directory, img_name)
+            pil_img = Image.open(img_path)
+            pil_img.thumbnail((180, 180))
+            tk_img = ImageTk.PhotoImage(pil_img)
+            thumbs.append(tk_img)
+            lbl = Label(frame, image=tk_img, bg="#222")
+            lbl.grid(row=idx//5, column=idx%5, padx=10, pady=10)
+
     root = Tk()
     root.title("Photo Derush - Minimalist Lightroom UI")
     root.configure(bg="#222")
     frame = Frame(root, bg="#222")
     frame.pack(padx=20, pady=20)
     thumbs = []
-    for idx, img_name in enumerate(image_paths):
-        img_path = os.path.join(directory, img_name)
-        pil_img = Image.open(img_path)
-        pil_img.thumbnail((180, 180))
-        tk_img = ImageTk.PhotoImage(pil_img)
-        thumbs.append(tk_img)  # keep reference
-        lbl = Label(frame, image=tk_img, bg="#222")
-        lbl.grid(row=idx//5, column=idx%5, padx=10, pady=10)
+    # Set a fixed window size
+    root.geometry("1100x500")
+    update_thumbnails(min(10, len(image_paths)))
+    slider = Scale(root, from_=1, to=len(image_paths), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12), command=lambda v: update_thumbnails(int(v)))
+    slider.set(min(10, len(image_paths)))
+    slider.pack(side="left", anchor="sw", padx=20, pady=20)
     root.mainloop()
 
 
