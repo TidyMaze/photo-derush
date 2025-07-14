@@ -88,12 +88,13 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                     border_color = "red"
                 else:
                     border_color = "#444"
-                lbl = Label(frame, image=tk_img, bg="#222", bd=2, relief="solid")
+                highlight = "#00bfff" if selected_idx[0] == idx else border_color
+                lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid")
                 lbl.image = tk_img
                 lbl.grid(row=idx//5, column=idx%5, padx=5, pady=5)
                 def on_click(event, i=idx, label=lbl):
                     selected_idx[0] = i
-                    label.config(bg="#555")
+                    update_ui()
                 def on_double_click(event, img_path=os.path.join(directory, img_name)):
                     open_full_image(img_path)
                 lbl.bind("<Button-1>", on_click)
@@ -138,6 +139,16 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                         if j != i:
                             duplicate_indices.add(j)
         print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
+        selected_indices = set()
+        label_refs = []
+        def update_selection():
+            for idx, lbl in enumerate(label_refs):
+                if idx in selected_indices:
+                    lbl.config(highlightbackground="blue")
+                elif idx in duplicate_indices:
+                    lbl.config(highlightbackground="red")
+                else:
+                    lbl.config(highlightbackground="#444")
         for img_name in valid_paths:
             img_path = os.path.join(directory, img_name)
             try:
@@ -152,12 +163,16 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                     border_color = "red"
                 else:
                     border_color = "#444"
-                lbl = Label(frame, image=tk_img, bg="#222", bd=2, relief="solid")
+                lbl = Label(frame, image=tk_img, bg="#222", bd=2, relief="solid", highlightbackground=border_color, highlightthickness=2)
                 lbl.image = tk_img
                 lbl.grid(row=idx//5, column=idx%5, padx=5, pady=5)
-                def on_click(event, i=idx, label=lbl):
-                    selected_idx[0] = i
-                    label.config(bg="#555")
+                label_refs.append(lbl)
+                def on_click(event, i=idx):
+                    if i in selected_indices:
+                        selected_indices.remove(i)
+                    else:
+                        selected_indices.add(i)
+                    update_selection()
                 def on_double_click(event, img_path=img_path):
                     open_full_image(img_path)
                 lbl.bind("<Button-1>", on_click)
