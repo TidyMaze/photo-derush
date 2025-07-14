@@ -225,9 +225,9 @@ def duplicate_slayer(image_dir, trash_dir):
         dst = os.path.join(trash_dir, img)
         os.rename(src, dst)
         trashed.append(img)
-    # Show up to 100 images (kept + trashed) in the UI
+    # Show up to 50 images (kept + trashed) in the UI
     all_images = [images[0]] + trashed
-    show_lightroom_ui(all_images[:100], image_dir, trashed_paths=trashed[:99], trashed_dir=trash_dir)
+    show_lightroom_ui(all_images[:50], image_dir, trashed_paths=trashed[:49], trashed_dir=trash_dir)
     return kept, [os.path.join(trash_dir, t) for t in trashed]
 
 
