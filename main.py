@@ -100,8 +100,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 lbl.bind("<Button-1>", on_click)
                 lbl.bind("<Double-Button-1>", on_double_click)
                 thumbs.append(tk_img)
-            frame.update_idletasks()
-            canvas.configure(scrollregion=canvas.bbox("all"))
+                frame.update_idletasks()
+                canvas.configure(scrollregion=canvas.bbox("all"))
         root.after(0, update_ui)
     def update_thumbnails(n):
         import time
