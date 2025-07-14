@@ -22,6 +22,25 @@ def is_image_extension(ext):
 
 
 def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None):
+    selected_idx = [None]
+    def open_full_image(img_path):
+        top = Tk()
+        top.title("Full Image Viewer")
+        top.configure(bg="#222")
+        img = Image.open(img_path)
+        screen_w = top.winfo_screenwidth()
+        screen_h = top.winfo_screenheight()
+        img.thumbnail((screen_w, screen_h))
+        tk_img = ImageTk.PhotoImage(img, master=top)
+        lbl = Label(top, image=tk_img, bg="#222")
+        lbl.pack(fill="both", expand=True)
+        top.geometry(f"{screen_w}x{screen_h}+0+0")
+        top.attributes('-fullscreen', True)
+        lbl.image = tk_img
+        def close(event):
+            top.destroy()
+        lbl.bind("<Button-1>", close)
+        top.mainloop()
     def update_thumbnails(n):
         for widget in frame.winfo_children():
             widget.destroy()
@@ -33,8 +52,22 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
             pil_img.thumbnail((180, 180))
             tk_img = ImageTk.PhotoImage(pil_img)
             thumbs.append(tk_img)
-            lbl = Label(frame, image=tk_img, bg="#222")
+            try:
+                img_hash = str(compute_dhash(img_path))
+            except Exception:
+                img_hash = "error"
+            def on_click(event, i=idx):
+                selected_idx[0] = i
+                for w in frame.winfo_children():
+                    w.config(highlightbackground="#FFD700" if w == event.widget else "#222", highlightthickness=2 if w == event.widget else 0)
+            def on_double_click(event, i=idx, img_path=img_path):
+                open_full_image(img_path)
+            lbl = Label(frame, image=tk_img, bg="#222", highlightthickness=0)
             lbl.grid(row=idx//5, column=idx%5, padx=10, pady=10)
+            lbl.bind("<Button-1>", on_click)
+            lbl.bind("<Double-Button-1>", on_double_click)
+            hash_lbl = Label(frame, text=img_hash, bg="#222", fg="#aaa", font=("Arial", 8))
+            hash_lbl.grid(row=idx//5, column=idx%5, padx=10, pady=(110,0))
         # Display trashed images if provided
         if trashed_paths and trashed_dir:
             for idx, img_name in enumerate(trashed_paths):
@@ -43,9 +76,22 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 pil_img.thumbnail((180, 180))
                 tk_img = ImageTk.PhotoImage(pil_img)
                 thumbs.append(tk_img)
-                lbl = Label(frame, image=tk_img, bg="#800", text="TRASHED", compound="top", fg="#fff")
+                try:
+                    img_hash = str(compute_dhash(img_path))
+                except Exception:
+                    img_hash = "error"
+                def on_click(event, i=n+idx):
+                    selected_idx[0] = i
+                    for w in frame.winfo_children():
+                        w.config(highlightbackground="#FFD700" if w == event.widget else ("#800" if w.cget("bg") == "#800" else "#222"), highlightthickness=2 if w == event.widget else 0)
+                def on_double_click(event, i=n+idx, img_path=img_path):
+                    open_full_image(img_path)
+                lbl = Label(frame, image=tk_img, bg="#800", text="TRASHED", compound="top", fg="#fff", highlightthickness=0)
                 lbl.grid(row=(n+idx)//5, column=(n+idx)%5, padx=10, pady=10)
-
+                lbl.bind("<Button-1>", on_click)
+                lbl.bind("<Double-Button-1>", on_double_click)
+                hash_lbl = Label(frame, text=img_hash, bg="#800", fg="#fff", font=("Arial", 8))
+                hash_lbl.grid(row=(n+idx)//5, column=(n+idx)%5, padx=10, pady=(110,0))
     root = Tk()
     root.title("Photo Derush - Minimalist Lightroom UI")
     root.configure(bg="#222")
