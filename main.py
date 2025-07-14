@@ -1,5 +1,4 @@
 import os
-import argparse
 
 
 def list_images(directory):
@@ -8,19 +7,16 @@ def list_images(directory):
             if os.path.isfile(os.path.join(directory, f)) and os.path.splitext(f)[1].lower() in exts]
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Photo Derush CLI App")
-    parser.add_argument('--version', action='version', version='Photo Derush 0.1')
-    parser.add_argument('--list', action='store_true', help='List all images in the dataset directory')
-    parser.add_argument('--dir', type=str, default='/Users/yannrolland/Pictures/photo-dataset', help='Image dataset directory')
-    args = parser.parse_args()
-    print("Welcome to Photo Derush CLI App!")
-    if args.list:
-        images = list_images(args.dir)
-        print(f"Found {len(images)} images.")
-        for img in images:
-            print(img)
+def list_extensions(directory):
+    return sorted(set(os.path.splitext(f)[1].lower() for f in os.listdir(directory)
+                     if os.path.isfile(os.path.join(directory, f)) and '.' in f))
 
 
-if __name__ == "__main__":
-    main()
+directory = '/Users/yannrolland/Pictures/photo-dataset'
+print("Welcome to Photo Derush Script!")
+images = list_images(directory)
+print(f"Found {len(images)} images.")
+for img in images:
+    print(img)
+exts = list_extensions(directory)
+print(f"Extensions found: {', '.join(exts)}")
