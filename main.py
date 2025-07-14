@@ -43,26 +43,28 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         lbl.bind("<Button-1>", close)
         top.mainloop()
     def update_thumbnails(n):
+        import time
+        start = time.time()
+        print(f"[Lightroom UI] update_thumbnails: Start loading {n} images.")
         for widget in frame.winfo_children():
             widget.destroy()
         thumbs.clear()
-        # Cluster duplicates using dHash + FAISS
         hashes = []
         valid_paths = []
         for img_name in image_paths[:n]:
             print(f"[Lightroom UI] Processing image: {img_name}")
             img_path = os.path.join(directory, img_name)
-
             try:
                 dh = compute_dhash(img_path)
-                # Convert dHash to 8 bytes (uint8 array)
                 hash_hex = int(str(dh), 16)
                 hash_bytes = np.array([(hash_hex >> (8 * i)) & 0xFF for i in range(8)], dtype='uint8')[::-1]
                 hashes.append(hash_bytes)
                 valid_paths.append(img_name)
-            except Exception:
+            except Exception as e:
+                print(f"[Lightroom UI] Error processing {img_name}: {e}")
                 hashes.append(None)
                 valid_paths.append(img_name)
+        print(f"[Lightroom UI] Finished hashing. Time elapsed: {time.time() - start:.2f}s")
         duplicate_indices = set()
         if hashes and all(h is not None for h in hashes):
             hashes_np = np.stack(hashes).astype('uint8')
@@ -75,6 +77,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                     for j in I[lims[0]:lims[1]]:
                         if j != i:
                             duplicate_indices.add(j)
+        print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
         # Display kept images
         for idx, img_name in enumerate(image_paths[:n]):
             img_path = os.path.join(directory, img_name)
