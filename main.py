@@ -18,6 +18,8 @@ def main():
     if args.list:
         images = list_images(args.dir)
         print(f"Found {len(images)} images.")
+        for img in images:
+            print(img)
 
 
 if __name__ == "__main__":
