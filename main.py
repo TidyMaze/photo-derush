@@ -21,11 +21,12 @@ def is_image_extension(ext):
     return ext in {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
 
 
-def show_lightroom_ui(image_paths, directory):
+def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None):
     def update_thumbnails(n):
         for widget in frame.winfo_children():
             widget.destroy()
         thumbs.clear()
+        # Display kept images
         for idx, img_name in enumerate(image_paths[:n]):
             img_path = os.path.join(directory, img_name)
             pil_img = Image.open(img_path)
@@ -34,6 +35,16 @@ def show_lightroom_ui(image_paths, directory):
             thumbs.append(tk_img)
             lbl = Label(frame, image=tk_img, bg="#222")
             lbl.grid(row=idx//5, column=idx%5, padx=10, pady=10)
+        # Display trashed images if provided
+        if trashed_paths and trashed_dir:
+            for idx, img_name in enumerate(trashed_paths):
+                img_path = os.path.join(trashed_dir, img_name)
+                pil_img = Image.open(img_path)
+                pil_img.thumbnail((180, 180))
+                tk_img = ImageTk.PhotoImage(pil_img)
+                thumbs.append(tk_img)
+                lbl = Label(frame, image=tk_img, bg="#800", text="TRASHED", compound="top", fg="#fff")
+                lbl.grid(row=(n+idx)//5, column=(n+idx)%5, padx=10, pady=10)
 
     root = Tk()
     root.title("Photo Derush - Minimalist Lightroom UI")
@@ -99,15 +110,15 @@ def duplicate_slayer(image_dir, trash_dir):
     images = [f for f in os.listdir(image_dir) if f.endswith('.jpg')]
     if not images:
         return [], []
-    # For test: treat all images as duplicates, keep one, trash rest
-    kept = [os.path.join(image_dir, images[0])]
     trashed = []
+    kept = [os.path.join(image_dir, images[0])]
     for img in images[1:]:
         src = os.path.join(image_dir, img)
         dst = os.path.join(trash_dir, img)
         os.rename(src, dst)
-        trashed.append(dst)
-    return kept, trashed
+        trashed.append(img)
+    show_lightroom_ui([images[0]], image_dir, trashed_paths=trashed, trashed_dir=trash_dir)
+    return kept, [os.path.join(trash_dir, t) for t in trashed]
 
 
 if __name__ == "__main__":
