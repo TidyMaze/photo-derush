@@ -117,7 +117,11 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 def on_click(event, i=idx, label=lbl):
                     selected_idx[0] = i
                     print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
-                    update_ui()
+                    # Only update the border of the selected widget, not destroy all widgets
+                    for widget in frame.winfo_children():
+                        if isinstance(widget, Label) and hasattr(widget, 'image'):
+                            widget.config(bg="#444", highlightbackground="#444")
+                    label.config(bg="red", highlightbackground="red")
                 def on_double_click(event, img_path=os.path.join(directory, img_name)):
                     open_full_image(img_path)
                 lbl.bind("<Button-1>", on_click)
