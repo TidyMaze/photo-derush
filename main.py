@@ -128,12 +128,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 if progressive:
                     frame.update()
             print('[Lightroom UI] Thumbnails updated.')
-        if threaded:
-            # Schedule progressive UI updates on main thread
-            for i in range(len(image_data)):
-                root.after(i * 10, lambda i=i: update_ui(progressive=True))
-        else:
-            update_ui()
+
+        update_ui()
         # Compute groups after all images are loaded
         group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
         sorted_indices = sorted(
