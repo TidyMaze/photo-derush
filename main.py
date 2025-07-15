@@ -63,8 +63,10 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 hashes.append(hash_bytes)
                 valid_paths.append(img_name)
                 if os.path.exists(thumb_path):
+                    print(f"[Lightroom UI] Using cached thumbnail for {img_name}.")
                     img = Image.open(thumb_path)
                 else:
+                    print(f"[Lightroom UI] Creating thumbnail for {img_name}.")
                     img = Image.open(img_path)
                     img.thumbnail((150, 150))
                     img.save(thumb_path)
@@ -129,6 +131,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
             key=lambda i: (-group_cardinality.get(group_ids[i], 1 if group_ids[i] else 0), group_ids[i] if group_ids[i] else 9999, i)
         )
         def update_ui(progressive=False):
+            print(f"[Lightroom UI] update_ui: Updating thumbnails with {len(sorted_indices)} images.")
             for widget in frame.winfo_children():
                 widget.destroy()
             thumbs.clear()
@@ -161,6 +164,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 canvas.configure(scrollregion=canvas.bbox("all"))
                 if progressive:
                     frame.update()
+            print('[Lightroom UI] Thumbnails updated.')
         if threaded:
             # Schedule progressive UI updates on main thread
             for i in range(len(image_data)):
