@@ -105,7 +105,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
                 lbl.image = tk_img
                 lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
-                label_text = f"Hash: N/A"
+                label_text = f"Hash: {hash_map[idx] if hash_map[idx] is not None else 'N/A'}"
                 info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
                 info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
                 def on_click(event, i=idx, label=lbl):
@@ -256,6 +256,7 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
     return clusters
 
 def compute_duplicate_groups(hashes):
+    print("[Duplicate Groups] Computing duplicate groups...")
     if not hashes or not all(h is not None for h in hashes):
         return {}, {}, {}
     hashes_np = np.stack(hashes).astype('uint8')
@@ -288,7 +289,7 @@ def compute_duplicate_groups(hashes):
         if h is not None:
             hash_map[idx] = ''.join(f'{b:02x}' for b in h)
         else:
-            hash_map[idx] = 'N/A'
+            hash_map[idx] = None
     return group_ids, group_cardinality, hash_map
 
 def main_duplicate_detection():
