@@ -47,17 +47,25 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         image_data = []
         hashes = []
         valid_paths = []
+        thumbnail_dir = os.path.join(directory, 'thumbnails')
+        os.makedirs(thumbnail_dir, exist_ok=True)
+        valid_paths = []
         for img_name in image_paths[:n]:
             print(f"[Lightroom UI] Processing image: {img_name}")
             img_path = os.path.join(directory, img_name)
+            thumb_path = os.path.join(thumbnail_dir, img_name)
             try:
                 dh = compute_dhash(img_path)
                 hash_hex = int(str(dh), 16)
                 hash_bytes = np.array([(hash_hex >> (8 * i)) & 0xFF for i in range(8)], dtype='uint8')[::-1]
                 hashes.append(hash_bytes)
                 valid_paths.append(img_name)
-                img = Image.open(img_path)
-                img.thumbnail((150, 150))
+                if os.path.exists(thumb_path):
+                    img = Image.open(thumb_path)
+                else:
+                    img = Image.open(img_path)
+                    img.thumbnail((150, 150))
+                    img.save(thumb_path)
                 image_data.append((img, img_name))
             except Exception as e:
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
@@ -84,18 +92,27 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         current_group = 1
         clusters = []
         visited = set()
-        for idx in range(len(valid_paths)):
-            if idx in duplicate_indices and idx not in visited:
-                cluster = [idx]
-                for j in duplicate_indices:
-                    if j != idx and j not in visited:
-                        cluster.append(j)
-                        visited.add(j)
-                for i in cluster:
-                    group_ids[i] = current_group
-                group_cardinality[current_group] = len(cluster)
-                clusters.append(cluster)
-                current_group += 1
+        # Find clusters using FAISS results
+        if hashes and all(h is not None for h in hashes):
+            hashes_np = np.stack(hashes).astype('uint8')
+            index = faiss.IndexBinaryFlat(64)
+            index.add(hashes_np)
+            assigned = set()
+            for i in range(len(hashes_np)):
+                if i in assigned:
+                    continue
+                res = index.range_search(hashes_np[i][np.newaxis, :], 5)
+                lims, D, I = res
+                cluster = set(j for j in I[lims[0]:lims[1]] if j != i)
+                cluster.add(i)
+                if len(cluster) > 1:
+                    for j in cluster:
+                        group_ids[j] = current_group
+                        assigned.add(j)
+                    group_cardinality[current_group] = len(cluster)
+                    clusters.append(list(cluster))
+                    current_group += 1
+        # Assign groupId=None for non-duplicates
         for idx in range(len(valid_paths)):
             if idx not in group_ids:
                 group_ids[idx] = None
@@ -117,7 +134,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 img, img_name = image_data[idx]
                 tk_img = ImageTk.PhotoImage(img, master=frame)
                 cell_w, cell_h = 160, 160
-                border_color = "red" if selected_idx[0] == idx else ("red" if idx in duplicate_indices else "#444")
+                border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
                 highlight = border_color
                 lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
                 lbl.image = tk_img
