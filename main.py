@@ -89,47 +89,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                         if j != i:
                             duplicate_indices.add(j)
         print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
-        # Assign group IDs for duplicates
-        group_ids = {}
-        group_cardinality = {}
-        hash_map = {}
-        current_group = 1
-        clusters = []
-        visited = set()
-        # Find clusters using FAISS results
-        if hashes and all(h is not None for h in hashes):
-            hashes_np = np.stack(hashes).astype('uint8')
-            index = faiss.IndexBinaryFlat(64)
-            index.add(hashes_np)
-            assigned = set()
-            for i in range(len(hashes_np)):
-                if i in assigned:
-                    continue
-                res = index.range_search(hashes_np[i][np.newaxis, :], 5)
-                lims, D, I = res
-                cluster = set(j for j in I[lims[0]:lims[1]] if j != i)
-                cluster.add(i)
-                if len(cluster) > 1:
-                    for j in cluster:
-                        group_ids[j] = current_group
-                        assigned.add(j)
-                    group_cardinality[current_group] = len(cluster)
-                    clusters.append(list(cluster))
-                    current_group += 1
-        # Assign groupId=None for non-duplicates
-        for idx in range(len(valid_paths)):
-            if idx not in group_ids:
-                group_ids[idx] = None
-        # Store hash for each image
-        for idx, h in enumerate(hashes):
-            if h is not None:
-                hash_map[idx] = ''.join(f'{b:02x}' for b in h)
-            else:
-                hash_map[idx] = 'N/A'
-        sorted_indices = sorted(
-            range(len(valid_paths)),
-            key=lambda i: (-group_cardinality.get(group_ids[i], 1 if group_ids[i] else 0), group_ids[i] if group_ids[i] else 9999, i)
-        )
+        # Remove group computation from thumbnail loading
+        sorted_indices = list(range(len(valid_paths)))
         def update_ui(progressive=False):
             print(f"[Lightroom UI] update_ui: Updating thumbnails with {len(sorted_indices)} images.")
             for widget in frame.winfo_children():
@@ -139,16 +100,12 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 img, img_name = image_data[idx]
                 tk_img = ImageTk.PhotoImage(img, master=frame)
                 cell_w, cell_h = 160, 160
-                border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
+                border_color = "#444"
                 highlight = border_color
                 lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
                 lbl.image = tk_img
                 lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
-                # Display groupId and hash if present
-                label_text = ""
-                if group_ids[idx]:
-                    label_text += f"Group {group_ids[idx]}\n"
-                label_text += f"Hash: {hash_map[idx]}"
+                label_text = f"Hash: N/A"
                 info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
                 info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
                 def on_click(event, i=idx, label=lbl):
@@ -171,6 +128,45 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 root.after(i * 10, lambda i=i: update_ui(progressive=True))
         else:
             update_ui()
+        # Compute groups after all images are loaded
+        group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
+        sorted_indices = sorted(
+            range(len(valid_paths)),
+            key=lambda i: (-group_cardinality.get(group_ids[i], 1 if group_ids[i] else 0), group_ids[i] if group_ids[i] else 9999, i)
+        )
+        # Now update UI with group info
+        def update_ui_with_groups():
+            for widget in frame.winfo_children():
+                widget.destroy()
+            thumbs.clear()
+            for pos, idx in enumerate(sorted_indices):
+                img, img_name = image_data[idx]
+                tk_img = ImageTk.PhotoImage(img, master=frame)
+                cell_w, cell_h = 160, 160
+                border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
+                highlight = border_color
+                lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
+                lbl.image = tk_img
+                lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
+                label_text = ""
+                if group_ids[idx]:
+                    label_text += f"Group {group_ids[idx]}\n"
+                label_text += f"Hash: {hash_map[idx]}"
+                info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
+                info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
+                def on_click(event, i=idx, label=lbl):
+                    selected_idx[0] = i
+                    print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
+                    update_ui_with_groups()
+                def on_double_click(event, img_path=os.path.join(directory, img_name)):
+                    open_full_image(img_path)
+                lbl.bind("<Button-1>", on_click)
+                lbl.bind("<Double-Button-1>", on_double_click)
+                thumbs.append(tk_img)
+                frame.update_idletasks()
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            print('[Lightroom UI] Thumbnails updated with groups.')
+        update_ui_with_groups()
     # Remove duplicate update_thumbnails definition
     # ...existing code...
     root = Tk()
@@ -258,6 +254,42 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
         if len(cluster) > 1:
             clusters.append(cluster)
     return clusters
+
+def compute_duplicate_groups(hashes):
+    if not hashes or not all(h is not None for h in hashes):
+        return {}, {}, {}
+    hashes_np = np.stack(hashes).astype('uint8')
+    index = faiss.IndexBinaryFlat(64)
+    index.add(hashes_np)
+    group_ids = {}
+    group_cardinality = {}
+    hash_map = {}
+    current_group = 1
+    clusters = []
+    assigned = set()
+    for i in range(len(hashes_np)):
+        if i in assigned:
+            continue
+        res = index.range_search(hashes_np[i][np.newaxis, :], 5)
+        lims, D, I = res
+        cluster = set(j for j in I[lims[0]:lims[1]] if j != i)
+        cluster.add(i)
+        if len(cluster) > 1:
+            for j in cluster:
+                group_ids[j] = current_group
+                assigned.add(j)
+            group_cardinality[current_group] = len(cluster)
+            clusters.append(list(cluster))
+            current_group += 1
+    for idx in range(len(hashes)):
+        if idx not in group_ids:
+            group_ids[idx] = None
+    for idx, h in enumerate(hashes):
+        if h is not None:
+            hash_map[idx] = ''.join(f'{b:02x}' for b in h)
+        else:
+            hash_map[idx] = 'N/A'
+    return group_ids, group_cardinality, hash_map
 
 def main_duplicate_detection():
     directory = '/Users/yannrolland/Pictures/photo-dataset'
