@@ -134,15 +134,14 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
             print('[Lightroom UI] Thumbnails updated.')
 
         update_ui()
-        # Compute groups after all images are loaded
-        group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
-        sorted_indices = sorted(
-            range(len(valid_paths)),
-            key=lambda i: (-group_cardinality.get(group_ids[i], 1 if group_ids[i] else 0), group_ids[i] if group_ids[i] else 9999, i)
-        )
-        # Now update UI with group info
-        def update_ui_with_groups():
-            def _update():
+        # Compute groups after all images are loaded in a separate thread
+        def compute_and_update_groups():
+            group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
+            sorted_indices = sorted(
+                range(len(valid_paths)),
+                key=lambda i: (-group_cardinality.get(group_ids[i], 1 if group_ids[i] else 0), group_ids[i] if group_ids[i] else 9999, i)
+            )
+            def update_ui_with_groups():
                 for widget in frame.winfo_children():
                     widget.destroy()
                 thumbs.clear()
@@ -173,8 +172,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                     frame.update_idletasks()
                     canvas.configure(scrollregion=canvas.bbox("all"))
                 print('[Lightroom UI] Thumbnails updated with groups.')
-            root.after(0, _update)
-        update_ui_with_groups()
+            root.after(0, update_ui_with_groups)
+        threading.Thread(target=compute_and_update_groups, daemon=True).start()
     # Remove duplicate update_thumbnails definition
     # ...existing code...
     root = Tk()
