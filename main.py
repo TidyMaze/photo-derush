@@ -142,24 +142,33 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 key=lambda i: (-group_cardinality.get(group_ids[i], 1 if group_ids[i] else 0), group_ids[i] if group_ids[i] else 9999, i)
             )
             def update_ui_with_groups():
-                for widget in frame.winfo_children():
-                    widget.destroy()
-                thumbs.clear()
                 for pos, idx in enumerate(sorted_indices):
                     img, img_name = image_data[idx]
                     tk_img = ImageTk.PhotoImage(img, master=frame)
                     cell_w, cell_h = 160, 160
                     border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
                     highlight = border_color
-                    lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
-                    lbl.image = tk_img
-                    lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
+                    # Try to reuse widgets if possible
+                    widget_list = frame.grid_slaves(row=pos//5, column=pos%5)
+                    if widget_list:
+                        lbl = widget_list[0]
+                        lbl.config(image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
+                        lbl.image = tk_img
+                    else:
+                        lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
+                        lbl.image = tk_img
+                        lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
                     label_text = ""
                     if group_ids[idx]:
                         label_text += f"Group {group_ids[idx]}\n"
                     label_text += f"Hash: {hash_map[idx]}"
-                    info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
-                    info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
+                    info_widgets = [w for w in frame.grid_slaves(row=pos//5, column=pos%5) if isinstance(w, Label) and not hasattr(w, 'image')]
+                    if info_widgets:
+                        info_label = info_widgets[0]
+                        info_label.config(text=label_text)
+                    else:
+                        info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
+                        info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
                     def on_click(event, i=idx, label=lbl):
                         selected_idx[0] = i
                         print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
