@@ -5,6 +5,8 @@ import imagehash
 import faiss
 import numpy as np
 
+MAX_IMAGES = 200
+
 def list_images(directory):
     exts = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
     return [f for f in os.listdir(directory)
@@ -197,12 +199,12 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     thumbs = []
     root.geometry("1100x900")
     root.resizable(True, True)
-    default_n = min(50, len(image_paths))
+    default_n = min(MAX_IMAGES, len(image_paths))
     print(f"[Lightroom UI] Loading thumbnails for {default_n} images.")
     def on_slider_change(v):
         print(f"[Lightroom UI] Slider changed: {v}")
         update_thumbnails(int(v), threaded=False)
-    slider = Scale(root, from_=1, to=min(50, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12))
+    slider = Scale(root, from_=1, to=min(MAX_IMAGES, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12))
     slider.set(default_n)
     slider.config(command=on_slider_change)
     print("[Lightroom UI] Slider created.")
@@ -276,8 +278,8 @@ def duplicate_slayer(image_dir, trash_dir):
         os.rename(src, dst)
         trashed.append(img)
     all_images = [images[0]] + trashed
-    print(f"[Duplicate Slayer] Loading {len(all_images[:50])} images in UI.")
-    show_lightroom_ui(all_images[:50], image_dir, trashed_paths=trashed[:49], trashed_dir=trash_dir)
+    print(f"[Duplicate Slayer] Loading {len(all_images[:MAX_IMAGES])} images in UI.")
+    show_lightroom_ui(all_images[:MAX_IMAGES], image_dir, trashed_paths=trashed[:MAX_IMAGES-1], trashed_dir=trash_dir)
     return kept, [os.path.join(trash_dir, t) for t in trashed]
 
 if __name__ == "__main__":
@@ -295,7 +297,7 @@ if __name__ == "__main__":
         if non_image_exts:
             print(f"Warning: Non-image extensions detected: {', '.join(non_image_exts)}")
         if len(images) > 0:
-            show_lightroom_ui(images[:50], directory)
+            show_lightroom_ui(images[:MAX_IMAGES], directory)
         else:
             print("No images found.")
         main_duplicate_detection()
