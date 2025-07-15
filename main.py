@@ -53,7 +53,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         os.makedirs(thumbnail_dir, exist_ok=True)
         valid_paths = []
         for img_name in image_paths[:n]:
-            print(f"[Lightroom UI] Processing image: {img_name}")
+            # print(f"[Lightroom UI] Processing image: {img_name}")
             img_path = os.path.join(directory, img_name)
             thumb_path = os.path.join(thumbnail_dir, img_name)
             try:
@@ -63,7 +63,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 hashes.append(hash_bytes)
                 valid_paths.append(img_name)
                 if os.path.exists(thumb_path):
-                    print(f"[Lightroom UI] Using cached thumbnail for {img_name}.")
+                    # print(f"[Lightroom UI] Using cached thumbnail for {img_name}.")
                     img = Image.open(thumb_path)
                 else:
                     print(f"[Lightroom UI] Creating thumbnail for {img_name}.")
@@ -91,6 +91,12 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
         # Remove group computation from thumbnail loading
         sorted_indices = list(range(len(valid_paths)))
+        hash_map_local = {}
+        for idx, h in enumerate(hashes):
+            if h is not None:
+                hash_map_local[idx] = ''.join(f'{b:02x}' for b in h)
+            else:
+                hash_map_local[idx] = None
         def update_ui(progressive=False):
             print(f"[Lightroom UI] update_ui: Updating thumbnails with {len(sorted_indices)} images.")
             for widget in frame.winfo_children():
@@ -105,7 +111,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
                 lbl.image = tk_img
                 lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
-                label_text = f"Hash: {hash_map[idx] if hash_map[idx] is not None else 'N/A'}"
+                label_text = f"Hash: {hash_map_local[idx] if hash_map_local[idx] is not None else 'N/A'}"
                 info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
                 info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
                 def on_click(event, i=idx, label=lbl):
@@ -136,36 +142,38 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         )
         # Now update UI with group info
         def update_ui_with_groups():
-            for widget in frame.winfo_children():
-                widget.destroy()
-            thumbs.clear()
-            for pos, idx in enumerate(sorted_indices):
-                img, img_name = image_data[idx]
-                tk_img = ImageTk.PhotoImage(img, master=frame)
-                cell_w, cell_h = 160, 160
-                border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
-                highlight = border_color
-                lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
-                lbl.image = tk_img
-                lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
-                label_text = ""
-                if group_ids[idx]:
-                    label_text += f"Group {group_ids[idx]}\n"
-                label_text += f"Hash: {hash_map[idx]}"
-                info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
-                info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
-                def on_click(event, i=idx, label=lbl):
-                    selected_idx[0] = i
-                    print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
-                    update_ui_with_groups()
-                def on_double_click(event, img_path=os.path.join(directory, img_name)):
-                    open_full_image(img_path)
-                lbl.bind("<Button-1>", on_click)
-                lbl.bind("<Double-Button-1>", on_double_click)
-                thumbs.append(tk_img)
-                frame.update_idletasks()
-                canvas.configure(scrollregion=canvas.bbox("all"))
-            print('[Lightroom UI] Thumbnails updated with groups.')
+            def _update():
+                for widget in frame.winfo_children():
+                    widget.destroy()
+                thumbs.clear()
+                for pos, idx in enumerate(sorted_indices):
+                    img, img_name = image_data[idx]
+                    tk_img = ImageTk.PhotoImage(img, master=frame)
+                    cell_w, cell_h = 160, 160
+                    border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
+                    highlight = border_color
+                    lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
+                    lbl.image = tk_img
+                    lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
+                    label_text = ""
+                    if group_ids[idx]:
+                        label_text += f"Group {group_ids[idx]}\n"
+                    label_text += f"Hash: {hash_map[idx]}"
+                    info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
+                    info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
+                    def on_click(event, i=idx, label=lbl):
+                        selected_idx[0] = i
+                        print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
+                        root.after(0, update_ui_with_groups)
+                    def on_double_click(event, img_path=os.path.join(directory, img_name)):
+                        open_full_image(img_path)
+                    lbl.bind("<Button-1>", on_click)
+                    lbl.bind("<Double-Button-1>", on_double_click)
+                    thumbs.append(tk_img)
+                    frame.update_idletasks()
+                    canvas.configure(scrollregion=canvas.bbox("all"))
+                print('[Lightroom UI] Thumbnails updated with groups.')
+            root.after(0, _update)
         update_ui_with_groups()
     # Remove duplicate update_thumbnails definition
     # ...existing code...
@@ -185,17 +193,6 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     def on_frame_configure(event):
         canvas.configure(scrollregion=canvas.bbox("all"))
     frame.bind("<Configure>", on_frame_configure)
-    def _on_mousewheel(event):
-        if hasattr(event, 'delta'):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        elif event.num == 4:
-            canvas.yview_scroll(-1, "units")
-        elif event.num == 5:
-            canvas.yview_scroll(1, "units")
-    canvas.bind_all("<MouseWheel>", _on_mousewheel)
-    canvas.bind_all("<Button-4>", _on_mousewheel)
-    canvas.bind_all("<Button-5>", _on_mousewheel)
-    canvas.bind_all("<Shift-MouseWheel>", _on_mousewheel)
     thumbs = []
     root.geometry("1100x900")
     root.resizable(True, True)
