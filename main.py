@@ -77,18 +77,58 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                         if j != i:
                             duplicate_indices.add(j)
         print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
+        # Assign group IDs for duplicates
+        group_ids = {}
+        group_cardinality = {}
+        hash_map = {}
+        current_group = 1
+        clusters = []
+        visited = set()
+        for idx in range(len(valid_paths)):
+            if idx in duplicate_indices and idx not in visited:
+                cluster = [idx]
+                for j in duplicate_indices:
+                    if j != idx and j not in visited:
+                        cluster.append(j)
+                        visited.add(j)
+                for i in cluster:
+                    group_ids[i] = current_group
+                group_cardinality[current_group] = len(cluster)
+                clusters.append(cluster)
+                current_group += 1
+        for idx in range(len(valid_paths)):
+            if idx not in group_ids:
+                group_ids[idx] = None
+        # Store hash for each image
+        for idx, h in enumerate(hashes):
+            if h is not None:
+                hash_map[idx] = ''.join(f'{b:02x}' for b in h)
+            else:
+                hash_map[idx] = 'N/A'
+        sorted_indices = sorted(
+            range(len(valid_paths)),
+            key=lambda i: (-group_cardinality.get(group_ids[i], 1 if group_ids[i] else 0), group_ids[i] if group_ids[i] else 9999, i)
+        )
         def update_ui(progressive=False):
             for widget in frame.winfo_children():
                 widget.destroy()
             thumbs.clear()
-            for idx, (img, img_name) in enumerate(image_data):
+            for pos, idx in enumerate(sorted_indices):
+                img, img_name = image_data[idx]
                 tk_img = ImageTk.PhotoImage(img, master=frame)
                 cell_w, cell_h = 160, 160
-                border_color = "red" if idx in duplicate_indices else "#444"
-                highlight = "#00bfff" if selected_idx[0] == idx else border_color
-                lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid")
+                border_color = "red" if selected_idx[0] == idx else ("red" if idx in duplicate_indices else "#444")
+                highlight = border_color
+                lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
                 lbl.image = tk_img
-                lbl.grid(row=idx//5, column=idx%5, padx=5, pady=5)
+                lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
+                # Display groupId and hash if present
+                label_text = ""
+                if group_ids[idx]:
+                    label_text += f"Group {group_ids[idx]}\n"
+                label_text += f"Hash: {hash_map[idx]}"
+                info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
+                info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
                 def on_click(event, i=idx, label=lbl):
                     selected_idx[0] = i
                     print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
