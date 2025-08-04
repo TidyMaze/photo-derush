@@ -42,188 +42,95 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     import threading
     print(f"[Lightroom UI] Preparing to load {len(image_paths)} images from {directory}.")
     selected_idx = [None]
+    thumbs = []
+    root = Tk()
+    root.title("Photo Derush")
+    canvas = Canvas(root, bg="#222")
+    frame = Frame(canvas, bg="#222")
+    canvas.pack(side="left", fill="both", expand=True)
+    frame.pack(fill="both", expand=True)
+    # Add placeholder widgets for each image immediately
+    placeholder_img = Image.new('RGB', (150, 150), color=(80, 80, 80))
+    placeholder_tk_img = ImageTk.PhotoImage(placeholder_img, master=frame)
+    image_labels = []
+    info_labels = []
+    for pos, img_name in enumerate(image_paths[:MAX_IMAGES]):
+        lbl = Label(frame, image=placeholder_tk_img, bg="#444", bd=4, relief="solid", highlightbackground="#444", highlightthickness=4)
+        lbl.image = placeholder_tk_img
+        lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
+        info_label = Label(frame, text="Loading...", bg="#222", fg="red", font=("Arial", 9, "bold"))
+        info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
+        image_labels.append(lbl)
+        info_labels.append(info_label)
+    frame.update_idletasks()
+    canvas.configure(scrollregion=canvas.bbox("all"))
     def update_thumbnails(n, threaded=False):
         import time
         start = time.time()
         print(f"[Lightroom UI] update_thumbnails: Start loading {n} images.")
-        image_data = []
-        hashes = []
-        valid_paths = []
+        image_data = [None] * n
+        hashes = [None] * n
+        valid_paths = [None] * n
         thumbnail_dir = os.path.join(directory, 'thumbnails')
         os.makedirs(thumbnail_dir, exist_ok=True)
-        valid_paths = []
-        for img_name in image_paths[:n]:
-            # print(f"[Lightroom UI] Processing image: {img_name}")
+        for idx, img_name in enumerate(image_paths[:n]):
             img_path = os.path.join(directory, img_name)
             thumb_path = os.path.join(thumbnail_dir, img_name)
             try:
                 dh = compute_dhash(img_path)
                 hash_hex = int(str(dh), 16)
                 hash_bytes = np.array([(hash_hex >> (8 * i)) & 0xFF for i in range(8)], dtype='uint8')[::-1]
-                hashes.append(hash_bytes)
-                valid_paths.append(img_name)
+                hashes[idx] = hash_bytes
+                valid_paths[idx] = img_name
                 if os.path.exists(thumb_path):
-                    # print(f"[Lightroom UI] Using cached thumbnail for {img_name}.")
                     img = Image.open(thumb_path)
                 else:
-                    print(f"[Lightroom UI] Creating thumbnail for {img_name}.")
                     img = Image.open(img_path)
                     img.thumbnail((150, 150))
                     img.save(thumb_path)
-                image_data.append((img, img_name))
+                image_data[idx] = (img, img_name)
+                tk_img = ImageTk.PhotoImage(img, master=frame)
+                image_labels[idx].config(image=tk_img)
+                image_labels[idx].image = tk_img
+                info_labels[idx].config(text=f"Hash: {''.join(f'{b:02x}' for b in hash_bytes)}")
             except Exception as e:
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
-                hashes.append(None)
-                valid_paths.append(img_name)
+                hashes[idx] = None
+                valid_paths[idx] = img_name
+                info_labels[idx].config(text="Error loading")
         print(f"[Lightroom UI] Finished hashing. Time elapsed: {time.time() - start:.2f}s")
-        duplicate_indices = set()
-        if hashes and all(h is not None for h in hashes):
-            hashes_np = np.stack(hashes).astype('uint8')
-            index = faiss.IndexBinaryFlat(64)
-            index.add(hashes_np)
-            for i, h in enumerate(hashes_np):
-                res = index.range_search(h[np.newaxis, :], 5)
-                lims, D, I = res
-                if lims[1] - lims[0] > 1:
-                    for j in I[lims[0]:lims[1]]:
-                        if j != i:
-                            duplicate_indices.add(j)
-        print(f"[Lightroom UI] Duplicate clustering done. Time elapsed: {time.time() - start:.2f}s")
-        # Remove group computation from thumbnail loading
-        sorted_indices = list(range(len(valid_paths)))
-        hash_map_local = {}
-        for idx, h in enumerate(hashes):
-            if h is not None:
-                hash_map_local[idx] = ''.join(f'{b:02x}' for b in h)
-            else:
-                hash_map_local[idx] = None
-        def update_ui(progressive=False):
-            print(f"[Lightroom UI] update_ui: Updating thumbnails with {len(sorted_indices)} images.")
-            for widget in frame.winfo_children():
-                widget.destroy()
-            thumbs.clear()
-            for pos, idx in enumerate(sorted_indices):
-                img, img_name = image_data[idx]
-                tk_img = ImageTk.PhotoImage(img, master=frame)
-                cell_w, cell_h = 160, 160
-                border_color = "#444"
-                highlight = border_color
-                lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
-                lbl.image = tk_img
-                lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
-                label_text = f"Hash: {hash_map_local[idx] if hash_map_local[idx] is not None else 'N/A'}"
-                info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
-                info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
-                def on_click(event, i=idx, label=lbl):
-                    selected_idx[0] = i
-                    print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
-                    # Only update the border of the selected widget, not destroy all widgets
-                    for widget in frame.winfo_children():
-                        if isinstance(widget, Label) and hasattr(widget, 'image'):
-                            widget.config(bg="#444", highlightbackground="#444")
-                    label.config(bg="red", highlightbackground="red")
-                def on_double_click(event, img_path=os.path.join(directory, img_name)):
-                    open_full_image(img_path)
-                lbl.bind("<Button-1>", on_click)
-                lbl.bind("<Double-Button-1>", on_double_click)
-                thumbs.append(tk_img)
-                frame.update_idletasks()
-                canvas.configure(scrollregion=canvas.bbox("all"))
-                if progressive:
-                    frame.update()
-            print('[Lightroom UI] Thumbnails updated.')
-
-        update_ui()
-        # Compute groups after all images are loaded in a separate thread
+        # Compute groups in a separate thread after all images are loaded
         def compute_and_update_groups():
             group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
             sorted_indices = sorted(
                 range(len(valid_paths)),
                 key=lambda i: (-group_cardinality.get(group_ids[i], 1 if group_ids[i] else 0), group_ids[i] if group_ids[i] else 9999, i)
             )
-            def update_ui_with_groups():
-                for pos, idx in enumerate(sorted_indices):
-                    img, img_name = image_data[idx]
-                    tk_img = ImageTk.PhotoImage(img, master=frame)
-                    cell_w, cell_h = 160, 160
-                    border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
-                    highlight = border_color
-                    # Try to reuse widgets if possible
-                    widget_list = frame.grid_slaves(row=pos//5, column=pos%5)
-                    if widget_list:
-                        lbl = widget_list[0]
-                        lbl.config(image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
-                        lbl.image = tk_img
-                    else:
-                        lbl = Label(frame, image=tk_img, bg=highlight, bd=4, relief="solid", highlightbackground=border_color, highlightthickness=4)
-                        lbl.image = tk_img
-                        lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
-                    label_text = ""
-                    if group_ids[idx]:
-                        label_text += f"Group {group_ids[idx]}\n"
-                    label_text += f"Hash: {hash_map[idx]}"
-                    info_widgets = [w for w in frame.grid_slaves(row=pos//5, column=pos%5) if isinstance(w, Label) and not hasattr(w, 'image')]
-                    if info_widgets:
-                        info_label = info_widgets[0]
-                        info_label.config(text=label_text)
-                    else:
-                        info_label = Label(frame, text=label_text, bg="#222", fg="red", font=("Arial", 9, "bold"))
-                        info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
-                    def on_click(event, i=idx, label=lbl):
-                        selected_idx[0] = i
-                        print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
-                        root.after(0, update_ui_with_groups)
-                    def on_double_click(event, img_path=os.path.join(directory, img_name)):
-                        open_full_image(img_path)
-                    lbl.bind("<Button-1>", on_click)
-                    lbl.bind("<Double-Button-1>", on_double_click)
-                    thumbs.append(tk_img)
-                    frame.update_idletasks()
-                    canvas.configure(scrollregion=canvas.bbox("all"))
-                print('[Lightroom UI] Thumbnails updated with groups.')
-            root.after(0, update_ui_with_groups)
+            for pos, idx in enumerate(sorted_indices):
+                img, img_name = image_data[idx]
+                tk_img = ImageTk.PhotoImage(img, master=frame)
+                border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
+                image_labels[pos].config(image=tk_img, bg=border_color, highlightbackground=border_color)
+                image_labels[pos].image = tk_img
+                label_text = ""
+                if group_ids[idx]:
+                    label_text += f"Group {group_ids[idx]}\n"
+                label_text += f"Hash: {hash_map[idx]}"
+                info_labels[pos].config(text=label_text)
+                def on_click(event, i=idx, label=image_labels[pos]):
+                    selected_idx[0] = i
+                    print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
+                    for lbl in image_labels:
+                        lbl.config(bg="#444", highlightbackground="#444")
+                    label.config(bg="red", highlightbackground="red")
+                def on_double_click(event, img_path=os.path.join(directory, img_name)):
+                    open_full_image(img_path)
+                image_labels[pos].bind("<Button-1>", on_click)
+                image_labels[pos].bind("<Double-Button-1>", on_double_click)
+            frame.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
         threading.Thread(target=compute_and_update_groups, daemon=True).start()
-    # Remove duplicate update_thumbnails definition
-    # ...existing code...
-    root = Tk()
-    print("[Lightroom UI] Tkinter window created.")
-    root.title("Photo Derush - Minimalist Lightroom UI")
-    root.configure(bg="#222")
-    canvas = Canvas(root, bg="#222")
-    print("[Lightroom UI] Canvas created.")
-    canvas.pack(side="top", fill="both", expand=True)
-    scroll_y = Scrollbar(canvas, orient="vertical", command=canvas.yview)
-    scroll_y.pack(side="right", fill="y")
-    canvas.configure(yscrollcommand=scroll_y.set)
-    frame = Frame(canvas, bg="#222")
-    frame_id = canvas.create_window((0,0), window=frame, anchor="nw")
-    print("[Lightroom UI] Frame for images created.")
-    def on_frame_configure(event):
-        canvas.configure(scrollregion=canvas.bbox("all"))
-    frame.bind("<Configure>", on_frame_configure)
-    thumbs = []
-    root.geometry("1100x900")
-    root.resizable(True, True)
-    default_n = min(MAX_IMAGES, len(image_paths))
-    print(f"[Lightroom UI] Loading thumbnails for {default_n} images.")
-    def on_slider_change(v):
-        print(f"[Lightroom UI] Slider changed: {v}")
-        update_thumbnails(int(v), threaded=False)
-    slider = Scale(root, from_=1, to=min(MAX_IMAGES, len(image_paths)), orient=HORIZONTAL, bg="#222", fg="#fff", highlightthickness=0, troughcolor="#444", label="Number of images", font=("Arial", 12))
-    slider.set(default_n)
-    slider.config(command=on_slider_change)
-    print("[Lightroom UI] Slider created.")
-    toolbar = Frame(root, bg="#333")
-    toolbar.place(x=0, rely=850, relwidth=1, height=50)
-    selector_label = Label(toolbar, text="Number of images:", bg="#333", fg="#fff", font=("Arial", 12))
-    selector_label.pack(side="left", padx=10, pady=5)
-    slider.pack_forget()
-    slider.pack(in_=toolbar, side="left", padx=10, pady=5)
-    print("[Lightroom UI] Toolbar and slider packed.")
-    # Load thumbnails in a separate thread
-    def load_images_thread():
-        update_thumbnails(default_n, threaded=True)
-    threading.Thread(target=load_images_thread, daemon=True).start()
+    threading.Thread(target=lambda: update_thumbnails(min(MAX_IMAGES, len(image_paths)), threaded=True), daemon=True).start()
     root.mainloop()
     print("[Lightroom UI] Tkinter mainloop exited.")
 
