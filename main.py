@@ -5,6 +5,7 @@ import imagehash
 import faiss
 import numpy as np
 import cv2
+from photo_derush.aesthetic import compute_nima_score
 
 MAX_IMAGES = 200
 
@@ -93,6 +94,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
             top_labels[pos].grid(row=row, column=col, sticky="n", padx=5, pady=(0, 30))
             bottom_labels[pos].grid(row=row, column=col, sticky="s", padx=5, pady=(30, 0))
             blur_labels[pos].grid(row=row, column=col, sticky="e", padx=5, pady=(0, 0))
+            aesthetic_labels[pos].grid(row=row, column=col, sticky="w", padx=5, pady=(0, 0))
         frame.update_idletasks()
         canvas.configure(scrollregion=canvas.bbox("all"))
 
@@ -107,6 +109,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     top_labels = []
     bottom_labels = []
     blur_labels = []
+    aesthetic_labels = []
     for pos, img_name in enumerate(image_paths[:MAX_IMAGES]):
         lbl = Label(frame, image=placeholder_tk_img, bg="#444", bd=4, relief="solid", highlightbackground="#444", highlightthickness=4)
         lbl.image = placeholder_tk_img
@@ -122,10 +125,13 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         bottom_label.grid(row=0, column=0, sticky="s")
         blur_label = Label(frame, text="Blur: ...", bg="#222", fg="yellow", font=("Arial", 9))
         blur_label.grid(row=0, column=0, sticky="e")
+        aesthetic_label = Label(frame, text="Aesthetic: ...", bg="#222", fg="cyan", font=("Arial", 9))
+        aesthetic_label.grid(row=0, column=0, sticky="w")
         image_labels.append(lbl)
         top_labels.append(top_label)
         bottom_labels.append(bottom_label)
         blur_labels.append(blur_label)
+        aesthetic_labels.append(aesthetic_label)
     relayout_grid()
     frame.update_idletasks()
     canvas.configure(scrollregion=canvas.bbox("all"))
@@ -161,6 +167,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 bottom_labels[idx].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
                 blur_score = compute_blur_score(img_path)
                 blur_labels[idx].config(text=f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A")
+                aesthetic_score = compute_nima_score(img_path)
+                aesthetic_labels[idx].config(text=f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A")
             except Exception as e:
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
                 hashes[idx] = None
@@ -188,6 +196,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 bottom_labels[pos].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
                 blur_score = compute_blur_score(os.path.join(directory, img_name))
                 blur_labels[pos].config(text=f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A")
+                aesthetic_score = compute_nima_score(os.path.join(directory, img_name))
+                aesthetic_labels[pos].config(text=f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A")
                 def on_click(event, i=idx, label=image_labels[pos]):
                     selected_idx[0] = i
                     print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
