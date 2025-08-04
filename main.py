@@ -4,6 +4,7 @@ from PIL import Image, ImageTk
 import imagehash
 import faiss
 import numpy as np
+import cv2
 
 MAX_IMAGES = 200
 
@@ -37,6 +38,12 @@ def open_full_image(img_path):
         top.destroy()
     lbl.bind("<Button-1>", close)
     top.mainloop()
+
+def compute_blur_score(img_path):
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return None
+    return cv2.Laplacian(img, cv2.CV_64F).var()
 
 def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None):
     import threading
@@ -85,6 +92,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
             lbl.grid(row=row, column=col, padx=5, pady=5)
             top_labels[pos].grid(row=row, column=col, sticky="n", padx=5, pady=(0, 30))
             bottom_labels[pos].grid(row=row, column=col, sticky="s", padx=5, pady=(30, 0))
+            blur_labels[pos].grid(row=row, column=col, sticky="e", padx=5, pady=(0, 0))
         frame.update_idletasks()
         canvas.configure(scrollregion=canvas.bbox("all"))
 
@@ -98,10 +106,11 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     image_labels = []
     top_labels = []
     bottom_labels = []
+    blur_labels = []
     for pos, img_name in enumerate(image_paths[:MAX_IMAGES]):
         lbl = Label(frame, image=placeholder_tk_img, bg="#444", bd=4, relief="solid", highlightbackground="#444", highlightthickness=4)
         lbl.image = placeholder_tk_img
-        lbl.grid(row=0, column=0)  # Initial dummy placement
+        lbl.grid(row=0, column=0)
         img_path = os.path.join(directory, img_name)
         try:
             date_str = str(os.path.getmtime(img_path))
@@ -111,9 +120,12 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         top_label.grid(row=0, column=0, sticky="n")
         bottom_label = Label(frame, text=f"{img_name}\nDate: {date_str}", bg="#222", fg="white", font=("Arial", 9))
         bottom_label.grid(row=0, column=0, sticky="s")
+        blur_label = Label(frame, text="Blur: ...", bg="#222", fg="yellow", font=("Arial", 9))
+        blur_label.grid(row=0, column=0, sticky="e")
         image_labels.append(lbl)
         top_labels.append(top_label)
         bottom_labels.append(bottom_label)
+        blur_labels.append(blur_label)
     relayout_grid()
     frame.update_idletasks()
     canvas.configure(scrollregion=canvas.bbox("all"))
@@ -147,6 +159,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 image_labels[idx].image = tk_img
                 top_labels[idx].config(text=f"Hash: {''.join(f'{b:02x}' for b in hash_bytes)}")
                 bottom_labels[idx].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
+                blur_score = compute_blur_score(img_path)
+                blur_labels[idx].config(text=f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A")
             except Exception as e:
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
                 hashes[idx] = None
@@ -172,6 +186,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 top_text += f"Hash: {hash_map[idx]}"
                 top_labels[pos].config(text=top_text)
                 bottom_labels[pos].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
+                blur_score = compute_blur_score(os.path.join(directory, img_name))
+                blur_labels[pos].config(text=f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A")
                 def on_click(event, i=idx, label=image_labels[pos]):
                     selected_idx[0] = i
                     print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
