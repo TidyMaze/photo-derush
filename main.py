@@ -46,9 +46,25 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     root = Tk()
     root.title("Photo Derush")
     canvas = Canvas(root, bg="#222")
-    frame = Frame(canvas, bg="#222")
+    vscroll = Scrollbar(root, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=vscroll.set)
+    vscroll.pack(side="right", fill="y")
     canvas.pack(side="left", fill="both", expand=True)
-    frame.pack(fill="both", expand=True)
+    frame = Frame(canvas, bg="#222")
+    frame_id = canvas.create_window((0, 0), window=frame, anchor="nw")
+    def on_frame_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+    frame.bind("<Configure>", on_frame_configure)
+    def _on_mousewheel(event):
+        if event.num == 4 or event.delta > 0:
+            canvas.yview_scroll(-1, "units")
+        elif event.num == 5 or event.delta < 0:
+            canvas.yview_scroll(1, "units")
+    # Windows and MacOS
+    canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    # Linux (X11)
+    canvas.bind_all("<Button-4>", _on_mousewheel)
+    canvas.bind_all("<Button-5>", _on_mousewheel)
     # Add placeholder widgets for each image immediately
     placeholder_img = Image.new('RGB', (150, 150), color=(80, 80, 80))
     placeholder_tk_img = ImageTk.PhotoImage(placeholder_img, master=frame)
