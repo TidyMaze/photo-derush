@@ -58,7 +58,13 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         lbl = Label(frame, image=placeholder_tk_img, bg="#444", bd=4, relief="solid", highlightbackground="#444", highlightthickness=4)
         lbl.image = placeholder_tk_img
         lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
-        info_label = Label(frame, text="Loading...", bg="#222", fg="red", font=("Arial", 9, "bold"))
+        # Get file date
+        img_path = os.path.join(directory, img_name)
+        try:
+            date_str = str(os.path.getmtime(img_path))
+        except Exception:
+            date_str = "N/A"
+        info_label = Label(frame, text=f"{img_name}\nDate: {date_str}\nLoading...", bg="#222", fg="red", font=("Arial", 9, "bold"))
         info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
         image_labels.append(lbl)
         info_labels.append(info_label)
@@ -92,7 +98,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 tk_img = ImageTk.PhotoImage(img, master=frame)
                 image_labels[idx].config(image=tk_img)
                 image_labels[idx].image = tk_img
-                info_labels[idx].config(text=f"Hash: {''.join(f'{b:02x}' for b in hash_bytes)}")
+                info_labels[idx].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}\nHash: {''.join(f'{b:02x}' for b in hash_bytes)}")
             except Exception as e:
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
                 hashes[idx] = None
@@ -115,7 +121,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 label_text = ""
                 if group_ids[idx]:
                     label_text += f"Group {group_ids[idx]}\n"
-                label_text += f"Hash: {hash_map[idx]}"
+                label_text += f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}\nHash: {hash_map[idx]}"
                 info_labels[pos].config(text=label_text)
                 def on_click(event, i=idx, label=image_labels[pos]):
                     selected_idx[0] = i
