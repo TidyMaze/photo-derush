@@ -83,7 +83,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
             row = pos // images_per_row
             col = pos % images_per_row
             lbl.grid(row=row, column=col, padx=5, pady=5)
-            info_labels[pos].grid(row=row, column=col, sticky="n", padx=5, pady=(0, 30))
+            top_labels[pos].grid(row=row, column=col, sticky="n", padx=5, pady=(0, 30))
+            bottom_labels[pos].grid(row=row, column=col, sticky="s", padx=5, pady=(30, 0))
         frame.update_idletasks()
         canvas.configure(scrollregion=canvas.bbox("all"))
 
@@ -95,21 +96,24 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     placeholder_img = Image.new('RGB', (150, 150), color=(80, 80, 80))
     placeholder_tk_img = ImageTk.PhotoImage(placeholder_img, master=frame)
     image_labels = []
-    info_labels = []
+    top_labels = []
+    bottom_labels = []
     for pos, img_name in enumerate(image_paths[:MAX_IMAGES]):
         lbl = Label(frame, image=placeholder_tk_img, bg="#444", bd=4, relief="solid", highlightbackground="#444", highlightthickness=4)
         lbl.image = placeholder_tk_img
         lbl.grid(row=0, column=0)  # Initial dummy placement
-        # Get file date
         img_path = os.path.join(directory, img_name)
         try:
             date_str = str(os.path.getmtime(img_path))
         except Exception:
             date_str = "N/A"
-        info_label = Label(frame, text=f"{img_name}\nDate: {date_str}\nLoading...", bg="#222", fg="red", font=("Arial", 9, "bold"))
-        info_label.grid(row=0, column=0, sticky="n")  # Initial dummy placement
+        top_label = Label(frame, text="Loading...", bg="#222", fg="red", font=("Arial", 9, "bold"))
+        top_label.grid(row=0, column=0, sticky="n")
+        bottom_label = Label(frame, text=f"{img_name}\nDate: {date_str}", bg="#222", fg="white", font=("Arial", 9))
+        bottom_label.grid(row=0, column=0, sticky="s")
         image_labels.append(lbl)
-        info_labels.append(info_label)
+        top_labels.append(top_label)
+        bottom_labels.append(bottom_label)
     relayout_grid()
     frame.update_idletasks()
     canvas.configure(scrollregion=canvas.bbox("all"))
@@ -141,7 +145,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 tk_img = ImageTk.PhotoImage(img, master=frame)
                 image_labels[idx].config(image=tk_img)
                 image_labels[idx].image = tk_img
-                info_labels[idx].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}\nHash: {''.join(f'{b:02x}' for b in hash_bytes)}")
+                top_labels[idx].config(text=f"Hash: {''.join(f'{b:02x}' for b in hash_bytes)}")
+                bottom_labels[idx].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
             except Exception as e:
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
                 hashes[idx] = None
@@ -161,11 +166,12 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
                 image_labels[pos].config(image=tk_img, bg=border_color, highlightbackground=border_color)
                 image_labels[pos].image = tk_img
-                label_text = ""
+                top_text = ""
                 if group_ids[idx]:
-                    label_text += f"Group {group_ids[idx]}\n"
-                label_text += f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}\nHash: {hash_map[idx]}"
-                info_labels[pos].config(text=label_text)
+                    top_text += f"Group {group_ids[idx]}\n"
+                top_text += f"Hash: {hash_map[idx]}"
+                top_labels[pos].config(text=top_text)
+                bottom_labels[pos].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
                 def on_click(event, i=idx, label=image_labels[pos]):
                     selected_idx[0] = i
                     print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
