@@ -56,15 +56,18 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         canvas.configure(scrollregion=canvas.bbox("all"))
     frame.bind("<Configure>", on_frame_configure)
     def _on_mousewheel(event):
-        if event.num == 4 or event.delta > 0:
+        if event.delta:
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif event.num == 4:
             canvas.yview_scroll(-1, "units")
-        elif event.num == 5 or event.delta < 0:
+        elif event.num == 5:
             canvas.yview_scroll(1, "units")
-    # Windows and MacOS
-    canvas.bind_all("<MouseWheel>", _on_mousewheel)
-    # Linux (X11)
-    canvas.bind_all("<Button-4>", _on_mousewheel)
-    canvas.bind_all("<Button-5>", _on_mousewheel)
+    # Bind mouse wheel events to both canvas and frame for proper focus
+    for widget in (canvas, frame):
+        widget.bind("<Enter>", lambda e: widget.bind_all("<MouseWheel>", _on_mousewheel))
+        widget.bind("<Leave>", lambda e: widget.unbind_all("<MouseWheel>"))
+        widget.bind_all("<Button-4>", _on_mousewheel)
+        widget.bind_all("<Button-5>", _on_mousewheel)
     # Add placeholder widgets for each image immediately
     placeholder_img = Image.new('RGB', (150, 150), color=(80, 80, 80))
     placeholder_tk_img = ImageTk.PhotoImage(placeholder_img, master=frame)
