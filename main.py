@@ -68,6 +68,29 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         widget.bind("<Leave>", lambda e: widget.unbind_all("<MouseWheel>"))
         widget.bind_all("<Button-4>", _on_mousewheel)
         widget.bind_all("<Button-5>", _on_mousewheel)
+
+    THUMB_SIZE = 160
+
+    def get_images_per_row():
+        width = canvas.winfo_width()
+        if width < THUMB_SIZE:
+            return 1
+        return max(1, ((width // THUMB_SIZE) - 1))
+
+    def relayout_grid():
+        images_per_row = get_images_per_row()
+        for pos, lbl in enumerate(image_labels):
+            row = pos // images_per_row
+            col = pos % images_per_row
+            lbl.grid(row=row, column=col, padx=5, pady=5)
+            info_labels[pos].grid(row=row, column=col, sticky="n", padx=5, pady=(0, 30))
+        frame.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    def on_resize(event):
+        relayout_grid()
+
+    canvas.bind('<Configure>', on_resize)
     # Add placeholder widgets for each image immediately
     placeholder_img = Image.new('RGB', (150, 150), color=(80, 80, 80))
     placeholder_tk_img = ImageTk.PhotoImage(placeholder_img, master=frame)
@@ -76,7 +99,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     for pos, img_name in enumerate(image_paths[:MAX_IMAGES]):
         lbl = Label(frame, image=placeholder_tk_img, bg="#444", bd=4, relief="solid", highlightbackground="#444", highlightthickness=4)
         lbl.image = placeholder_tk_img
-        lbl.grid(row=pos//5, column=pos%5, padx=5, pady=5)
+        lbl.grid(row=0, column=0)  # Initial dummy placement
         # Get file date
         img_path = os.path.join(directory, img_name)
         try:
@@ -84,9 +107,10 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         except Exception:
             date_str = "N/A"
         info_label = Label(frame, text=f"{img_name}\nDate: {date_str}\nLoading...", bg="#222", fg="red", font=("Arial", 9, "bold"))
-        info_label.grid(row=pos//5, column=pos%5, sticky="n", padx=5, pady=(0, 30))
+        info_label.grid(row=0, column=0, sticky="n")  # Initial dummy placement
         image_labels.append(lbl)
         info_labels.append(info_label)
+    relayout_grid()
     frame.update_idletasks()
     canvas.configure(scrollregion=canvas.bbox("all"))
     def update_thumbnails(n, threaded=False):
