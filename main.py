@@ -63,6 +63,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     thumbs = []
     root = Tk()
     root.title("Photo Derush")
+    root.geometry("1400x800")
     canvas = Canvas(root, bg="#222")
     vscroll = Scrollbar(root, orient="vertical", command=canvas.yview)
     canvas.configure(yscrollcommand=vscroll.set)
