@@ -104,7 +104,6 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
             top_labels[pos].grid(row=row, column=col, sticky="n", padx=5, pady=(0, 30))
             bottom_labels[pos].grid(row=row, column=col, sticky="s", padx=5, pady=(30, 0))
             blur_labels[pos].grid(row=row, column=col, sticky="e", padx=5, pady=(0, 0))
-            aesthetic_labels[pos].grid(row=row, column=col, sticky="w", padx=5, pady=(0, 0))
         frame.update_idletasks()
         canvas.configure(scrollregion=canvas.bbox("all"))
 
@@ -119,7 +118,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     top_labels = []
     bottom_labels = []
     blur_labels = []
-    aesthetic_labels = []
+    # Remove aesthetic_labels
     metrics_cache = {}
     num_images = min(MAX_IMAGES, len(image_paths))
     for pos, img_name in enumerate(image_paths[:num_images]):
@@ -137,9 +136,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
         bottom_label.grid(row=0, column=0, sticky="s")
         blur_label = Label(frame, text="", bg="#222", fg="yellow", font=("Arial", 9))
         blur_label.grid(row=0, column=0, sticky="e")
-        aesthetic_label = Label(frame, text="", bg="#222", fg="cyan", font=("Arial", 9))
-        aesthetic_label.grid(row=0, column=0, sticky="w")
-        def show_metrics(event, bl=blur_label, al=aesthetic_label, ip=img_path):
+        # Remove aesthetic_label, unify metrics in blur_label
+        def show_metrics(event, bl=blur_label, ip=img_path):
             if ip in metrics_cache:
                 blur_score, sharpness_metrics, aesthetic_score = metrics_cache[ip]
             else:
@@ -147,18 +145,23 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 sharpness_metrics = compute_sharpness_features(ip)
                 aesthetic_score = 42
                 metrics_cache[ip] = (blur_score, sharpness_metrics, aesthetic_score)
-            bl.config(text=f"Blur: {blur_score:.1f} | Lap: {sharpness_metrics['variance_laplacian']:.1f} | Tenengrad: {sharpness_metrics['tenengrad']:.1f} | Brenner: {sharpness_metrics['brenner']:.1f} | Wavelet: {sharpness_metrics['wavelet_energy']:.1f}" if blur_score is not None else "Blur: N/A")
-            al.config(text=f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A")
-        def hide_metrics(event, bl=blur_label, al=aesthetic_label):
+            lines = [
+                f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A",
+                f"Laplacian: {sharpness_metrics['variance_laplacian']:.1f}",
+                f"Tenengrad: {sharpness_metrics['tenengrad']:.1f}",
+                f"Brenner: {sharpness_metrics['brenner']:.1f}",
+                f"Wavelet: {sharpness_metrics['wavelet_energy']:.1f}",
+                f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A"
+            ]
+            bl.config(text="\n".join(lines))
+        def hide_metrics(event, bl=blur_label):
             bl.config(text="")
-            al.config(text="")
         lbl.bind("<Enter>", show_metrics)
         lbl.bind("<Leave>", hide_metrics)
         image_labels.append(lbl)
         top_labels.append(top_label)
         bottom_labels.append(bottom_label)
         blur_labels.append(blur_label)
-        aesthetic_labels.append(aesthetic_label)
     relayout_grid()
     frame.update_idletasks()
     canvas.configure(scrollregion=canvas.bbox("all"))
@@ -193,7 +196,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 top_labels[idx].config(text=f"Hash: {''.join(f'{b:02x}' for b in hash_bytes)}")
                 bottom_labels[idx].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
                 blur_labels[idx].config(text="")
-                aesthetic_labels[idx].config(text="")
+                # Remove aesthetic_labels
             except Exception as e:
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
                 hashes[idx] = None
@@ -222,7 +225,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 blur_score = compute_blur_score(os.path.join(directory, img_name))
                 blur_labels[pos].config(text=f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A")
                 aesthetic_score = 42
-                aesthetic_labels[pos].config(text=f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A")
+                # aesthetic_labels[pos].config(text=f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A")
                 def on_click(event, i=idx, label=image_labels[pos]):
                     selected_idx[0] = i
                     print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
