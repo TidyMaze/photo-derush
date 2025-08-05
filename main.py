@@ -5,7 +5,6 @@ import imagehash
 import faiss
 import numpy as np
 import cv2
-from photo_derush.aesthetic import compute_nima_score
 
 MAX_IMAGES = 200
 
@@ -167,7 +166,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 bottom_labels[idx].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
                 blur_score = compute_blur_score(img_path)
                 blur_labels[idx].config(text=f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A")
-                aesthetic_score = compute_nima_score(img_path)
+                aesthetic_score = 42
                 aesthetic_labels[idx].config(text=f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A")
             except Exception as e:
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
