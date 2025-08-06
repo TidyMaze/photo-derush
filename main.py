@@ -5,6 +5,7 @@ import imagehash
 import faiss
 import numpy as np
 import cv2
+import logging
 
 MAX_IMAGES = 200
 
@@ -184,12 +185,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 hash_bytes = np.array([(hash_hex >> (8 * i)) & 0xFF for i in range(8)], dtype='uint8')[::-1]
                 hashes[idx] = hash_bytes
                 valid_paths[idx] = img_name
-                if os.path.exists(thumb_path):
-                    img = Image.open(thumb_path)
-                else:
-                    img = Image.open(img_path)
-                    img.thumbnail((150, 150))
-                    img.save(thumb_path)
+                img, cached = cache_thumbnail(img_path, thumb_path)
                 image_data[idx] = (img, img_name)
                 tk_img = ImageTk.PhotoImage(img, master=frame)
                 image_labels[idx].config(image=tk_img)
@@ -340,6 +336,21 @@ def duplicate_slayer(image_dir, trash_dir):
     print(f"[Duplicate Slayer] Loading {len(all_images[:MAX_IMAGES])} images in UI.")
     show_lightroom_ui(all_images[:MAX_IMAGES], image_dir, trashed_paths=trashed[:MAX_IMAGES-1], trashed_dir=trash_dir)
     return kept, [os.path.join(trash_dir, t) for t in trashed]
+
+def cache_thumbnail(img_path, thumb_path, size=(150, 150)):
+    """Load thumbnail from cache or create and cache it."""
+    from PIL import Image
+    import logging
+    if os.path.exists(thumb_path):
+        img = Image.open(thumb_path)
+        logging.info(f"Loaded cached thumbnail for {os.path.basename(thumb_path)}")
+        return img, True
+    else:
+        img = Image.open(img_path)
+        img.thumbnail(size)
+        img.save(thumb_path)
+        logging.info(f"Created and cached thumbnail for {os.path.basename(thumb_path)}")
+        return img, False
 
 if __name__ == "__main__":
     import sys

@@ -1,3 +1,5 @@
+import os
+from PIL import Image
 import pytest
 from unittest.mock import MagicMock
 import main
@@ -49,17 +51,26 @@ def test_image_selection_and_open(monkeypatch):
 
 def test_thumbnail_low_resolution(monkeypatch):
     loaded_sizes = []
-    class DummyImage:
-        def __init__(self):
-            self.size = (4000, 3000)
-        def thumbnail(self, size):
-            loaded_sizes.append(size)
+    from PIL import Image
+    import tempfile
+    import os
+    # Create a dummy image file at /tmp/img1.jpg
+    tmp_img_path = "/tmp/img1.jpg"
+    img = Image.new("RGB", (4000, 3000))
+    img.save(tmp_img_path)
     def fake_open(path):
-        return DummyImage()
+        img = Image.open(tmp_img_path)
+        orig_thumbnail = img.thumbnail
+        def thumbnail(size):
+            loaded_sizes.append(size)
+            return orig_thumbnail(size)
+        img.thumbnail = thumbnail
+        return img
     monkeypatch.setattr("PIL.Image.open", fake_open)
     import main
     main.show_lightroom_ui(["img1.jpg"], "/tmp")
     assert any(s[0] <= 200 and s[1] <= 200 for s in loaded_sizes), "Images should be loaded in low resolution (thumbnail)"
+    os.remove(tmp_img_path)
 
 def test_images_displayed_after_window_opens(monkeypatch):
     displayed = []
@@ -79,3 +90,28 @@ def test_images_displayed_after_window_opens(monkeypatch):
     import main
     main.show_lightroom_ui(["img1.jpg", "img2.jpg"], "/tmp")
     assert displayed, "Images should be displayed in the UI after window opens"
+
+def test_thumbnail_cache_usage(tmp_path, caplog):
+    img_name = "test.jpg"
+    img_path = tmp_path / img_name
+    img = Image.new("RGB", (300, 300), color="red")
+    img.save(img_path)
+    thumbnail_dir = tmp_path / "thumbnails"
+    thumbnail_dir.mkdir(exist_ok=True)
+    thumb_path = thumbnail_dir / img_name
+
+    from main import cache_thumbnail
+
+    # First call: should create thumbnail
+    with caplog.at_level("INFO"):
+        img_obj, cached = cache_thumbnail(str(img_path), str(thumb_path))
+    assert thumb_path.exists(), "Thumbnail was not created"
+    assert not cached, "Thumbnail should not be cached on first call"
+    assert any("Created and cached thumbnail" in r for r in caplog.messages), "Thumbnail creation not logged"
+
+    # Second call: should use cache
+    caplog.clear()
+    with caplog.at_level("INFO"):
+        img_obj, cached = cache_thumbnail(str(img_path), str(thumb_path))
+    assert cached, "Thumbnail cache not used on second call"
+    assert any("Loaded cached thumbnail" in r for r in caplog.messages), "Thumbnail cache usage not logged"
