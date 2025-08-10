@@ -156,10 +156,22 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A"
             ]
             bl.config(text="\n".join(lines))
+            bl._metrics_open = True
         def hide_metrics(event, bl=blur_label):
-            bl.config(text="")
+            # Only hide if cursor is not on metrics label
+            if not getattr(bl, '_metrics_hover', False):
+                bl.config(text="")
+                bl._metrics_open = False
+        def metrics_enter(event, bl=blur_label):
+            bl._metrics_hover = True
+        def metrics_leave(event, bl=blur_label):
+            bl._metrics_hover = False
+            if not getattr(bl, '_metrics_open', False):
+                bl.config(text="")
         lbl.bind("<Enter>", show_metrics)
         lbl.bind("<Leave>", hide_metrics)
+        blur_label.bind("<Enter>", metrics_enter)
+        blur_label.bind("<Leave>", metrics_leave)
         image_labels.append(lbl)
         top_labels.append(top_label)
         bottom_labels.append(bottom_label)
