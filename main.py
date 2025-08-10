@@ -72,6 +72,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     left_panel.pack(side="left", fill="both", expand=True)
     right_panel = Frame(main_container, bg="#222")
     right_panel.pack(side="right", fill="both", expand=True)
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
     # Add scrollable text to right panel
     right_canvas = Canvas(right_panel, bg="#222")
     right_scroll = Scrollbar(right_panel, orient="vertical", command=right_canvas.yview)
@@ -81,11 +83,32 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     right_frame = Frame(right_canvas, bg="#222")
     right_canvas.create_window((0, 0), window=right_frame, anchor="nw")
     def on_right_frame_configure(event):
+        logging.debug(f"Right frame configured: scrollregion={right_canvas.bbox('all')}")
         right_canvas.configure(scrollregion=right_canvas.bbox("all"))
     right_frame.bind("<Configure>", on_right_frame_configure)
+    # Enable trackpad scrolling (macOS and cross-platform)
+    def _on_right_mousewheel(event):
+        logging.debug(f"Right panel mousewheel event: delta={getattr(event, 'delta', None)}, num={getattr(event, 'num', None)}")
+        if event.delta:
+            right_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif event.num == 4:
+            right_canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            right_canvas.yview_scroll(1, "units")
+    right_canvas.bind_all("<MouseWheel>", _on_right_mousewheel)
+    right_canvas.bind_all("<Button-4>", _on_right_mousewheel)
+    right_canvas.bind_all("<Button-5>", _on_right_mousewheel)
     filler_text = ("This is the right panel.\n" * 50).strip()
     right_label = Label(right_frame, text=filler_text, bg="#222", fg="#aaa", font=("Arial", 14), justify="left", anchor="nw")
     right_label.pack(fill="both", expand=True, padx=30, pady=30)
+    def on_right_label_event(event):
+        logging.debug(f"Right label event: type={event.type}, widget={event.widget}")
+    right_label.bind("<Enter>", on_right_label_event)
+    right_label.bind("<Leave>", on_right_label_event)
+    right_label.bind("<Button-1>", on_right_label_event)
+    right_label.bind("<Button-2>", on_right_label_event)
+    right_label.bind("<Button-3>", on_right_label_event)
+    right_label.bind("<Motion>", on_right_label_event)
     # Move canvas and scrollbar to left_panel
     canvas = Canvas(left_panel, bg="#222")
     vscroll = Scrollbar(left_panel, orient="vertical", command=canvas.yview)
