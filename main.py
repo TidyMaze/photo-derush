@@ -210,7 +210,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
             for pos, idx in enumerate(sorted_indices):
                 img, img_name = image_data[idx]
                 tk_img = ImageTk.PhotoImage(img, master=frame)
-                border_color = "red" if selected_idx[0] == idx else ("red" if group_ids[idx] else "#444")
+                border_color = "blue" if group_ids[idx] else ("red" if selected_idx[0] == idx else "#444")
                 image_labels[pos].config(image=tk_img, bg=border_color, highlightbackground=border_color)
                 image_labels[pos].image = tk_img
                 top_text = ""
