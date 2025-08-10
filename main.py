@@ -219,13 +219,12 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 top_text += f"Hash: {hash_map[idx]}"
                 top_labels[pos].config(text=top_text)
                 bottom_labels[pos].config(text=f"{img_name}\nDate: {str(os.path.getmtime(os.path.join(directory, img_name)))}")
-                blur_score = compute_blur_score(os.path.join(directory, img_name))
-                blur_labels[pos].config(text=f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A")
                 aesthetic_score = 42
                 # aesthetic_labels[pos].config(text=f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A")
                 def on_click(event, i=idx, label=image_labels[pos]):
                     selected_idx[0] = i
-                    print(f"[Lightroom UI] Image selected: {valid_paths[i]}")
+                    import logging
+                    logging.info(f"[Lightroom UI] Image selected: {valid_paths[i]}")
                     for lbl in image_labels:
                         lbl.config(bg="#444", highlightbackground="#444")
                     label.config(bg="red", highlightbackground="red")
