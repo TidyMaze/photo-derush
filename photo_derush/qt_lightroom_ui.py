@@ -12,6 +12,12 @@ from .viewer import open_full_image_qt
 
 def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None, image_info=None):
     app = QApplication.instance() or QApplication(sys.argv)
+    # Apply global darkstyle
+    import os
+    qss_path = os.path.join(os.path.dirname(__file__), 'qdarkstyle.qss')
+    if os.path.exists(qss_path):
+        with open(qss_path, 'r') as f:
+            app.setStyleSheet(f.read())
     def get_sorted_images():
         return image_paths
     win = LightroomMainWindow(image_paths, directory, get_sorted_images, image_info=image_info)

@@ -68,13 +68,13 @@ class InfoPanel(QWidget):
                 continue  # already shown
             other_exif.append((k, v))
         # Render important EXIF fields as a table
-        exif_table = "<table style='font-size:11pt; color:#bbb;'>"
+        exif_table = "<table style='font-size:11pt; color:#bbb; background:#232629;'>"
         for k, v in exif_display:
             exif_table += f"<tr><td style='font-weight:bold; padding-right:10px;'>{k}</td><td>{v}</td></tr>"
         exif_table += "</table>"
         # Render other EXIF fields in a <details> block
         if other_exif:
-            more_table = "<table style='font-size:10pt; color:#aaa;'>"
+            more_table = "<table style='font-size:10pt; color:#aaa; background:#232629;'>"
             for k, v in other_exif:
                 more_table += f"<tr><td style='font-weight:bold; padding-right:10px;'>{k}</td><td>{v}</td></tr>"
             more_table += "</table>"
