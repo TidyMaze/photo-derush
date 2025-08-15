@@ -1,17 +1,17 @@
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
 from .utils import extract_exif, format_gps_info
 
 class InfoPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.label = QLabel()
-        self.label.setStyleSheet("color: #aaa; background: #222; font-size: 14pt;")
-        self.label.setAlignment(self.label.alignment() | self.label.alignment())
-        self.label.setTextInteractionFlags(
-            self.label.textInteractionFlags() | self.label.textInteractionFlags()
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setStyleSheet("color: #aaa; background: #222; font-size: 14pt;")
+        self.text_edit.setTextInteractionFlags(
+            self.text_edit.textInteractionFlags() | self.text_edit.textInteractionFlags().TextSelectableByMouse | self.text_edit.textInteractionFlags().TextSelectableByKeyboard
         )
         layout = QVBoxLayout(self)
-        layout.addWidget(self.label)
+        layout.addWidget(self.text_edit)
         self.setLayout(layout)
 
     def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None):
@@ -19,7 +19,11 @@ class InfoPanel(QWidget):
         exif_lines = []
         for k, v in exif.items():
             if k == "GPSInfo" and isinstance(v, dict):
-                exif_lines.append(f"GPSInfo: {format_gps_info(v)}")
+                try:
+                    gps_str = format_gps_info(v)
+                except Exception as e:
+                    gps_str = f"[Invalid GPSInfo: {e}]"
+                exif_lines.append(f"GPSInfo: {gps_str}")
             else:
                 exif_lines.append(f"{k}: {v}")
         exif_str = "\n".join(exif_lines) if exif_lines else "No EXIF data"
@@ -42,5 +46,4 @@ class InfoPanel(QWidget):
         info += f"<b>Image Hash:</b> {image_hash}<br>"
         info += metrics_str
         info += f"<b>EXIF:</b><br><pre style='font-size:10pt'>{exif_str}</pre>"
-        self.label.setText(info)
-
+        self.text_edit.setHtml(info)
