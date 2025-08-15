@@ -69,7 +69,7 @@ def test_cluster_duplicates_groups_similar_images(tmp_path):
     draw.rectangle([8, 8, 24, 24], fill=(0, 0, 0))
     img_diff.save(img3)
     image_paths = ["img1.jpg", "img2.jpg", "img3.jpg"]
-    clusters = cluster_duplicates(image_paths, str(tmp_path), hamming_thresh=1)
+    clusters, _ = cluster_duplicates(image_paths, str(tmp_path), hamming_thresh=1)
     # There should be one cluster with the two identical images
     assert any(set(cluster) == {"img1.jpg", "img2.jpg"} for cluster in clusters), f"Expected img1 and img2 to be clustered together, got {clusters}"
     # The different image should not be clustered with the others

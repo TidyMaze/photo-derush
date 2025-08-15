@@ -57,7 +57,7 @@ class LightroomMainWindow(QMainWindow):
         super().closeEvent(event)
 
 # --- Main Lightroom UI ---
-def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None):
+def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None):
     logging.info("Starting Photo Derush Qt app...")
     logging.info(f"Image directory: {directory}")
     logging.info(f"Number of images: {len(image_paths)})")
@@ -100,9 +100,15 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     logging.info("About to show window...")
     win.show()
     logging.info("Window shown, scheduling deferred hashing...")
+    if on_window_opened:
+        QTimer.singleShot(0, on_window_opened)
 
     def deferred_hashing_and_population():
         logging.info("Deferred hashing started (should be after window is visible)...")
+        from main import cluster_duplicates
+        clusters, image_hashes = cluster_duplicates(image_paths, directory)
+        if on_window_opened:
+            on_window_opened(clusters, image_hashes)
         # --- Image grid population ---
         THUMB_SIZE = 160
         num_images = min(MAX_IMAGES, len(image_paths))
@@ -131,48 +137,13 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             blur_labels[idx].setText("\n".join(lines))
         def hide_metrics(idx):
             blur_labels[idx].setText("")
-        # --- Group images by similarity hash ---
-        hash_threshold = 5  # Hamming distance threshold for similarity
-        image_hashes = {}
-        hash_to_filenames = {}
-        for i, img_name in enumerate(image_paths[:num_images]):
-            img_path = os.path.join(directory, img_name)
-            if os.path.exists(img_path):
-                phash = compute_perceptual_hash(img_path)
-                if phash is not None:
-                    image_hashes[img_name] = phash
-                    hash_to_filenames.setdefault(str(phash), []).append(img_name)
-                else:
-                    image_hashes[img_name] = None
-            else:
-                image_hashes[img_name] = None
-            if i % 10 == 0 or i == num_images - 1:
-                logging.info(f"Processed {i+1}/{num_images} images for perceptual hashing...")
-        # --- Find similarity groups ---
-        ungrouped = set(img_name for img_name, h in image_hashes.items() if h is not None)
-        similarity_groups = []
-        while ungrouped:
-            base = ungrouped.pop()
-            base_hash = image_hashes[base]
-            group = [base]
-            to_remove = set()
-            for other in ungrouped:
-                if image_hashes[other] - base_hash <= hash_threshold:
-                    group.append(other)
-                    to_remove.add(other)
-            ungrouped -= to_remove
-            similarity_groups.append(group)
-        # Add images with no hash to their own group
-        for img_name, h in image_hashes.items():
-            if h is None:
-                similarity_groups.append([img_name])
-        logging.info(f"Formed {len(similarity_groups)} similarity groups.")
+        # Use clusters and image_hashes for UI population as needed
         # --- Populate grid by similarity group ---
         row = 0
         col_count = 5
-        for group_idx, group in enumerate(similarity_groups):
+        for group_idx, group in enumerate(clusters):
             group_hash = str(image_hashes[group[0]]) if image_hashes[group[0]] is not None else "NO_HASH"
-            logging.info(f"Placing group {group_idx+1}/{len(similarity_groups)}: hash {group_hash} with {len(group)} images")
+            logging.info(f"Placing group {group_idx+1}/{len(clusters)}: hash {group_hash} with {len(group)} images")
             group_label = QLabel(f"Similarity group: {group_hash}")
             group_label.setStyleSheet("color: #3daee9; background: #232629; font-weight: bold; font-size: 12pt;")
             grid.addWidget(group_label, row, 0, 1, col_count)
@@ -189,6 +160,8 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
                     img = Image.open(img_path)
                     img.thumbnail((THUMB_SIZE, THUMB_SIZE))
                     img.save(thumb_path)
+                # Always ensure the image is a thumbnail before display
+                img.thumbnail((THUMB_SIZE, THUMB_SIZE))
                 pix = pil2pixmap(img)
                 # Top label
                 blur_score = compute_blur_score(img_path)

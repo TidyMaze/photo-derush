@@ -41,8 +41,8 @@ def compute_sharpness_features(img_path):
     features['wavelet_energy'] = cv2.Laplacian(img, cv2.CV_64F).var()  # Placeholder for Wavelet energy
     return features
 
-def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None):
-    show_lightroom_ui_qt(image_paths, directory, trashed_paths, trashed_dir)
+def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None):
+    show_lightroom_ui_qt(image_paths, directory, trashed_paths, trashed_dir, on_window_opened=on_window_opened)
 
 def compute_dhash(image_path):
     img = Image.open(image_path)
@@ -51,18 +51,20 @@ def compute_dhash(image_path):
 def cluster_duplicates(image_paths, directory, hamming_thresh=5):
     hashes = []
     valid_paths = []
+    image_hashes = {}
     for img_name in image_paths:
         img_path = os.path.join(directory, img_name)
         try:
             dh = compute_dhash(img_path)
-            # Convert hash to uint8 array (8 bytes for 64 bits)
             h_bytes = int(str(dh), 16).to_bytes(8, 'big')
-            hashes.append(np.frombuffer(h_bytes, dtype='uint8'))
+            hash_arr = np.frombuffer(h_bytes, dtype='uint8')
+            hashes.append(hash_arr)
             valid_paths.append(img_name)
+            image_hashes[img_name] = hash_arr
         except Exception:
             continue
     if not hashes:
-        return []
+        return [], {}
     hashes_np = np.stack(hashes)
     index = faiss.IndexBinaryFlat(64)
     index.add(hashes_np)
@@ -71,15 +73,13 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
     for i, h in enumerate(hashes_np):
         if i in visited:
             continue
-        # FAISS expects 2D array for queries
         lims, D, I = index.range_search(h[np.newaxis, :], hamming_thresh)
-        # Get indices for this query
         cluster = [valid_paths[j] for j in I[lims[0]:lims[1]] if j not in visited]
         for j in I[lims[0]:lims[1]]:
             visited.add(j)
         if len(cluster) > 1:
             clusters.append(cluster)
-    return clusters
+    return clusters, image_hashes
 
 def compute_duplicate_groups(hashes):
     print("[Duplicate Groups] Computing duplicate groups...")
@@ -118,10 +118,11 @@ def compute_duplicate_groups(hashes):
             hash_map[idx] = None
     return group_ids, group_cardinality, hash_map
 
-def main_duplicate_detection():
+def main_duplicate_detection(clusters=None, image_hashes=None):
     directory = '/Users/yannrolland/Pictures/photo-dataset'
-    images = list_images(directory)
-    clusters = cluster_duplicates(images, directory)
+    if clusters is None or image_hashes is None:
+        images = list_images(directory)
+        clusters, image_hashes = cluster_duplicates(images, directory)
     print(f"Found {len(clusters)} duplicate clusters.")
     for idx, cluster in enumerate(clusters):
         print(f"Cluster {idx+1}: {cluster}")
@@ -178,7 +179,10 @@ if __name__ == "__main__":
         if non_image_exts:
             print(f"Warning: Non-image extensions detected: {', '.join(non_image_exts)}")
         if len(images) > 0:
-            show_lightroom_ui(images[:MAX_IMAGES], directory)
+            show_lightroom_ui(
+                images[:MAX_IMAGES],
+                directory,
+                on_window_opened=lambda clusters, hashes: main_duplicate_detection(clusters, hashes)
+            )
         else:
             print("No images found.")
-        main_duplicate_detection()

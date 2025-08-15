@@ -74,6 +74,10 @@ def test_thumbnail_low_resolution(monkeypatch):
         else:
             return original_open(path)
     monkeypatch.setattr("PIL.Image.open", fake_open)
+    # Remove any existing thumbnail to force generation
+    thumb_path = "/tmp/thumbnails/img1.jpg"
+    if os.path.exists(thumb_path):
+        os.remove(thumb_path)
     import main
     main.show_lightroom_ui(["img1.jpg"], "/tmp")
     assert any(s[0] <= 200 and s[1] <= 200 for s in loaded_sizes), "Images should be loaded in low resolution (thumbnail)"
