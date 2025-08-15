@@ -168,16 +168,16 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             bottom_label.setStyleSheet("color: white; background: #222;")
             blur_label = QLabel("")
             blur_label.setStyleSheet("color: yellow; background: #222;")
-            lbl = QLabel()
+            lbl = HoverEffectLabel()
             lbl.setPixmap(pix)
             lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
-            lbl.setStyleSheet("background: #444; border: 2px solid #444;")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path):
                 def handler(e: QMouseEvent):
                     for l in image_labels:
-                        l.setStyleSheet("background: #444; border: 2px solid #444;")
-                    label.setStyleSheet("background: red; border: 2px solid red;")
+                        if isinstance(l, HoverEffectLabel):
+                            l.set_selected(False)
+                    label.set_selected(True)
                     # Compute metrics and update right panel
                     blur_score = compute_blur_score(img_path)
                     sharpness_metrics = compute_sharpness_features(img_path)
@@ -364,4 +364,26 @@ class HoverLabel(QLabel):
     def leaveEvent(self, event):
         if self._on_leave:
             self._on_leave(event)
+        super().leaveEvent(event)
+
+class HoverEffectLabel(QLabel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._is_selected = False
+        self._base_style = "background: #444; border: 2px solid #444;"
+        self._hover_style = "background: #666; border: 2px solid #888;"
+        self.setStyleSheet(self._base_style)
+    def set_selected(self, selected: bool):
+        self._is_selected = selected
+        if selected:
+            self.setStyleSheet("background: red; border: 2px solid red;")
+        else:
+            self.setStyleSheet(self._base_style)
+    def enterEvent(self, event):
+        if not self._is_selected:
+            self.setStyleSheet(self._hover_style)
+        super().enterEvent(event)
+    def leaveEvent(self, event):
+        if not self._is_selected:
+            self.setStyleSheet(self._base_style)
         super().leaveEvent(event)
