@@ -62,6 +62,8 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     logging.info(f"Image directory: {directory}")
     logging.info(f"Number of images: {len(image_paths)})")
     app = QApplication.instance() or QApplication([])
+    # Ensure app quits when last window is closed
+    app.lastWindowClosed.connect(app.quit)
     # Load and apply QDarkStyle stylesheet
     qss_path = os.path.join(os.path.dirname(__file__), "qdarkstyle.qss")
     with open(qss_path, "r") as f:
@@ -232,7 +234,9 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
         row += 2
     status.showMessage(f"Loaded {num_images} images")
     win.show()
+    logging.info("Entering Qt event loop...")
     app.exec()
+    logging.info("Qt event loop exited. Application quitting.")
     def on_close(event):
         app.setStyleSheet("")  # Reset style to default
         app.quit()
