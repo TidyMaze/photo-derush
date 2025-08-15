@@ -131,9 +131,9 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     right_layout = QVBoxLayout(right_panel)
     info_label = QLabel(("This is the right panel.\n" * 50).strip())
     info_label.setStyleSheet("color: #aaa; background: #222; font-size: 14pt;")
-    info_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+    info_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
     info_label.setTextInteractionFlags(
-        Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse
+        Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse
     )
     right_layout.addWidget(info_label)
     splitter.addWidget(left_panel)
@@ -200,7 +200,10 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             lbl.setPixmap(pix)
             lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
             lbl.setStyleSheet("background: #444; border: 2px solid #444;")
-            lbl.setAlignment(Qt.AlignCenter)
+            # Ensure QLabel has no parent before adding to layout (fix QObject::setParent error)
+            if lbl.parent() is not None:
+                lbl.setParent(None)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=os.path.join(directory, img_name)):
                 def handler(e: QMouseEvent):
                     for l in image_labels:
@@ -302,7 +305,10 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             lbl.setPixmap(pix)
             lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
             lbl.setStyleSheet("background: #444; border: 2px solid #444;")
-            lbl.setAlignment(Qt.AlignCenter)
+            # Ensure QLabel has no parent before adding to layout (fix QObject::setParent error)
+            if lbl.parent() is not None:
+                lbl.setParent(None)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path):
                 def handler(e: QMouseEvent):
                     for l in image_labels:
