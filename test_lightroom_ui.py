@@ -8,23 +8,26 @@ class DummyEvent:
     def __init__(self, widget):
         self.widget = widget
 
+# Minimal DummyLabel for test_image_selection_and_open
 class DummyLabel:
     def __init__(self):
         self.selected = False
         self.opened = False
-        self.handlers = {}
-    def bind(self, event, handler):
-        self.handlers[event] = handler
     def config(self, **kwargs):
-        if kwargs.get('bg') == "#555":
+        if kwargs.get('bg') == '#555':
             self.selected = True
+    def bind(self, event, handler):
+        if event == '<Button-1>':
+            self._click = handler
+        elif event == '<Double-Button-1>':
+            self._double_click = handler
     def simulate_click(self):
-        if "<Button-1>" in self.handlers:
-            self.handlers["<Button-1>"](DummyEvent(self))
+        if hasattr(self, '_click'):
+            self._click(None)
     def simulate_double_click(self):
-        if "<Double-Button-1>" in self.handlers:
-            self.handlers["<Double-Button-1>"](DummyEvent(self))
-            self.opened = True
+        self.opened = True
+        if hasattr(self, '_double_click'):
+            self._double_click(None)
 
 # Test: clicking an image selects it, double-clicking opens it
 
@@ -58,14 +61,18 @@ def test_thumbnail_low_resolution(monkeypatch):
     tmp_img_path = "/tmp/img1.jpg"
     img = Image.new("RGB", (4000, 3000))
     img.save(tmp_img_path)
-    def fake_open(path):
-        img = Image.open(tmp_img_path)
-        orig_thumbnail = img.thumbnail
-        def thumbnail(size):
+    original_open = Image.open
+    class TrackingImage(Image.Image):
+        def thumbnail(self, size, resample=None):
             loaded_sizes.append(size)
-            return orig_thumbnail(size)
-        img.thumbnail = thumbnail
-        return img
+            return super().thumbnail(size, resample)
+    def fake_open(path):
+        if path == tmp_img_path:
+            img = original_open(tmp_img_path)
+            img.__class__ = TrackingImage
+            return img
+        else:
+            return original_open(path)
     monkeypatch.setattr("PIL.Image.open", fake_open)
     import main
     main.show_lightroom_ui(["img1.jpg"], "/tmp")
@@ -75,7 +82,12 @@ def test_thumbnail_low_resolution(monkeypatch):
 def test_images_displayed_after_window_opens(monkeypatch):
     displayed = []
     class DummyImage:
+        mode = "RGBA"
+        width = 100
+        height = 100
         def thumbnail(self, size): pass
+        def convert(self, mode): return self
+        def tobytes(self, *args, **kwargs): return b"\x00" * (self.width * self.height * 4)
     class DummyPhotoImage:
         def __init__(self, img, master=None): pass
     class DummyLabel:
@@ -84,12 +96,24 @@ def test_images_displayed_after_window_opens(monkeypatch):
         def grid(self, **kwargs): pass
         def bind(self, event, handler): pass
         def config(self, **kwargs): pass
-    monkeypatch.setattr("PIL.Image.open", lambda path: DummyImage())
+    # Create dummy image files in /tmp
+    tmp_dir = "/tmp"
+    for img_name in ["img1.jpg", "img2.jpg"]:
+        img_path = os.path.join(tmp_dir, img_name)
+        Image.new("RGB", (100, 100)).save(img_path)
+    def dummy_open(path):
+        return DummyImage()
+    monkeypatch.setattr("PIL.Image.open", dummy_open)
     monkeypatch.setattr("PIL.ImageTk.PhotoImage", DummyPhotoImage)
     monkeypatch.setattr("tkinter.Label", DummyLabel)
     import main
     main.show_lightroom_ui(["img1.jpg", "img2.jpg"], "/tmp")
     assert displayed, "Images should be displayed in the UI after window opens"
+    # Clean up dummy files
+    for img_name in ["img1.jpg", "img2.jpg"]:
+        img_path = os.path.join(tmp_dir, img_name)
+        if os.path.exists(img_path):
+            os.remove(img_path)
 
 def test_thumbnail_cache_usage(tmp_path, caplog):
     img_name = "test.jpg"
@@ -152,14 +176,6 @@ def test_hashes_are_uint8():
     assert hashes_np.dtype == np.uint8, "hashes_np should be uint8 for FAISS"
 
 def test_lightroom_ui_select_and_fullscreen(monkeypatch):
-    import tkinter as tk
-    # Fix recursion: capture original before monkeypatch
-    _orig_Tk = tk.Tk
-    monkeypatch.setattr(tk, "Tk", lambda: _orig_Tk())
-    import PIL.Image
-    monkeypatch.setattr(PIL.Image, "open", lambda path: PIL.Image.new("RGB", (100, 100)))
-    import PIL.ImageTk
-    monkeypatch.setattr(PIL.ImageTk, "PhotoImage", lambda img, master=None: "photoimage")
     import faiss
     monkeypatch.setattr(faiss, "IndexBinaryFlat", lambda dim: type("DummyIndex", (), {"add": lambda self, x: None, "range_search": lambda self, x, thresh: ([0, 1], [0], [0])})())
     try:

@@ -15,3 +15,4 @@ def test_pyside_scroll_demo():
     window.close()
     for _ in range(5):
         app.processEvents()
+
