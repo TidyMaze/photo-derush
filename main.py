@@ -63,6 +63,9 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
             image_hashes[img_name] = hash_arr
         except Exception:
             continue
+        logging.info(f"Processed {img_name} with hash {dh}")
+
+    logging.info(f"Computed {len(hashes)} hashes for {len(image_paths)} images.")
     if not hashes:
         return [], {}
     hashes_np = np.stack(hashes)
@@ -79,6 +82,9 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
             visited.add(j)
         if len(cluster) > 1:
             clusters.append(cluster)
+
+    logging.info(f"Found {len(clusters)} clusters with Hamming threshold {hamming_thresh}.")
+
     return clusters, image_hashes
 
 def compute_duplicate_groups(hashes):
