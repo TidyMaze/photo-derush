@@ -6,6 +6,7 @@ PySide6 port of the Lightroom UI from main.py (Tkinter version).
 - All event handling and image display is Qt idiomatic
 """
 import os
+import hashlib
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QScrollArea, QLabel, QGridLayout, QSplitter, QDialog, QStatusBar
 )
@@ -127,11 +128,19 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
         lbl.setStyleSheet("background: #444; border: 2px solid #444;")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Top label
-        top_label = QLabel("Loading...")
+        blur_score = compute_blur_score(img_path)
+        if blur_score is not None:
+            top_label = QLabel(f"Blur: {blur_score:.1f}")
+        else:
+            top_label = QLabel("")
         top_label.setStyleSheet("color: red; background: #222;")
         # Bottom label
+        sha256_hash = ""
+        if os.path.exists(img_path):
+            with open(img_path, "rb") as f:
+                sha256_hash = hashlib.sha256(f.read()).hexdigest()[:12]
         date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
-        bottom_label = QLabel(f"{img_name}\nDate: {date_str}")
+        bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nSHA256: {sha256_hash}")
         bottom_label.setStyleSheet("color: white; background: #222;")
         # Blur/metrics label
         blur_label = QLabel("")
