@@ -1,6 +1,4 @@
 import os
-# Remove all Tkinter imports
-# from tkinter import Tk, Frame, Label, Scale, HORIZONTAL, Canvas, Scrollbar
 from PIL import Image
 import imagehash
 import faiss

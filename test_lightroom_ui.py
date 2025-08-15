@@ -96,9 +96,7 @@ def test_images_displayed_after_window_opens(monkeypatch):
     def dummy_open(path):
         return DummyImage()
     monkeypatch.setattr("PIL.Image.open", dummy_open)
-    # Remove Tkinter and PIL.ImageTk mocks
-    # monkeypatch.setattr("PIL.ImageTk.PhotoImage", DummyPhotoImage)
-    # monkeypatch.setattr("tkinter.Label", DummyLabel)
+    # Remove Tkinter and PIL.ImageTk mocks (already commented out)
     import main
     main.show_lightroom_ui(["img1.jpg", "img2.jpg"], "/tmp")
     assert displayed == [], "DummyLabel is not used anymore; test logic should be updated for Qt UI."
