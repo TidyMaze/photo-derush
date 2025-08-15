@@ -54,11 +54,20 @@ def extract_exif(img_path):
         return {}
 
 def format_gps_info(gps_info):
+    def _to_float(val):
+        # Handles tuple, int, float, or IFDRational
+        try:
+            if hasattr(val, 'numerator') and hasattr(val, 'denominator'):
+                return float(val.numerator) / float(val.denominator)
+            elif isinstance(val, (tuple, list)) and len(val) == 2:
+                return float(val[0]) / float(val[1])
+            else:
+                return float(val)
+        except Exception:
+            return float(val)
     def _convert_to_degrees(value):
         d, m, s = value
-        return float(d[0]) / float(d[1]) + \
-               float(m[0]) / float(m[1]) / 60 + \
-               float(s[0]) / float(s[1]) / 3600
+        return _to_float(d) + _to_float(m) / 60 + _to_float(s) / 3600
     try:
         gps_tags = {ExifTags.GPSTAGS.get(k, k): v for k, v in gps_info.items()}
         lat = lon = None
