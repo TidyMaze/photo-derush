@@ -61,6 +61,36 @@ class ClusteringWorker(QObject):
         clusters, image_hashes = cluster_duplicates(self.image_paths, self.directory)
         self.finished.emit(clusters, image_hashes)
 
+class ImageLoaderWorker(QObject):
+    image_ready = Signal(str, object, object, object, object)  # img_name, pix, metrics, date_str, thumb_path
+    finished = Signal()
+    def __init__(self, image_paths, directory):
+        super().__init__()
+        self.image_paths = image_paths
+        self.directory = directory
+    def run(self):
+        from PIL import Image
+        import os
+        for idx, img_name in enumerate(self.image_paths):
+            img_path = os.path.join(self.directory, img_name)
+            thumb_path = os.path.join(self.directory, 'thumbnails', img_name)
+            os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+            if os.path.exists(thumb_path):
+                img = Image.open(thumb_path)
+            else:
+                img = Image.open(img_path)
+                img.thumbnail((160, 160))
+                img.save(thumb_path)
+            img.thumbnail((160, 160))
+            from .qt_lightroom_ui import pil2pixmap, compute_blur_score, compute_sharpness_features
+            pix = pil2pixmap(img)
+            blur_score = compute_blur_score(img_path)
+            sharpness_metrics = compute_sharpness_features(img_path)
+            metrics = (blur_score, sharpness_metrics, 42)
+            date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
+            self.image_ready.emit(img_name, pix, metrics, date_str, thumb_path)
+        self.finished.emit()
+
 class LightroomMainWindow(QMainWindow):
     def closeEvent(self, event):
         QApplication.quit()
