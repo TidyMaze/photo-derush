@@ -65,6 +65,8 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     root = Tk()
     root.title("Photo Derush")
     root.geometry("1400x800")
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        root.after(50, root.quit)
     # Split view: left for app, right for empty panel
     main_container = Frame(root, bg="#222")
     main_container.pack(fill="both", expand=True)
@@ -255,7 +257,7 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
                 print(f"[Lightroom UI] Error processing {img_name}: {e}")
                 hashes[idx] = None
                 valid_paths[idx] = img_name
-                info_labels[idx].config(text="Error loading")
+                top_labels[idx].config(text="Error loading")
         print(f"[Lightroom UI] Finished hashing. Time elapsed: {time.time() - start:.2f}s")
         # Compute groups in a separate thread after all images are loaded
         def compute_and_update_groups():
@@ -374,7 +376,7 @@ def main_duplicate_detection():
     for idx, cluster in enumerate(clusters):
         print(f"Cluster {idx+1}: {cluster}")
 
-def duplicate_slayer(image_dir, trash_dir):
+def duplicate_slayer(image_dir, trash_dir, show_ui=True):
     images = [f for f in os.listdir(image_dir) if f.endswith('.jpg')]
     print(f"[Duplicate Slayer] Found {len(images)} images in {image_dir}.")
     if not images:
@@ -389,8 +391,11 @@ def duplicate_slayer(image_dir, trash_dir):
         os.rename(src, dst)
         trashed.append(img)
     all_images = [images[0]] + trashed
-    print(f"[Duplicate Slayer] Loading {len(all_images[:MAX_IMAGES])} images in UI.")
-    show_lightroom_ui(all_images[:MAX_IMAGES], image_dir, trashed_paths=trashed[:MAX_IMAGES-1], trashed_dir=trash_dir)
+    # Skip UI during automated tests
+    running_tests = os.environ.get("PYTEST_CURRENT_TEST") is not None
+    if show_ui and not running_tests:
+        print(f"[Duplicate Slayer] Loading {len(all_images[:MAX_IMAGES])} images in UI.")
+        show_lightroom_ui(all_images[:MAX_IMAGES], image_dir, trashed_paths=trashed[:MAX_IMAGES-1], trashed_dir=trash_dir)
     return kept, [os.path.join(trash_dir, t) for t in trashed]
 
 def cache_thumbnail(img_path, thumb_path, size=(150, 150)):

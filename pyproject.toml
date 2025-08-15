@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "A tool to dereush photography session with IA"
 authors = ["yrolland <rolland_yann@orange.fr>"]
 readme = "README.md"
-package-mode = false
+package-mode = true
+packages = [{ include = "photo_derush" }]
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -13,7 +14,7 @@ pytest = "^8.4.1"
 imagehash = "^4.3.2"
 faiss-cpu = "^1.11.0"
 opencv-python = "^4.12.0.88"
-
+PySide6 = "^6.7.0"
 
 [build-system]
 requires = ["poetry-core"]
