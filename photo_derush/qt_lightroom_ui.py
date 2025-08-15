@@ -168,27 +168,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             bottom_label.setStyleSheet("color: white; background: #222;")
             blur_label = QLabel("")
             blur_label.setStyleSheet("color: yellow; background: #222;")
-            def show_metrics(event=None, idx=idx):
-                img_path = os.path.join(directory, sorted_images[idx])
-                if img_path in metrics_cache:
-                    blur_score, sharpness_metrics, aesthetic_score = metrics_cache[img_path]
-                else:
-                    blur_score = compute_blur_score(img_path)
-                    sharpness_metrics = compute_sharpness_features(img_path)
-                    aesthetic_score = 42
-                    metrics_cache[img_path] = (blur_score, sharpness_metrics, aesthetic_score)
-                lines = [
-                    f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A",
-                    f"Laplacian: {sharpness_metrics['variance_laplacian']:.1f}",
-                    f"Tenengrad: {sharpness_metrics['tenengrad']:.1f}",
-                    f"Brenner: {sharpness_metrics['brenner']:.1f}",
-                    f"Wavelet: {sharpness_metrics['wavelet_energy']:.1f}",
-                    f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A"
-                ]
-                blur_label.setText("\n".join(lines))
-            def hide_metrics(event=None, idx=idx):
-                blur_label.setText("")
-            lbl = HoverLabel(on_enter=show_metrics, on_leave=hide_metrics)
+            lbl = QLabel()
             lbl.setPixmap(pix)
             lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
             lbl.setStyleSheet("background: #444; border: 2px solid #444;")
@@ -198,7 +178,12 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
                     for l in image_labels:
                         l.setStyleSheet("background: #444; border: 2px solid #444;")
                     label.setStyleSheet("background: red; border: 2px solid red;")
-                    update_info_panel(img_name, img_path, "-", "...", "...")
+                    # Compute metrics and update right panel
+                    blur_score = compute_blur_score(img_path)
+                    sharpness_metrics = compute_sharpness_features(img_path)
+                    aesthetic_score = 42
+                    metrics = (blur_score, sharpness_metrics, aesthetic_score)
+                    update_info_panel(img_name, img_path, "-", "...", "...", metrics)
                 return handler
             lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path)
             grid.addWidget(lbl, (idx//col_count)*4, idx%col_count)
@@ -257,7 +242,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
         status.showMessage(f"Grouping complete: {len(new_clusters)} groups")
     QTimer.singleShot(0, deferred_hashing_and_population)
 
-    def update_info_panel(img_name, img_path, group_idx, group_hash, image_hash):
+    def update_info_panel(img_name, img_path, group_idx, group_hash, image_hash, metrics=None):
         exif = extract_exif(img_path)
         exif_lines = []
         for k, v in exif.items():
@@ -266,11 +251,25 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             else:
                 exif_lines.append(f"{k}: {v}")
         exif_str = "\n".join(exif_lines) if exif_lines else "No EXIF data"
+        # Metrics
+        metrics_str = ""
+        if metrics:
+            blur_score, sharpness_metrics, aesthetic_score = metrics
+            lines = [
+                f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A",
+                f"Laplacian: {sharpness_metrics['variance_laplacian']:.1f}" if sharpness_metrics else "Laplacian: N/A",
+                f"Tenengrad: {sharpness_metrics['tenengrad']:.1f}" if sharpness_metrics else "Tenengrad: N/A",
+                f"Brenner: {sharpness_metrics['brenner']:.1f}" if sharpness_metrics else "Brenner: N/A",
+                f"Wavelet: {sharpness_metrics['wavelet_energy']:.1f}" if sharpness_metrics else "Wavelet: N/A",
+                f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A"
+            ]
+            metrics_str = "<b>Metrics:</b><br>" + "<br>".join(lines) + "<br>"
         info = f"<b>File:</b> {img_name}<br>"
         info += f"<b>Path:</b> {img_path}<br>"
         info += f"<b>Group ID:</b> {group_idx}<br>"
         info += f"<b>Group Hash:</b> {group_hash}<br>"
         info += f"<b>Image Hash:</b> {image_hash}<br>"
+        info += metrics_str
         info += f"<b>EXIF:</b><br><pre style='font-size:10pt'>{exif_str}</pre>"
         info_label.setText(info)
 
