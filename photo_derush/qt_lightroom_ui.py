@@ -147,7 +147,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             # Blur/metrics label
             blur_label = QLabel("")
             blur_label.setStyleSheet("color: yellow; background: #222;")
-            def show_metrics(idx=idx):
+            def show_metrics(event=None, idx=idx):
                 img_path = os.path.join(directory, image_paths[idx])
                 if img_path in metrics_cache:
                     blur_score, sharpness_metrics, aesthetic_score = metrics_cache[img_path]
@@ -165,7 +165,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
                     f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A"
                 ]
                 blur_label.setText("\n".join(lines))
-            def hide_metrics(idx=idx):
+            def hide_metrics(event=None, idx=idx):
                 blur_label.setText("")
             lbl = HoverLabel(on_enter=show_metrics, on_leave=hide_metrics)
             lbl.setPixmap(pix)
