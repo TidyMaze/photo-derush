@@ -115,6 +115,89 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     if on_window_opened:
         QTimer.singleShot(0, on_window_opened)
 
+    # --- Image grid population: PHASE 1 (show images immediately, no grouping) ---
+    THUMB_SIZE = 160
+    num_images = min(MAX_IMAGES, len(image_paths))
+    image_labels = []
+    top_labels = []
+    bottom_labels = []
+    blur_labels = []
+    metrics_cache = {}
+    image_name_to_widgets = {}
+    row = 0
+    col_count = 5
+    col = 0
+    for idx, img_name in enumerate(image_paths[:num_images]):
+        img_path = os.path.join(directory, img_name)
+        thumb_path = os.path.join(directory, 'thumbnails', img_name)
+        os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+        if os.path.exists(thumb_path):
+            img = Image.open(thumb_path)
+        else:
+            img = Image.open(img_path)
+            img.thumbnail((THUMB_SIZE, THUMB_SIZE))
+            img.save(thumb_path)
+        img.thumbnail((THUMB_SIZE, THUMB_SIZE))
+        pix = pil2pixmap(img)
+        # Top label (placeholder)
+        top_label = QLabel("")
+        top_label.setStyleSheet("color: red; background: #222;")
+        # Bottom label (filename, no hash yet)
+        date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
+        bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: ...")
+        bottom_label.setStyleSheet("color: white; background: #222;")
+        # Blur/metrics label
+        blur_label = QLabel("")
+        blur_label.setStyleSheet("color: yellow; background: #222;")
+        def show_metrics(event=None, idx=idx):
+            img_path = os.path.join(directory, image_paths[idx])
+            if img_path in metrics_cache:
+                blur_score, sharpness_metrics, aesthetic_score = metrics_cache[img_path]
+            else:
+                blur_score = compute_blur_score(img_path)
+                sharpness_metrics = compute_sharpness_features(img_path)
+                aesthetic_score = 42
+                metrics_cache[img_path] = (blur_score, sharpness_metrics, aesthetic_score)
+            lines = [
+                f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A",
+                f"Laplacian: {sharpness_metrics['variance_laplacian']:.1f}",
+                f"Tenengrad: {sharpness_metrics['tenengrad']:.1f}",
+                f"Brenner: {sharpness_metrics['brenner']:.1f}",
+                f"Wavelet: {sharpness_metrics['wavelet_energy']:.1f}",
+                f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A"
+            ]
+            blur_label.setText("\n".join(lines))
+        def hide_metrics(event=None, idx=idx):
+            blur_label.setText("")
+        lbl = HoverLabel(on_enter=show_metrics, on_leave=hide_metrics)
+        lbl.setPixmap(pix)
+        lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
+        lbl.setStyleSheet("background: #444; border: 2px solid #444;")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path):
+            def handler(e: QMouseEvent):
+                for l in image_labels:
+                    l.setStyleSheet("background: #444; border: 2px solid #444;")
+                label.setStyleSheet("background: red; border: 2px solid red;")
+                update_info_panel(img_name, img_path, "-", "...", "...")
+            return handler
+        lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path)
+        grid.addWidget(lbl, row*4, col)
+        grid.addWidget(top_label, row*4+1, col)
+        grid.addWidget(bottom_label, row*4+2, col)
+        grid.addWidget(blur_label, row*4+3, col)
+        image_labels.append(lbl)
+        top_labels.append(top_label)
+        bottom_labels.append(bottom_label)
+        blur_labels.append(blur_label)
+        image_name_to_widgets[img_name] = (lbl, top_label, bottom_label, blur_label)
+        col += 1
+        if col == col_count:
+            col = 0
+            row += 1
+    status.showMessage(f"Loaded {num_images} images (thumbnails only, grouping pending)")
+
+    # --- PHASE 2: Deferred hashing/grouping, update UI when ready ---
     def deferred_hashing_and_population():
         logging.info("Deferred hashing started (should be after window is visible)...")
         from main import cluster_duplicates
