@@ -92,6 +92,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     info_label = QLabel(("This is the right panel.\n" * 50).strip())
     info_label.setStyleSheet("color: #aaa; background: #222; font-size: 14pt;")
     info_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+    info_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse)
     right_layout.addWidget(info_label)
     splitter.addWidget(left_panel)
     splitter.addWidget(right_panel)
