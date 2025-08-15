@@ -105,7 +105,9 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     def deferred_hashing_and_population():
         logging.info("Deferred hashing started (should be after window is visible)...")
         from main import cluster_duplicates
+        logging.info("Clustering duplicates...")
         clusters, image_hashes = cluster_duplicates(image_paths, directory)
+        logging.info(f"Clustering complete: {len(clusters)} groups found.")
         if on_window_opened:
             on_window_opened(clusters, image_hashes)
         # --- Image grid population ---
