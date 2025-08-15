@@ -49,6 +49,10 @@ def open_full_image_qt(img_path):
 # --- Main Lightroom UI ---
 def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None):
     app = QApplication.instance() or QApplication([])
+    # Load and apply QDarkStyle stylesheet
+    qss_path = os.path.join(os.path.dirname(__file__), "qdarkstyle.qss")
+    with open(qss_path, "r") as f:
+        app.setStyleSheet(f.read())
     win = QMainWindow()
     win.setWindowTitle("Photo Derush (Qt)")
     win.resize(1400, 800)
