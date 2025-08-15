@@ -51,3 +51,26 @@ def test_lightroom_ui_select_and_fullscreen(monkeypatch):
         img_path = os.path.join(tmp_dir, img_name)
         if os.path.exists(img_path):
             os.remove(img_path)
+
+def test_cluster_duplicates_groups_similar_images(tmp_path):
+    from main import cluster_duplicates
+    from PIL import Image
+    # Create two identical images and one different
+    img1 = tmp_path / "img1.jpg"
+    img2 = tmp_path / "img2.jpg"
+    img3 = tmp_path / "img3.jpg"
+    img = Image.new("RGB", (32, 32), color=(255, 0, 0))
+    img.save(img1)
+    img.save(img2)
+    img_diff = Image.new("RGB", (32, 32), color=(255, 0, 0))
+    # Draw a black rectangle to make it visually different
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(img_diff)
+    draw.rectangle([8, 8, 24, 24], fill=(0, 0, 0))
+    img_diff.save(img3)
+    image_paths = ["img1.jpg", "img2.jpg", "img3.jpg"]
+    clusters = cluster_duplicates(image_paths, str(tmp_path), hamming_thresh=1)
+    # There should be one cluster with the two identical images
+    assert any(set(cluster) == {"img1.jpg", "img2.jpg"} for cluster in clusters), f"Expected img1 and img2 to be clustered together, got {clusters}"
+    # The different image should not be clustered with the others
+    assert not any("img3.jpg" in cluster and len(cluster) > 1 for cluster in clusters), f"img3.jpg should not be clustered with others: {clusters}"

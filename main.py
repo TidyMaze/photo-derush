@@ -71,9 +71,11 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
     for i, h in enumerate(hashes_np):
         if i in visited:
             continue
-        D, I = index.range_search(h, hamming_thresh)
-        cluster = [valid_paths[j] for j in I if j not in visited]
-        for j in I:
+        # FAISS expects 2D array for queries
+        lims, D, I = index.range_search(h[np.newaxis, :], hamming_thresh)
+        # Get indices for this query
+        cluster = [valid_paths[j] for j in I[lims[0]:lims[1]] if j not in visited]
+        for j in I[lims[0]:lims[1]]:
             visited.add(j)
         if len(cluster) > 1:
             clusters.append(cluster)
