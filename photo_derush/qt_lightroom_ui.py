@@ -6,14 +6,13 @@ PySide6 port of the Lightroom UI from main.py (Tkinter version).
 - All event handling and image display is Qt idiomatic
 """
 import os
-import hashlib
 import logging
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QScrollArea, QLabel, QGridLayout, QSplitter, QDialog, QStatusBar
 )
-from PySide6.QtCore import Qt, QTimer, QMetaObject
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap, QImage, QMouseEvent
-from PIL import Image
+from PIL import Image, ExifTags
 import cv2
 import imagehash
 
@@ -117,6 +116,16 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
         bottom_labels = []
         blur_labels = []
         metrics_cache = {}
+        def update_info_panel(img_name, img_path, group_idx, group_hash, image_hash):
+            exif = extract_exif(img_path)
+            exif_str = "\n".join(f"{k}: {v}" for k, v in exif.items()) if exif else "No EXIF data"
+            info = f"<b>File:</b> {img_name}<br>"
+            info += f"<b>Path:</b> {img_path}<br>"
+            info += f"<b>Group ID:</b> {group_idx}<br>"
+            info += f"<b>Group Hash:</b> {group_hash}<br>"
+            info += f"<b>Image Hash:</b> {image_hash}<br>"
+            info += f"<b>EXIF:</b><br><pre style='font-size:10pt'>{exif_str}</pre>"
+            info_label.setText(info)
         def show_metrics(idx):
             img_path = os.path.join(directory, image_paths[idx])
             if img_path in metrics_cache:
@@ -188,15 +197,17 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
                 lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
                 lbl.setStyleSheet("background: #444; border: 2px solid #444;")
                 lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                def mousePressEventFactory(idx=idx, label=lbl):
+                image_hash = str(image_hashes[img_name]) if image_hashes[img_name] is not None else "NO_HASH"
+                def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path, group_idx=group_idx, group_hash=group_hash, image_hash=image_hash):
                     def handler(e: QMouseEvent):
                         for l in image_labels:
                             l.setStyleSheet("background: #444; border: 2px solid #444;")
                         label.setStyleSheet("background: red; border: 2px solid red;")
+                        update_info_panel(img_name, img_path, group_idx, group_hash, image_hash)
                     return handler
                 def mouseDoubleClickEventFactory(img_path=img_path):
                     return lambda e: open_full_image_qt(img_path)
-                lbl.mousePressEvent = mousePressEventFactory(idx, lbl)
+                lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path, group_idx, group_hash, image_hash)
                 lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory(img_path)
                 grid.addWidget(lbl, row*4, col)
                 grid.addWidget(top_label, row*4+1, col)
@@ -246,6 +257,21 @@ def compute_perceptual_hash(img_path):
     except Exception as e:
         logging.warning(f"Could not compute perceptual hash for {img_path}: {e}")
         return None
+
+def extract_exif(img_path):
+    try:
+        img = Image.open(img_path)
+        exif_data = img._getexif()
+        if not exif_data:
+            return {}
+        exif = {}
+        for tag, value in exif_data.items():
+            decoded = ExifTags.TAGS.get(tag, tag)
+            exif[decoded] = value
+        return exif
+    except Exception as e:
+        logging.warning(f"Could not extract EXIF for {img_path}: {e}")
+        return {}
 
 class HoverLabel(QLabel):
     def __init__(self, *args, on_enter=None, on_leave=None, **kwargs):
