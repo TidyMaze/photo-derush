@@ -88,6 +88,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     scroll.setWidget(grid_container)
     # Right: info panel
     right_panel = QWidget()
+    right_panel.setFixedWidth(400)
     right_layout = QVBoxLayout(right_panel)
     info_label = QLabel(("This is the right panel.\n" * 50).strip())
     info_label.setStyleSheet("color: #aaa; background: #222; font-size: 14pt;")
