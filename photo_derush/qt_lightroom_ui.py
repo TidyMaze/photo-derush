@@ -10,7 +10,7 @@ import logging
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QScrollArea, QLabel, QGridLayout, QSplitter, QDialog, QStatusBar
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread, Signal, QObject
 from PySide6.QtGui import QPixmap, QImage, QMouseEvent
 from PIL import Image, ExifTags
 import cv2
@@ -49,6 +49,17 @@ def open_full_image_qt(img_path):
     lbl.mousePressEvent = lambda e: close_event()
     dlg.keyPressEvent = lambda e: close_event() if e.key() in (Qt.Key.Key_Escape, Qt.Key.Key_Q) else None
     dlg.exec()
+
+class ClusteringWorker(QObject):
+    finished = Signal(object, object)  # clusters, image_hashes
+    def __init__(self, image_paths, directory):
+        super().__init__()
+        self.image_paths = image_paths
+        self.directory = directory
+    def run(self):
+        from main import cluster_duplicates
+        clusters, image_hashes = cluster_duplicates(self.image_paths, self.directory)
+        self.finished.emit(clusters, image_hashes)
 
 class LightroomMainWindow(QMainWindow):
     def closeEvent(self, event):
@@ -241,11 +252,19 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
 
         # Start clustering in background after UI is responsive
         def start_deferred_grouping():
-            from main import cluster_duplicates
-            clusters, image_hashes = cluster_duplicates(image_paths, directory)
-            update_grid_with_groups(clusters, image_hashes)
-            if on_window_opened:
-                on_window_opened(clusters, image_hashes)
+            worker = ClusteringWorker(image_paths, directory)
+            thread = QThread()
+            worker.moveToThread(thread)
+            def on_finished(clusters, image_hashes):
+                update_grid_with_groups(clusters, image_hashes)
+                if on_window_opened:
+                    on_window_opened(clusters, image_hashes)
+                thread.quit()
+                worker.deleteLater()
+                thread.deleteLater()
+            worker.finished.connect(on_finished)
+            thread.started.connect(worker.run)
+            thread.start()
         QTimer.singleShot(0, start_deferred_grouping)
     QTimer.singleShot(0, deferred_hashing_and_population)
 
