@@ -51,18 +51,23 @@ def open_full_image_qt(img_path):
     dlg.keyPressEvent = lambda e: close_event() if e.key() in (Qt.Key.Key_Escape, Qt.Key.Key_Q) else None
     dlg.exec()
 
+class LightroomMainWindow(QMainWindow):
+    def closeEvent(self, event):
+        QApplication.quit()
+        super().closeEvent(event)
+
 # --- Main Lightroom UI ---
 def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None):
     logging.info("Starting Photo Derush Qt app...")
     logging.info(f"Image directory: {directory}")
-    logging.info(f"Number of images: {len(image_paths)}")
+    logging.info(f"Number of images: {len(image_paths)})")
     app = QApplication.instance() or QApplication([])
     # Load and apply QDarkStyle stylesheet
     qss_path = os.path.join(os.path.dirname(__file__), "qdarkstyle.qss")
     with open(qss_path, "r") as f:
         app.setStyleSheet(f.read())
     logging.info("QDarkStyle stylesheet applied.")
-    win = QMainWindow()
+    win = LightroomMainWindow()
     win.setWindowTitle("Photo Derush (Qt)")
     win.resize(1400, 800)
     status = QStatusBar()
