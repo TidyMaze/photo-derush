@@ -11,7 +11,7 @@ import logging
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QScrollArea, QLabel, QGridLayout, QSplitter, QDialog, QStatusBar
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QMetaObject
 from PySide6.QtGui import QPixmap, QImage, QMouseEvent
 from PIL import Image
 import cv2
@@ -97,10 +97,12 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     splitter.addWidget(left_panel)
     splitter.addWidget(right_panel)
     splitter.setSizes([1000, 400])
+    logging.info("About to show window...")
     win.show()
-    logging.info("Window shown, entering Qt event loop...")
+    logging.info("Window shown, scheduling deferred hashing...")
 
     def deferred_hashing_and_population():
+        logging.info("Deferred hashing started (should be after window is visible)...")
         # --- Image grid population ---
         THUMB_SIZE = 160
         num_images = min(MAX_IMAGES, len(image_paths))
