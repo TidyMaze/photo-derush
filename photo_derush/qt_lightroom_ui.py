@@ -118,7 +118,13 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
         metrics_cache = {}
         def update_info_panel(img_name, img_path, group_idx, group_hash, image_hash):
             exif = extract_exif(img_path)
-            exif_str = "\n".join(f"{k}: {v}" for k, v in exif.items()) if exif else "No EXIF data"
+            exif_lines = []
+            for k, v in exif.items():
+                if k == "GPSInfo" and isinstance(v, dict):
+                    exif_lines.append(f"GPSInfo: {format_gps_info(v)}")
+                else:
+                    exif_lines.append(f"{k}: {v}")
+            exif_str = "\n".join(exif_lines) if exif_lines else "No EXIF data"
             info = f"<b>File:</b> {img_name}<br>"
             info += f"<b>Path:</b> {img_path}<br>"
             info += f"<b>Group ID:</b> {group_idx}<br>"
@@ -272,6 +278,29 @@ def extract_exif(img_path):
     except Exception as e:
         logging.warning(f"Could not extract EXIF for {img_path}: {e}")
         return {}
+
+def format_gps_info(gps_info):
+    def _convert_to_degrees(value):
+        d, m, s = value
+        return float(d[0]) / float(d[1]) + \
+               float(m[0]) / float(m[1]) / 60 + \
+               float(s[0]) / float(s[1]) / 3600
+    try:
+        gps_tags = {ExifTags.GPSTAGS.get(k, k): v for k, v in gps_info.items()}
+        lat = lon = None
+        if 'GPSLatitude' in gps_tags and 'GPSLatitudeRef' in gps_tags:
+            lat = _convert_to_degrees(gps_tags['GPSLatitude'])
+            if gps_tags['GPSLatitudeRef'] in ['S', b'S']:
+                lat = -lat
+        if 'GPSLongitude' in gps_tags and 'GPSLongitudeRef' in gps_tags:
+            lon = _convert_to_degrees(gps_tags['GPSLongitude'])
+            if gps_tags['GPSLongitudeRef'] in ['W', b'W']:
+                lon = -lon
+        if lat is not None and lon is not None:
+            return f"Latitude: {lat:.6f}, Longitude: {lon:.6f}"
+        return str(gps_tags)
+    except Exception as e:
+        return f"[Invalid GPSInfo: {e}]"
 
 class HoverLabel(QLabel):
     def __init__(self, *args, on_enter=None, on_leave=None, **kwargs):
