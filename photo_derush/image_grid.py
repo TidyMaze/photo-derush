@@ -95,3 +95,7 @@ class ImageGrid(QWidget):
             self.blur_labels.append(blur_label)
             self.image_name_to_widgets[img_name] = (lbl, top_label, bottom_label, blur_label)
         self.status_bar.showMessage(f"Loaded {num_images} images (thumbnails only, grouping pending)")
+
+    def set_cell_size(self, size):
+        self.THUMB_SIZE = size
+        self.populate_grid()

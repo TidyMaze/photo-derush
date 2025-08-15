@@ -20,7 +20,7 @@ class LightroomMainWindow(QMainWindow):
         self.splitter.addWidget(self.image_grid)
         self.splitter.addWidget(self.info_panel)
         self.splitter.setSizes([1000, 400])
+        self.toolbar.zoom_changed.connect(self.image_grid.set_cell_size)
     def closeEvent(self, event):
         QApplication.quit()
         super().closeEvent(event)
-
