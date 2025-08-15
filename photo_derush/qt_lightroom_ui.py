@@ -120,7 +120,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     # --- Group images by hash ---
     hash_to_images = {}
     image_hashes = {}
-    for img_name in image_paths[:num_images]:
+    for i, img_name in enumerate(image_paths[:num_images]):
         img_path = os.path.join(directory, img_name)
         if os.path.exists(img_path):
             with open(img_path, "rb") as f:
@@ -129,17 +129,21 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             sha256_hash = "MISSING"
         image_hashes[img_name] = sha256_hash
         hash_to_images.setdefault(sha256_hash, []).append(img_name)
+        if i % 10 == 0 or i == num_images - 1:
+            logging.info(f"Processed {i+1}/{num_images} images for hashing...")
     # --- Populate grid by group ---
     row = 0
     col_count = 5
-    for sha256_hash, group in hash_to_images.items():
+    for group_idx, (sha256_hash, group) in enumerate(hash_to_images.items()):
+        logging.info(f"Placing group {group_idx+1}/{len(hash_to_images)}: hash {sha256_hash} with {len(group)} images")
         # Add group header
         group_label = QLabel(f"Hash group: {sha256_hash}")
         group_label.setStyleSheet("color: #3daee9; background: #232629; font-weight: bold; font-size: 12pt;")
         grid.addWidget(group_label, row, 0, 1, col_count)
         row += 1
         col = 0
-        for img_name in group:
+        for img_idx, img_name in enumerate(group):
+            logging.debug(f"Loading image {img_name} in group {sha256_hash}")
             img_path = os.path.join(directory, img_name)
             thumb_path = os.path.join(directory, 'thumbnails', img_name)
             os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
