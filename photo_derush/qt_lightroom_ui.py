@@ -172,6 +172,44 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
         image_name_to_widgets[img_name] = (lbl, top_label, bottom_label, blur_label)
     status.showMessage(f"Loaded {num_images} images (thumbnails only, grouping pending)")
 
+    def update_grid_with_groups(clusters, image_hashes):
+        """
+        Update the image grid to reflect groupings (clusters) visually.
+        - clusters: list of lists of image names (filenames)
+        - image_hashes: dict mapping image names to hash values
+        """
+        # Use a set of visually distinct colors for group highlighting
+        group_colors = [
+            "#FF6666", "#66FF66", "#6699FF", "#FFCC66", "#CC66FF", "#66FFFF", "#FF99CC",
+            "#CCCCCC", "#FFB366", "#B3FF66", "#66B3FF", "#FF66B3", "#B366FF"
+        ]
+        # Map each image to its group index
+        image_to_group = {}
+        for group_idx, group in enumerate(clusters):
+            for img_name in group:
+                image_to_group[img_name] = group_idx
+        # Update widgets for each image
+        for img_name, widgets in image_name_to_widgets.items():
+            lbl, top_label, bottom_label, blur_label = widgets
+            group_idx = image_to_group.get(img_name)
+            group_color = group_colors[group_idx % len(group_colors)] if group_idx is not None else "#444"
+            # Update top label with group info
+            if group_idx is not None:
+                top_label.setText(f"Group {group_idx+1}")
+                top_label.setStyleSheet(f"color: white; background: {group_color}; font-weight: bold;")
+            else:
+                top_label.setText("")
+                top_label.setStyleSheet("color: red; background: #222;")
+            # Update border color of thumbnail
+            lbl.setStyleSheet(f"background: #444; border: 2px solid {group_color};")
+            # Update bottom label with hash info
+            img_hash = image_hashes.get(img_name, "...")
+            lines = bottom_label.text().split("\n")
+            if len(lines) >= 3:
+                lines[2] = f"Hash: {img_hash}"
+            bottom_label.setText("\n".join(lines))
+        logging.info(f"Updated grid with {len(clusters)} groups.")
+
     # --- Deferred hashing/grouping, update UI when ready ---
     def deferred_hashing_and_population():
         logging.info("Deferred hashing started (should be after window is visible)...")
@@ -286,48 +324,3 @@ class HoverLabel(QLabel):
         if self._on_leave:
             self._on_leave(event)
         super().leaveEvent(event)
-
-def update_grid_with_groups(clusters, image_hashes):
-    """
-    Update the image grid to reflect groupings (clusters) visually.
-    - clusters: list of lists of image names (filenames)
-    - image_hashes: dict mapping image names to hash values
-    """
-    # Use a set of visually distinct colors for group highlighting
-    group_colors = [
-        "#FF6666", "#66FF66", "#6699FF", "#FFCC66", "#CC66FF", "#66FFFF", "#FF99CC",
-        "#CCCCCC", "#FFB366", "#B3FF66", "#66B3FF", "#FF66B3", "#B366FF"
-    ]
-    # Access the global image_name_to_widgets from the outer scope
-    try:
-        outer_frame = show_lightroom_ui_qt.__globals__
-        image_name_to_widgets = outer_frame.get('image_name_to_widgets', {})
-    except Exception:
-        logging.warning("Could not access image_name_to_widgets for group update.")
-        return
-    # Map each image to its group index
-    image_to_group = {}
-    for group_idx, group in enumerate(clusters):
-        for img_name in group:
-            image_to_group[img_name] = group_idx
-    # Update widgets for each image
-    for img_name, widgets in image_name_to_widgets.items():
-        lbl, top_label, bottom_label, blur_label = widgets
-        group_idx = image_to_group.get(img_name)
-        group_color = group_colors[group_idx % len(group_colors)] if group_idx is not None else "#444"
-        # Update top label with group info
-        if group_idx is not None:
-            top_label.setText(f"Group {group_idx+1}")
-            top_label.setStyleSheet(f"color: white; background: {group_color}; font-weight: bold;")
-        else:
-            top_label.setText("")
-            top_label.setStyleSheet("color: red; background: #222;")
-        # Update border color of thumbnail
-        lbl.setStyleSheet(f"background: #444; border: 2px solid {group_color};")
-        # Update bottom label with hash info
-        img_hash = image_hashes.get(img_name, "...")
-        lines = bottom_label.text().split("\n")
-        if len(lines) >= 3:
-            lines[2] = f"Hash: {img_hash}"
-        bottom_label.setText("\n".join(lines))
-    logging.info(f"Updated grid with {len(clusters)} groups.")
