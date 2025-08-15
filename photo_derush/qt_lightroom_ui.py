@@ -7,6 +7,7 @@ PySide6 port of the Lightroom UI from main.py (Tkinter version).
 """
 import os
 import hashlib
+import logging
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QScrollArea, QLabel, QGridLayout, QSplitter, QDialog, QStatusBar
 )
@@ -14,6 +15,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QImage, QMouseEvent
 from PIL import Image
 import cv2
+
+logging.basicConfig(level=logging.INFO)
 
 MAX_IMAGES = 200
 
@@ -49,11 +52,15 @@ def open_full_image_qt(img_path):
 
 # --- Main Lightroom UI ---
 def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None):
+    logging.info("Starting Photo Derush Qt app...")
+    logging.info(f"Image directory: {directory}")
+    logging.info(f"Number of images: {len(image_paths)}")
     app = QApplication.instance() or QApplication([])
     # Load and apply QDarkStyle stylesheet
     qss_path = os.path.join(os.path.dirname(__file__), "qdarkstyle.qss")
     with open(qss_path, "r") as f:
         app.setStyleSheet(f.read())
+    logging.info("QDarkStyle stylesheet applied.")
     win = QMainWindow()
     win.setWindowTitle("Photo Derush (Qt)")
     win.resize(1400, 800)
@@ -90,6 +97,26 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     bottom_labels = []
     blur_labels = []
     metrics_cache = {}
+    def show_metrics(idx):
+        img_path = os.path.join(directory, image_paths[idx])
+        if img_path in metrics_cache:
+            blur_score, sharpness_metrics, aesthetic_score = metrics_cache[img_path]
+        else:
+            blur_score = compute_blur_score(img_path)
+            sharpness_metrics = compute_sharpness_features(img_path)
+            aesthetic_score = 42
+            metrics_cache[img_path] = (blur_score, sharpness_metrics, aesthetic_score)
+        lines = [
+            f"Blur: {blur_score:.1f}" if blur_score is not None else "Blur: N/A",
+            f"Laplacian: {sharpness_metrics['variance_laplacian']:.1f}",
+            f"Tenengrad: {sharpness_metrics['tenengrad']:.1f}",
+            f"Brenner: {sharpness_metrics['brenner']:.1f}",
+            f"Wavelet: {sharpness_metrics['wavelet_energy']:.1f}",
+            f"Aesthetic: {aesthetic_score:.2f}" if aesthetic_score is not None else "Aesthetic: N/A"
+        ]
+        blur_labels[idx].setText("\n".join(lines))
+    def hide_metrics(idx):
+        blur_labels[idx].setText("")
     # --- Group images by hash ---
     hash_to_images = {}
     image_hashes = {}
@@ -111,7 +138,8 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
         group_label.setStyleSheet("color: #3daee9; background: #232629; font-weight: bold; font-size: 12pt;")
         grid.addWidget(group_label, row, 0, 1, col_count)
         row += 1
-        for i, img_name in enumerate(group):
+        col = 0
+        for img_name in group:
             img_path = os.path.join(directory, img_name)
             thumb_path = os.path.join(directory, 'thumbnails', img_name)
             os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
@@ -122,11 +150,6 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
                 img.thumbnail((THUMB_SIZE, THUMB_SIZE))
                 img.save(thumb_path)
             pix = pil2pixmap(img)
-            lbl = QLabel()
-            lbl.setPixmap(pix)
-            lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
-            lbl.setStyleSheet("background: #444; border: 2px solid #444;")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             # Top label
             blur_score = compute_blur_score(img_path)
             if blur_score is not None:
@@ -141,14 +164,17 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             # Blur/metrics label
             blur_label = QLabel("")
             blur_label.setStyleSheet("color: yellow; background: #222;")
-            # Mouse events
+            # Use HoverLabel for image label with hover callbacks
             idx = len(image_labels)
-            def enterEventFactory(idx=idx):
-                return lambda e: show_metrics(idx)
-            def leaveEventFactory(idx=idx):
-                return lambda e: hide_metrics(idx)
-            lbl.enterEvent = enterEventFactory()
-            lbl.leaveEvent = leaveEventFactory()
+            def on_enter(event, idx=idx):
+                show_metrics(idx)
+            def on_leave(event, idx=idx):
+                hide_metrics(idx)
+            lbl = HoverLabel(on_enter=on_enter, on_leave=on_leave)
+            lbl.setPixmap(pix)
+            lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
+            lbl.setStyleSheet("background: #444; border: 2px solid #444;")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             # Selection and double-click
             def mousePressEventFactory(idx=idx, label=lbl):
                 def handler(e: QMouseEvent):
@@ -161,7 +187,6 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             lbl.mousePressEvent = mousePressEventFactory(idx, lbl)
             lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory(img_path)
             # Add to grid
-            col = i % col_count
             grid.addWidget(lbl, row*4, col)
             grid.addWidget(top_label, row*4+1, col)
             grid.addWidget(bottom_label, row*4+2, col)
@@ -170,14 +195,19 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
             top_labels.append(top_label)
             bottom_labels.append(bottom_label)
             blur_labels.append(blur_label)
-            if col == col_count - 1:
+            col += 1
+            if col == col_count:
+                col = 0
                 row += 1
-        # Add spacing after each group
+        # After group, move to next row for spacing
         row += 2
     status.showMessage(f"Loaded {num_images} images")
     win.show()
     app.exec()
-    win.closeEvent = lambda event: app.quit()
+    def on_close(event):
+        app.setStyleSheet("")  # Reset style to default
+        app.quit()
+    win.closeEvent = on_close
 
 # --- Metrics functions (copied from main.py) ---
 def compute_blur_score(img_path):
@@ -196,3 +226,17 @@ def compute_sharpness_features(img_path):
     features['brenner'] = cv2.Laplacian(img, cv2.CV_64F).var()  # Placeholder for Brenner
     features['wavelet_energy'] = cv2.Laplacian(img, cv2.CV_64F).var()  # Placeholder for Wavelet energy
     return features
+
+class HoverLabel(QLabel):
+    def __init__(self, *args, on_enter=None, on_leave=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._on_enter = on_enter
+        self._on_leave = on_leave
+    def enterEvent(self, event):
+        if self._on_enter:
+            self._on_enter(event)
+        super().enterEvent(event)
+    def leaveEvent(self, event):
+        if self._on_leave:
+            self._on_leave(event)
+        super().leaveEvent(event)
