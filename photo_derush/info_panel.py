@@ -16,12 +16,27 @@ class InfoPanel(QWidget):
 
     def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None):
         exif = extract_exif(img_path)
-        # Define important EXIF fields in order
+        # Define important EXIF fields in order, with emojis
         important_fields = [
-            "DateTimeOriginal", "DateTime", "Make", "Model", "LensMake", "LensModel", "Software",
-            "ExposureTime", "FNumber", "ISOSpeedRatings", "FocalLength", "FocalLengthIn35mmFilm",
-            "ExposureBiasValue", "MeteringMode", "WhiteBalance", "Flash", "GPSInfo",
-            "ExifImageWidth", "ExifImageHeight"
+            ("DateTimeOriginal", "📅"),
+            ("DateTime", "🕒"),
+            ("Make", "🏭"),
+            ("Model", "📷"),
+            ("LensMake", "🔍"),
+            ("LensModel", "🔭"),
+            ("Software", "💾"),
+            ("ExposureTime", "⏱️"),
+            ("FNumber", "🔆"),
+            ("ISOSpeedRatings", "🌡️"),
+            ("FocalLength", "🔎"),
+            ("FocalLengthIn35mmFilm", "📏"),
+            ("ExposureBiasValue", "➕➖"),
+            ("MeteringMode", "📐"),
+            ("WhiteBalance", "⚪"),
+            ("Flash", "⚡"),
+            ("GPSInfo", "📍"),
+            ("ExifImageWidth", "↔️"),
+            ("ExifImageHeight", "↕️")
         ]
         # Prepare important and other EXIF fields
         exif_display = []
@@ -33,20 +48,20 @@ class InfoPanel(QWidget):
                 gps_str = format_gps_info(exif["GPSInfo"])
             except Exception as e:
                 gps_str = f"[Invalid GPSInfo: {e}]"
-            exif_display.append(("GPSInfo", gps_str))
+            exif_display.append(("📍 GPSInfo", gps_str))
         # Add other important fields in order
-        for key in important_fields:
+        for key, emoji in important_fields:
             if key == "GPSInfo":
                 continue  # already handled
             if key in exif:
-                exif_display.append((key, exif[key]))
+                exif_display.append((f"{emoji} {key}", exif[key]))
         # Add image size as WxH if both present
         width = exif.get("ExifImageWidth")
         height = exif.get("ExifImageHeight")
         if width and height:
-            exif_display.append(("Image Size", f"{width} x {height}"))
+            exif_display.append(("🖼️ Image Size", f"{width} x {height}"))
         # Collect other EXIF fields
-        shown_keys = {k for k, _ in exif_display}
+        shown_keys = {k.split(' ', 1)[-1] for k, _ in exif_display}
         for k in sorted(exif_keys - shown_keys):
             v = exif[k]
             if k == "GPSInfo" and isinstance(v, dict):
