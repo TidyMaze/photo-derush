@@ -15,6 +15,8 @@ def open_full_image_qt(img_path):
     lbl = QLabel()
     lbl.setPixmap(pix)
     lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lbl.setSizePolicy(lbl.sizePolicy().Expanding, lbl.sizePolicy().Expanding)
+    lbl.setScaledContents(True)
     layout = QVBoxLayout()
     layout.addWidget(lbl)
     dlg.setLayout(layout)
@@ -23,4 +25,3 @@ def open_full_image_qt(img_path):
     lbl.mousePressEvent = lambda e: close_event()
     dlg.keyPressEvent = lambda e: close_event() if e.key() in (Qt.Key.Key_Escape, Qt.Key.Key_Q) else None
     dlg.exec()
-

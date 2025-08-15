@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy
+from PySide6.QtCore import Qt
 from .widgets import HoverEffectLabel
 from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
 
@@ -68,8 +69,9 @@ class ImageGrid(QWidget):
             blur_label.setStyleSheet("color: yellow; background: #222;")
             lbl = HoverEffectLabel()
             lbl.setPixmap(pix)
-            lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
-            lbl.setAlignment(lbl.alignment())
+            lbl.setMinimumSize(self.THUMB_SIZE, self.THUMB_SIZE)
+            lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path):
                 def handler(e):
                     for l in self.image_labels:
@@ -83,7 +85,7 @@ class ImageGrid(QWidget):
                     self.info_panel.update_info(img_name, img_path, "-", "...", "...", metrics)
                 return handler
             lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path)
-            self.grid.addWidget(lbl, (idx//self.col_count)*4, idx%self.col_count)
+            self.grid.addWidget(lbl, (idx//self.col_count)*4, idx%self.col_count, alignment=Qt.AlignmentFlag.AlignCenter)
             self.grid.addWidget(top_label, (idx//self.col_count)*4+1, idx%self.col_count)
             self.grid.addWidget(bottom_label, (idx//self.col_count)*4+2, idx%self.col_count)
             self.grid.addWidget(blur_label, (idx//self.col_count)*4+3, idx%self.col_count)
@@ -93,4 +95,3 @@ class ImageGrid(QWidget):
             self.blur_labels.append(blur_label)
             self.image_name_to_widgets[img_name] = (lbl, top_label, bottom_label, blur_label)
         self.status_bar.showMessage(f"Loaded {num_images} images (thumbnails only, grouping pending)")
-
