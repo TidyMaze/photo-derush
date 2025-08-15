@@ -170,25 +170,49 @@ def cache_thumbnail(img_path, thumb_path, size=(150, 150)):
         logging.info(f"Created and cached thumbnail for {os.path.basename(thumb_path)}")
         return img, False
 
+def main():
+    directory = '/Users/yannrolland/Pictures/photo-dataset'
+    print("Welcome to Photo Derush Script!")
+    images = list_images(directory)
+    print(f"Found {len(images)} images.")
+    exts = list_extensions(directory)
+    print(f"Extensions found: {', '.join(exts)}")
+    non_image_exts = [e for e in exts if not is_image_extension(e)]
+    if non_image_exts:
+        print(f"Warning: Non-image extensions detected: {', '.join(non_image_exts)}")
+    # Compute hashes and groups
+    image_hashes = {}
+    hashes = []
+    for img in images:
+        img_path = os.path.join(directory, img)
+        try:
+            dh = compute_dhash(img_path)
+            h_bytes = int(str(dh), 16).to_bytes(8, 'big')
+            hash_arr = np.frombuffer(h_bytes, dtype='uint8')
+            image_hashes[img] = hash_arr
+            hashes.append(hash_arr)
+        except Exception:
+            image_hashes[img] = None
+            hashes.append(None)
+    group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
+    # Prepare image info mapping
+    image_info = {}
+    for idx, img in enumerate(images):
+        image_info[img] = {
+            "hash": hash_map.get(idx, None),
+            "group": group_ids.get(idx, None)
+        }
+    if len(images) > 0:
+        from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt
+        show_lightroom_ui_qt(
+            images[:MAX_IMAGES],
+            directory,
+            image_info=image_info
+        )
+    else:
+        print("No images found.")
+
 if __name__ == "__main__":
     import sys
     if not any(x in sys.argv[0] for x in ["pytest", "test_", "_test"]):
-        directory = '/Users/yannrolland/Pictures/photo-dataset'
-        print("Welcome to Photo Derush Script!")
-        images = list_images(directory)
-        print(f"Found {len(images)} images.")
-        for img in images:
-            print(img)
-        exts = list_extensions(directory)
-        print(f"Extensions found: {', '.join(exts)}")
-        non_image_exts = [e for e in exts if not is_image_extension(e)]
-        if non_image_exts:
-            print(f"Warning: Non-image extensions detected: {', '.join(non_image_exts)}")
-        if len(images) > 0:
-            show_lightroom_ui(
-                images[:MAX_IMAGES],
-                directory,
-                on_window_opened=lambda clusters, hashes: main_duplicate_detection(clusters, hashes)
-            )
-        else:
-            print("No images found.")
+        main()

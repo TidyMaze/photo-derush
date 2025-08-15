@@ -10,10 +10,10 @@ from PySide6.QtWidgets import QApplication
 from .main_window import LightroomMainWindow
 from .viewer import open_full_image_qt
 
-def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None):
+def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None, image_info=None):
     app = QApplication.instance() or QApplication(sys.argv)
     def get_sorted_images():
         return image_paths
-    win = LightroomMainWindow(image_paths, directory, get_sorted_images)
+    win = LightroomMainWindow(image_paths, directory, get_sorted_images, image_info=image_info)
     win.show()
     app.exec()

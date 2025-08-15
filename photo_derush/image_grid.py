@@ -4,13 +4,14 @@ from .widgets import HoverEffectLabel
 from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
 
 class ImageGrid(QWidget):
-    def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, *args, **kwargs):
+    def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.image_paths = image_paths
         self.directory = directory
         self.info_panel = info_panel
         self.status_bar = status_bar
         self.get_sorted_images = get_sorted_images
+        self.image_info = image_info or {}
         self.THUMB_SIZE = 160
         self.MAX_IMAGES = 200
         self.col_count = 5
@@ -63,7 +64,11 @@ class ImageGrid(QWidget):
             top_label = QLabel("")
             top_label.setStyleSheet("color: red; background: #222;")
             date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
-            bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: ...")
+            # Get hash and group from image_info
+            info = self.image_info.get(img_name, {})
+            hash_str = info.get("hash", "...")
+            group_str = info.get("group", "...")
+            bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}\nGroup: {group_str}")
             bottom_label.setStyleSheet("color: white; background: #222;")
             blur_label = QLabel("")
             blur_label.setStyleSheet("color: yellow; background: #222;")
@@ -82,7 +87,7 @@ class ImageGrid(QWidget):
                     sharpness_metrics = compute_sharpness_features(img_path)
                     aesthetic_score = 42
                     metrics = (blur_score, sharpness_metrics, aesthetic_score)
-                    self.info_panel.update_info(img_name, img_path, "-", "...", "...", metrics)
+                    self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics)
                 return handler
             lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path)
             self.grid.addWidget(lbl, (idx//self.col_count)*4, idx%self.col_count, alignment=Qt.AlignmentFlag.AlignCenter)
