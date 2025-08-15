@@ -6,15 +6,13 @@ PySide6 port of the Lightroom UI from main.py (Tkinter version).
 - All event handling and image display is Qt idiomatic
 """
 import os
-import numpy as np
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QGridLayout, QFrame, QSplitter, QDialog, QStatusBar
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QScrollArea, QLabel, QGridLayout, QSplitter, QDialog, QStatusBar
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QImage, QMouseEvent
 from PIL import Image
 import cv2
-import logging
 
 MAX_IMAGES = 200
 
@@ -23,29 +21,29 @@ def pil2pixmap(img: Image.Image) -> QPixmap:
     if img.mode != "RGBA":
         img = img.convert("RGBA")
     data = img.tobytes("raw", "RGBA")
-    qimg = QImage(data, img.width, img.height, QImage.Format_RGBA8888)
+    qimg = QImage(data, img.width, img.height, QImage.Format.Format_RGBA8888)
     return QPixmap.fromImage(qimg)
 
 # --- Full Image Viewer ---
 def open_full_image_qt(img_path):
     dlg = QDialog()
     dlg.setWindowTitle("Full Image Viewer")
-    dlg.setWindowFlag(Qt.Window)
-    dlg.setWindowState(Qt.WindowFullScreen)
+    dlg.setWindowFlag(Qt.WindowType.Window)
+    dlg.setWindowState(Qt.WindowState.WindowFullScreen)
     img = Image.open(img_path)
     screen = QApplication.primaryScreen().geometry()
     img.thumbnail((screen.width(), screen.height()))
     pix = pil2pixmap(img)
     lbl = QLabel()
     lbl.setPixmap(pix)
-    lbl.setAlignment(Qt.AlignCenter)
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout = QVBoxLayout()
     layout.addWidget(lbl)
     dlg.setLayout(layout)
     def close_event(*_):
         dlg.accept()
     lbl.mousePressEvent = lambda e: close_event()
-    dlg.keyPressEvent = lambda e: close_event() if e.key() in (Qt.Key_Escape, Qt.Key_Q) else None
+    dlg.keyPressEvent = lambda e: close_event() if e.key() in (Qt.Key.Key_Escape, Qt.Key.Key_Q) else None
     dlg.exec()
 
 # --- Main Lightroom UI ---
@@ -66,6 +64,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     scroll.setWidgetResizable(True)
     left_layout.addWidget(scroll)
     grid_container = QWidget()
+    grid_container.setStyleSheet("background-color: #222;")
     grid = QGridLayout(grid_container)
     scroll.setWidget(grid_container)
     # Right: info panel
@@ -73,7 +72,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
     right_layout = QVBoxLayout(right_panel)
     info_label = QLabel(("This is the right panel.\n" * 50).strip())
     info_label.setStyleSheet("color: #aaa; background: #222; font-size: 14pt;")
-    info_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+    info_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
     right_layout.addWidget(info_label)
     splitter.addWidget(left_panel)
     splitter.addWidget(right_panel)
@@ -122,7 +121,7 @@ def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir
         lbl.setPixmap(pix)
         lbl.setFixedSize(THUMB_SIZE, THUMB_SIZE)
         lbl.setStyleSheet("background: #444; border: 2px solid #444;")
-        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Top label
         top_label = QLabel("Loading...")
         top_label.setStyleSheet("color: red; background: #222;")
@@ -182,4 +181,3 @@ def compute_sharpness_features(img_path):
     features['brenner'] = cv2.Laplacian(img, cv2.CV_64F).var()  # Placeholder for Brenner
     features['wavelet_energy'] = cv2.Laplacian(img, cv2.CV_64F).var()  # Placeholder for Wavelet energy
     return features
-

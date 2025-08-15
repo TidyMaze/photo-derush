@@ -55,13 +55,15 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
         img_path = os.path.join(directory, img_name)
         try:
             dh = compute_dhash(img_path)
-            hashes.append(np.array([int(str(dh), 16)], dtype='uint64'))
+            # Convert hash to uint8 array (8 bytes for 64 bits)
+            h_bytes = int(str(dh), 16).to_bytes(8, 'big')
+            hashes.append(np.frombuffer(h_bytes, dtype='uint8'))
             valid_paths.append(img_name)
         except Exception:
             continue
     if not hashes:
         return []
-    hashes_np = np.array(hashes)
+    hashes_np = np.stack(hashes)
     index = faiss.IndexBinaryFlat(64)
     index.add(hashes_np)
     clusters = []
