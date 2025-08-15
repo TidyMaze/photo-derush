@@ -16,17 +16,56 @@ class InfoPanel(QWidget):
 
     def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None):
         exif = extract_exif(img_path)
-        exif_lines = []
-        for k, v in exif.items():
+        # Define important EXIF fields in order
+        important_fields = [
+            "DateTimeOriginal", "DateTime", "Make", "Model", "LensMake", "LensModel", "Software",
+            "ExposureTime", "FNumber", "ISOSpeedRatings", "FocalLength", "FocalLengthIn35mmFilm",
+            "ExposureBiasValue", "MeteringMode", "WhiteBalance", "Flash", "GPSInfo",
+            "ExifImageWidth", "ExifImageHeight"
+        ]
+        # Prepare important and other EXIF fields
+        exif_display = []
+        other_exif = []
+        exif_keys = set(exif.keys())
+        # GPSInfo first if present
+        if "GPSInfo" in exif and isinstance(exif["GPSInfo"], dict):
+            try:
+                gps_str = format_gps_info(exif["GPSInfo"])
+            except Exception as e:
+                gps_str = f"[Invalid GPSInfo: {e}]"
+            exif_display.append(("GPSInfo", gps_str))
+        # Add other important fields in order
+        for key in important_fields:
+            if key == "GPSInfo":
+                continue  # already handled
+            if key in exif:
+                exif_display.append((key, exif[key]))
+        # Add image size as WxH if both present
+        width = exif.get("ExifImageWidth")
+        height = exif.get("ExifImageHeight")
+        if width and height:
+            exif_display.append(("Image Size", f"{width} x {height}"))
+        # Collect other EXIF fields
+        shown_keys = {k for k, _ in exif_display}
+        for k in sorted(exif_keys - shown_keys):
+            v = exif[k]
             if k == "GPSInfo" and isinstance(v, dict):
-                try:
-                    gps_str = format_gps_info(v)
-                except Exception as e:
-                    gps_str = f"[Invalid GPSInfo: {e}]"
-                exif_lines.append(f"<b>GPSInfo:</b> {gps_str}")
-            else:
-                exif_lines.append(f"<b>{k}:</b> {v}")
-        exif_str = "<br>".join(exif_lines) if exif_lines else "No EXIF data"
+                continue  # already shown
+            other_exif.append((k, v))
+        # Render important EXIF fields as a table
+        exif_table = "<table style='font-size:11pt; color:#bbb;'>"
+        for k, v in exif_display:
+            exif_table += f"<tr><td style='font-weight:bold; padding-right:10px;'>{k}</td><td>{v}</td></tr>"
+        exif_table += "</table>"
+        # Render other EXIF fields in a <details> block
+        if other_exif:
+            more_table = "<table style='font-size:10pt; color:#aaa;'>"
+            for k, v in other_exif:
+                more_table += f"<tr><td style='font-weight:bold; padding-right:10px;'>{k}</td><td>{v}</td></tr>"
+            more_table += "</table>"
+            exif_more = f"<details style='margin-top:8px;'><summary style='cursor:pointer; color:#88f;'>See more</summary>{more_table}</details>"
+        else:
+            exif_more = ""
         # Metrics section
         metrics_str = "<div style='margin-bottom:10px;'><b>Metrics</b><br>"
         if metrics:
@@ -50,7 +89,7 @@ class InfoPanel(QWidget):
         file_info += f"<b>Group Hash:</b> {group_hash}<br>"
         file_info += f"<b>Image Hash:</b> {image_hash}</div>"
         # EXIF section
-        exif_section = f"<div style='margin-top:10px;'><b>EXIF</b><br><div style='font-family:monospace; font-size:11pt; background:#222; color:#bbb; padding:6px 0;'>{exif_str}</div></div>"
+        exif_section = f"<div style='margin-top:10px;'><b>EXIF</b><br>{exif_table}{exif_more}</div>"
         # Combine all sections
         html = file_info + metrics_str + exif_section
         self.text_edit.setHtml(html)
