@@ -48,6 +48,29 @@ class ImageGrid(QWidget):
         self.image_name_to_widgets.clear()
         sorted_images = self.get_sorted_images()
         num_images = min(self.MAX_IMAGES, len(sorted_images))
+        # Assign a color to each group
+        import random
+        import colorsys
+        group_to_color = {}
+        used_groups = set()
+        for img_name in sorted_images[:num_images]:
+            info = self.image_info.get(img_name, {})
+            group = info.get("group", None)
+            if group is not None:
+                used_groups.add(group)
+        used_groups = sorted(g for g in used_groups if g is not None)
+        palette = []
+        n = max(1, len(used_groups))
+        for i in range(n):
+            hue = i / n
+            lightness = 0.5
+            saturation = 0.7
+            rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
+            color = '#%02x%02x%02x' % tuple(int(255*x) for x in rgb)
+            palette.append(color)
+        for idx, group in enumerate(used_groups):
+            group_to_color[group] = palette[idx % len(palette)]
+        default_color = '#444444'
         for idx, img_name in enumerate(sorted_images[:num_images]):
             img_path = self.directory + '/' + img_name
             thumb_path = self.directory + '/thumbnails/' + img_name
@@ -61,13 +84,14 @@ class ImageGrid(QWidget):
             from PIL import Image
             img = Image.open(thumb_path)
             pix = pil2pixmap(img)
-            top_label = QLabel("")
-            top_label.setStyleSheet("color: red; background: #222;")
-            date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
-            # Get hash and group from image_info
             info = self.image_info.get(img_name, {})
+            group = info.get("group", None)
+            color = group_to_color.get(group, default_color)
+            top_label = QLabel("")
+            top_label.setStyleSheet(f"background: {color}; min-height: 8px;")
+            date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
             hash_str = info.get("hash", "...")
-            group_str = info.get("group", "...")
+            group_str = group if group is not None else "..."
             bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}\nGroup: {group_str}")
             bottom_label.setStyleSheet("color: white; background: #222;")
             blur_label = QLabel("")
@@ -77,7 +101,7 @@ class ImageGrid(QWidget):
             lbl.setMinimumSize(self.THUMB_SIZE, self.THUMB_SIZE)
             lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path):
+            def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path, hash_str=hash_str, group_str=group_str):
                 def handler(e):
                     for l in self.image_labels:
                         if isinstance(l, HoverEffectLabel):
@@ -89,7 +113,7 @@ class ImageGrid(QWidget):
                     metrics = (blur_score, sharpness_metrics, aesthetic_score)
                     self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics)
                 return handler
-            lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path)
+            lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path, hash_str, group_str)
             self.grid.addWidget(lbl, (idx//self.col_count)*4, idx%self.col_count, alignment=Qt.AlignmentFlag.AlignCenter)
             self.grid.addWidget(top_label, (idx//self.col_count)*4+1, idx%self.col_count)
             self.grid.addWidget(bottom_label, (idx//self.col_count)*4+2, idx%self.col_count)
