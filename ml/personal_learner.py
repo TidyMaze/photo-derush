@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.linear_model import SGDClassifier
+from sklearn.preprocessing import StandardScaler
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,19 +14,23 @@ class PersonalLearner:
         logger.info("[ModelInit] NEW PersonalLearner created n_features=%d classes=%s", n_features, self.classes.tolist())
         logger.info("=" * 72)
         self.model = SGDClassifier(loss="log_loss", max_iter=1, warm_start=True)
+        self.scaler = StandardScaler(with_mean=True, with_std=True)
         self._is_initialized = False
 
     def partial_fit(self, X, y):
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.int64)
+        # Update scaler incrementally before model update
+        self.scaler.partial_fit(X)
+        Xs = self.scaler.transform(X)
         init_before = self._is_initialized
         if not self._is_initialized:
-            logger.info("[Learner] Initial partial_fit: %d samples, classes=%s", len(X), np.unique(y))
-            self.model.partial_fit(X, y, classes=self.classes)
+            logger.info("[Learner] Initial partial_fit: %d samples, classes=%s", len(Xs), np.unique(y))
+            self.model.partial_fit(Xs, y, classes=self.classes)
             self._is_initialized = True
         else:
-            logger.info("[Learner] Incremental partial_fit: %d samples, classes=%s", len(X), np.unique(y))
-            self.model.partial_fit(X, y)
+            logger.info("[Learner] Incremental partial_fit: %d samples, classes=%s", len(Xs), np.unique(y))
+            self.model.partial_fit(Xs, y)
         logger.info("[Learner] partial_fit complete (was_initialized=%s, now_initialized=%s)", init_before, self._is_initialized)
 
     def predict_proba(self, X):
@@ -33,8 +38,13 @@ class PersonalLearner:
         if not self._is_initialized:
             logger.info("[Learner] predict_proba called before initialization (%d samples) -> uniform", len(X))
             return np.full((len(X), 2), 0.5)
-        logger.info("[Learner] predict_proba on %d samples", len(X))
-        return self.model.predict_proba(X)
+        try:
+            Xs = self.scaler.transform(X)
+        except Exception as e:  # noqa: PERF203
+            logger.warning("[Learner] Scaling failed (%s); using raw features", e)
+            Xs = X
+        logger.info("[Learner] predict_proba on %d samples", len(Xs))
+        return self.model.predict_proba(Xs)
 
     def predict_keep_prob(self, X):
         proba = self.predict_proba(X)
