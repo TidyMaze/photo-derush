@@ -57,6 +57,10 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_clicked)
         self.toolbar.export_csv_clicked.connect(self.on_export_csv_clicked)
         self.toolbar.reset_model_clicked.connect(self.on_reset_model_clicked)
+        self.toolbar.predict_sort_desc_clicked.connect(self.on_predict_sort_desc)
+        self.toolbar.predict_sort_asc_clicked.connect(self.on_predict_sort_asc)
+        # Backward compat original signal -> desc
+        self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_desc)
         self._feature_cache = {}  # path -> (mtime, (fv, keys))
 
     def _compute_sorted_images(self):
@@ -343,18 +347,52 @@ class LightroomMainWindow(QMainWindow):
         self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob)
         logging.info("[Predict] Updated keep_prob for image=%s: %.4f", img_name, keep_prob)
 
-    def on_predict_sort_clicked(self):
-        # Sort remaining images by keep probability (desc)
-        scored = []
+    def _sort_by_probability(self, desc: bool = True):
+        """Sort images by predicted keep probability (desc default). Neutral 0.5 for missing features/learner."""
+        if not self.sorted_images:
+            return
+        # Only init learner if predictions needed and learner absent
+        if self.learner is None:
+            self._ensure_learner()
+        names = []
+        vectors = []
+        neutral = []
         for img_name in self.sorted_images:
-            img_path = os.path.join(self.directory, img_name)
-            fv, _ = feature_vector(img_path)
-            prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else 0.5
-            scored.append((prob, img_name))
-        scored.sort(reverse=True)
-        self.sorted_images = [img for _, img in scored]
-        self.image_grid.image_paths = self.sorted_images
-        self.image_grid.populate_grid()
+            path = os.path.join(self.directory, img_name)
+            fv_tuple = self._get_feature_vector(path)
+            if fv_tuple is None:
+                neutral.append(img_name)
+                continue
+            fv, _ = fv_tuple
+            names.append(img_name)
+            vectors.append(fv)
+        prob_map = {}
+        if self.learner is not None and vectors:
+            try:
+                probs = self.learner.predict_keep_prob(vectors)
+                for n, p in zip(names, probs):
+                    prob_map[n] = float(p)
+            except Exception as e:
+                self.logger.warning("[Sort] Probability prediction failed: %s", e)
+        for n in neutral:
+            prob_map.setdefault(n, 0.5)
+        for n in names:
+            prob_map.setdefault(n, 0.5)
+        self.logger.info("[Sort] prob_map=%s mode=%s", prob_map, 'desc' if desc else 'asc')
+        self.sorted_images.sort(key=lambda n: prob_map.get(n, 0.5), reverse=desc)
+        if self.image_grid:
+            self.image_grid.image_paths = self.sorted_images
+            self.image_grid.populate_grid()
+        self.logger.info("[Sort] Completed probability sort (%s)", 'desc' if desc else 'asc')
+
+    def on_predict_sort_desc(self):
+        self._sort_by_probability(desc=True)
+
+    def on_predict_sort_asc(self):
+        self._sort_by_probability(desc=False)
+
+    def on_predict_sort_clicked(self):  # legacy path (desc)
+        self._sort_by_probability(desc=True)
 
     def on_export_csv_clicked(self):
         # Export latest labeled images with keep_prob
