@@ -6,6 +6,11 @@ import numpy as np
 import cv2
 import logging
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt, open_full_image_qt
+import time
+
+# Configure logging if not already configured
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 MAX_IMAGES = 200
 
@@ -170,17 +175,19 @@ def cache_thumbnail(img_path, thumb_path, size=(150, 150)):
         logging.info(f"Created and cached thumbnail for {os.path.basename(thumb_path)}")
         return img, False
 
-def main():
-    directory = '/Users/yannrolland/Pictures/photo-dataset'
-    print("Welcome to Photo Derush Script!")
+def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
+    """Prepare images and their hash/group metadata before launching the UI.
+
+    Returns (all_images_list, image_info_dict, stats_dict)
+    stats_dict keys: total_images, duplicate_group_count, duration_seconds
+    """
     images = list_images(directory)
-    print(f"Found {len(images)} images.")
-    exts = list_extensions(directory)
-    print(f"Extensions found: {', '.join(exts)}")
-    non_image_exts = [e for e in exts if not is_image_extension(e)]
-    if non_image_exts:
-        print(f"Warning: Non-image extensions detected: {', '.join(non_image_exts)}")
-    # Compute hashes and groups
+    logging.info("[Prep] Found %d images in %s", len(images), directory)
+    if not images:
+        return [], {}, {"total_images": 0, "duplicate_group_count": 0, "duration_seconds": 0.0}
+    # Hash + group computation
+    logging.info("[Hashing] Starting hash + group computation for %d images", len(images))
+    start_hash_time = time.perf_counter()
     image_hashes = {}
     hashes = []
     for img in images:
@@ -191,26 +198,40 @@ def main():
             hash_arr = np.frombuffer(h_bytes, dtype='uint8')
             image_hashes[img] = hash_arr
             hashes.append(hash_arr)
-        except Exception:
+        except Exception:  # noqa: PERF203
             image_hashes[img] = None
             hashes.append(None)
     group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
-    # Prepare image info mapping
+    duration = time.perf_counter() - start_hash_time
+    duplicate_group_count = len([g for g in set(group_ids.values()) if g is not None])
+    logging.info(
+        "[Hashing] Finished hash + group computation in %.2fs. Duplicate groups: %d", duration, duplicate_group_count
+    )
+    # image_info mapping
     image_info = {}
     for idx, img in enumerate(images):
-        image_info[img] = {
-            "hash": hash_map.get(idx, None),
-            "group": group_ids.get(idx, None)
-        }
+        image_info[img] = {"hash": hash_map.get(idx), "group": group_ids.get(idx)}
+    stats = {
+        "total_images": len(images),
+        "duplicate_group_count": duplicate_group_count,
+        "duration_seconds": duration,
+    }
+    return images, image_info, stats
+
+def main():
+    directory = '/Users/yannrolland/Pictures/photo-dataset'
+    print("Welcome to Photo Derush Script!")
+    images, image_info, stats = prepare_images_and_groups(directory, MAX_IMAGES)
+    if not images:
+        print("No images found.")
+        return
+    logging.info(
+        "[Prep] Summary: %d images, %d duplicate groups (%.2fs)",
+        stats["total_images"], stats["duplicate_group_count"], stats["duration_seconds"],
+    )
     if len(images) > 0:
         from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt
-        show_lightroom_ui_qt(
-            images[:MAX_IMAGES],
-            directory,
-            image_info=image_info
-        )
-    else:
-        print("No images found.")
+        show_lightroom_ui_qt(images[:MAX_IMAGES], directory, image_info=image_info)
 
 if __name__ == "__main__":
     import sys
