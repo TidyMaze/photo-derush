@@ -80,9 +80,20 @@ def clear_model_and_log(delete_log: bool = True):
         if delete_log and os.path.exists(LOG_PATH):
             os.remove(LOG_PATH)
 
-def rebuild_model_from_log(learner):
-    # Use only latest label per image
+def rebuild_model_from_log(learner, expected_n_features: int | None = None):
+    """Replay latest labeled samples into learner.
+    If expected_n_features provided, filter samples to that length to avoid schema mismatch.
+    """
     X, y, _ = load_latest_labeled_samples()
+    if expected_n_features is not None:
+        filtered = [(x, yy) for x, yy in zip(X, y) if isinstance(x, list) and len(x) == expected_n_features]
+        if filtered and len(filtered) != len(X):
+            logger.info('[Rebuild] Filtered %d/%d samples due to feature length mismatch (expected=%d)', len(X)-len(filtered), len(X), expected_n_features)
+        if not filtered:
+            logger.info('[Rebuild] No matching samples after filtering; skipping rebuild')
+            return learner
+        X, y = zip(*filtered)
+        X, y = list(X), list(y)
     if X and y:
         learner.partial_fit(X, y)
         save_model(learner)

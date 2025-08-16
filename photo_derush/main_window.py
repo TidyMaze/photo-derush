@@ -185,7 +185,37 @@ class LightroomMainWindow(QMainWindow):
             self._cold_start_completed = True
             if hasattr(self, 'image_grid'):
                 self.image_grid.learner = self.learner
-            self.logger.info("[Learner] Loaded persisted model (cold start satisfied)")
+            # Dimension migration check: compare a fresh feature vector length; if mismatch, reset
+            sample_path = None
+            if fv is not None:
+                sample_len = len(fv)
+            else:
+                if self.sorted_images:
+                    sample_path = os.path.join(self.directory, self.sorted_images[0])
+                    fv_tuple_mig = self._get_feature_vector_sync(sample_path)
+                    sample_len = len(fv_tuple_mig[0]) if fv_tuple_mig else None
+                else:
+                    sample_len = None
+            try:
+                model_feature_len = getattr(self.learner.model, 'coef_', None)
+                if model_feature_len is not None:
+                    model_feature_len = self.learner.model.coef_.shape[1]
+                else:
+                    model_feature_len = self.learner.n_features
+            except Exception:
+                model_feature_len = self.learner.n_features
+            if sample_len is not None and sample_len != model_feature_len:
+                self.logger.info('[Learner][Migration] Feature length changed persisted=%d new=%d -> reinitializing model', model_feature_len, sample_len)
+                from ml.personal_learner import PersonalLearner as _PL
+                self.learner = _PL(n_features=sample_len)
+                # Attempt rebuild with filtered log entries of new length
+                rebuild_model_from_log(self.learner, expected_n_features=sample_len)
+                # Cold start may or may not be satisfied after rebuild
+                self._cold_start_completed = self.learner._is_initialized
+                if hasattr(self, 'image_grid'):
+                    self.image_grid.learner = self.learner
+            else:
+                self.logger.info('[Learner] Loaded persisted model (cold start satisfied) n_features=%s', model_feature_len)
             return
         # Provided fresh fv
         if fv is not None:
@@ -193,7 +223,7 @@ class LightroomMainWindow(QMainWindow):
             self.learner = PersonalLearner(n_features=len(fv))
             if counts[0] >= MIN_CLASS_SAMPLES and counts[1] >= MIN_CLASS_SAMPLES:
                 self.logger.info("[Learner] Cold-start threshold met (%d/%d); rebuilding from log", counts[0], counts[1])
-                rebuild_model_from_log(self.learner)
+                rebuild_model_from_log(self.learner, expected_n_features=self.learner.n_features)
                 self._cold_start_completed = True
             else:
                 self.logger.info("[Learner] Cold-start threshold not yet met (class0=%d class1=%d need %d each) -> postponing training", counts[0], counts[1], MIN_CLASS_SAMPLES)
@@ -209,7 +239,7 @@ class LightroomMainWindow(QMainWindow):
                 if feats:
                     self.logger.info("[Learner] Initializing from latest log replay (%d dims) after threshold met", len(feats))
                     self.learner = PersonalLearner(n_features=len(feats))
-                    rebuild_model_from_log(self.learner)
+                    rebuild_model_from_log(self.learner, expected_n_features=self.learner.n_features)
                     self._cold_start_completed = True
                     if hasattr(self, 'image_grid'):
                         self.image_grid.learner = self.learner
@@ -357,7 +387,7 @@ class LightroomMainWindow(QMainWindow):
                     if counts[0] >= MIN_CLASS_SAMPLES and counts[1] >= MIN_CLASS_SAMPLES:
                         # Perform initial training over all historical data
                         self.logger.info("[Training] Cold-start threshold reached (class0=%d class1=%d). Performing initial full training.", counts[0], counts[1])
-                        rebuild_model_from_log(self.learner)
+                        rebuild_model_from_log(self.learner, expected_n_features=self.learner.n_features)
                         self._cold_start_completed = True
                         self._debounced_save_model(force=True)
                         self.logger.info("[Training] Initial full training complete and model saved")
