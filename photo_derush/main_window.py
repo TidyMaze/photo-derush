@@ -83,14 +83,43 @@ class LightroomMainWindow(QMainWindow):
             self._init_learner()
         self.refresh_keep_prob()
 
-    def _init_learner(self):
-        # Use first image to get feature size
-        if self.sorted_images:
-            fv, _ = feature_vector(os.path.join(self.directory, self.sorted_images[0]))
+    def _ensure_learner(self, fv=None):
+        """Guarantee self.learner is initialized.
+        Order of attempts:
+          1. If already initialized -> return.
+          2. If provided fv (numpy array) -> init with its length and rebuild from log.
+          3. Scan event log for a definitive labeled sample (0/1) -> infer n_features & rebuild.
+          4. Derive feature length from first available image (no training yet).
+        """
+        if self.learner is not None:
+            return
+        # If we were given a fresh feature vector (definitive label path)
+        if fv is not None:
+            self.logger.info("[Learner] Initializing from provided feature vector (%d dims)", len(fv))
             self.learner = PersonalLearner(n_features=len(fv))
             rebuild_model_from_log(self.learner)
-        else:
-            self.learner = None
+            return
+        # Try rebuild from log (look for 0/1 labels)
+        for event in iter_events():
+            if event.get('label') in (0, 1) and 'features' in event:
+                feats = event['features']
+                self.logger.info("[Learner] Initializing from log replay (%d dims)", len(feats))
+                self.learner = PersonalLearner(n_features=len(feats))
+                rebuild_model_from_log(self.learner)
+                return
+        # Derive from first image if possible
+        if self.sorted_images:
+            first_path = os.path.join(self.directory, self.sorted_images[0])
+            fv_tuple = feature_vector(first_path)
+            if fv_tuple is not None:
+                fv0, _ = fv_tuple
+                self.logger.info("[Learner] Initializing size from first image only (%d dims, untrained)", len(fv0))
+                self.learner = PersonalLearner(n_features=len(fv0))
+
+    def _init_learner(self):
+        # Backwards-compat entry point – now just ensures learner.
+        if self.sorted_images:
+            self._ensure_learner()
 
     def get_current_image(self):
         if 0 <= self.current_img_idx < len(self.sorted_images):
@@ -129,20 +158,17 @@ class LightroomMainWindow(QMainWindow):
         event = {'image': img_name, 'path': img_path, 'features': fv.tolist(), 'label': label}
         append_event(event)
         self.labels_map[img_name] = label
-        # Lazy init learner on first definitive label
-        if label in (0, 1) and self.learner is None:
-            self.logger.info("[Learner] Lazy init on first definitive label")
-            self.learner = PersonalLearner(n_features=len(fv))
-            rebuild_model_from_log(self.learner)
-        if label in (0, 1) and self.learner is not None:
-            self.logger.debug("[Training] Starting incremental update for image=%s label=%s", img_name, label)
-            self.learner.partial_fit([fv], [label])
-            save_model(self.learner)
-            self.logger.debug("[Training] Model saved after update")
+        # Ensure learner only for definitive labels
+        if label in (0, 1):
+            self._ensure_learner(fv)
+            if self.learner is not None:
+                self.logger.debug("[Training] Incremental update for image=%s label=%s", img_name, label)
+                self.learner.partial_fit([fv], [label])
+                save_model(self.learner)
+                self.logger.debug("[Training] Model saved after update")
         # update UI badge
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
-        # Only refresh probability if model exists and label is definitive
         if self.learner is not None:
             self.refresh_keep_prob()
 
@@ -150,31 +176,16 @@ class LightroomMainWindow(QMainWindow):
         img_name = self.get_current_image()
         if img_name is None:
             return
+        self._ensure_learner()  # May initialize (untrained) or rebuild from log
         if self.learner is None:
-            # Attempt lazy init if we have at least one labeled 0/1 sample in log
-            # or at least one image to derive feature length
-            for event in iter_events():
-                if event.get('label') in (0,1) and 'features' in event:
-                    fv = event['features']
-                    self.learner = PersonalLearner(n_features=len(fv))
-                    rebuild_model_from_log(self.learner)
-                    break
-            if self.learner is None and self.sorted_images:
-                # Try derive n_features from first image but don't train
-                first_path = os.path.join(self.directory, self.sorted_images[0])
-                fv_tuple = feature_vector(first_path)
-                if fv_tuple is not None:
-                    fv0,_ = fv_tuple
-                    self.learner = PersonalLearner(n_features=len(fv0))
-            if self.learner is None:
-                self.logger.debug("[Predict] Skipping keep_prob refresh (no learner yet)")
-                return
+            self.logger.debug("[Predict] Skipping keep_prob refresh (no learner)")
+            return
         img_path = os.path.join(self.directory, img_name)
         fv_tuple = feature_vector(img_path)
         if fv_tuple is None:
             self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
             return
-        fv,_ = fv_tuple
+        fv, _ = fv_tuple
         self.logger.debug("[Predict] Computing keep probability for image=%s", img_name)
         keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
         self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
@@ -200,7 +211,7 @@ class LightroomMainWindow(QMainWindow):
             img_path = event['path']
             label = event['label']
             fv = event['features']
-            prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else 0.5
+            prob = float(self.learner.predict_keep_prob([fv])[0]) if (self.learner is not None and fv is not None) else 0.5
             rows.append({'path': img_path, 'label': label, 'keep_prob': prob})
         with open('labels.csv', 'w') as f:
             f.write('path,label,keep_prob\n')
@@ -209,13 +220,15 @@ class LightroomMainWindow(QMainWindow):
 
     def on_reset_model_clicked(self):
         clear_model_and_log()
-        self._init_learner()
+        self.learner = None
+        self._ensure_learner()
         self.refresh_keep_prob()
 
     def on_sort_by_group_toggled(self, checked):
         self.sort_by_group = checked
         if self.image_grid:
             self.image_grid.populate_grid()
+
     def closeEvent(self, event):
         QApplication.quit()
         super().closeEvent(event)
@@ -239,7 +252,6 @@ class LightroomMainWindow(QMainWindow):
         self.image_info = image_info or {}
         if self.image_grid:
             self.image_grid.image_info = self.image_info
-            # If user wants group sorting, resort; otherwise just recolor
             if self.sort_by_group:
                 self.sorted_images = self._compute_sorted_images()
             self.image_grid.populate_grid()
