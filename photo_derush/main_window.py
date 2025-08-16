@@ -57,6 +57,7 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_clicked)
         self.toolbar.export_csv_clicked.connect(self.on_export_csv_clicked)
         self.toolbar.reset_model_clicked.connect(self.on_reset_model_clicked)
+        self._feature_cache = {}  # path -> (mtime, (fv, keys))
 
     def _compute_sorted_images(self):
         if self.sort_by_group and self.image_info:
@@ -193,12 +194,27 @@ class LightroomMainWindow(QMainWindow):
                 labels[os.path.basename(img)] = lbl
         return labels
 
+    def _get_feature_vector(self, img_path):
+        """Return (vector, keys) with simple mtime-based cache; None on failure."""
+        try:
+            mtime = os.path.getmtime(img_path)
+        except OSError:
+            return None
+        cached = self._feature_cache.get(img_path)
+        if cached and cached[0] == mtime:
+            return cached[1]
+        fv_tuple = feature_vector(img_path)
+        if fv_tuple is None:
+            return None
+        self._feature_cache[img_path] = (mtime, fv_tuple)
+        return fv_tuple
+
     def _label_current_image(self, label):
         img_name = self.get_current_image()
         if img_name is None:
             return
         img_path = os.path.join(self.directory, img_name)
-        fv_tuple = feature_vector(img_path)
+        fv_tuple = self._get_feature_vector(img_path)
         if fv_tuple is None:
             import logging as _logging
             _logging.warning("[Learner] Feature extraction failed for %s; skipping label", img_path)
@@ -288,7 +304,7 @@ class LightroomMainWindow(QMainWindow):
         # Only need probabilities for images currently in grid (respect MAX_IMAGES)
         for img_name in self.image_grid.image_paths[:self.image_grid.MAX_IMAGES]:
             img_path = os.path.join(self.directory, img_name)
-            fv_tuple = feature_vector(img_path)
+            fv_tuple = self._get_feature_vector(img_path)
             if fv_tuple is None:
                 logging.warning("[Predict] Feature extraction failed for %s; skipping", img_path)
                 continue
@@ -319,7 +335,7 @@ class LightroomMainWindow(QMainWindow):
             self.logger.info("[Predict] Skipping keep_prob refresh (no learner)")
             return
         img_path = os.path.join(self.directory, img_name)
-        fv_tuple = feature_vector(img_path)
+        fv_tuple = self._get_feature_vector(img_path)
         if fv_tuple is None:
             self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
             return
