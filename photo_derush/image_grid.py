@@ -223,3 +223,4 @@ class ImageGrid(QWidget):
                 bottom_label.setText(f"{base}\nProb: {prob:.2f}")
             else:
                 bottom_label.setText(base)
+            logging.info("[ImageGrid] Updated keep probability for %s: %.2f", img_name, prob if prob is not None else -1)

@@ -306,6 +306,7 @@ class LightroomMainWindow(QMainWindow):
             logging.info("[Predict] Computed keep probabilities for %d images", len(probs))
             prob_map = {n: float(p) for n, p in zip(names, probs)}
             self.image_grid.update_keep_probabilities(prob_map)
+            logging.info("Done updating proba in grid for %d images", len(prob_map))
         except Exception as e:
             self.logger.warning("[Predict] Failed batch probability refresh: %s", e)
 
