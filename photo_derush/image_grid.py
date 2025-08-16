@@ -1,3 +1,5 @@
+import logging
+
 from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy
 from PySide6.QtCore import Qt
 from .widgets import HoverEffectLabel
@@ -195,6 +197,7 @@ class ImageGrid(QWidget):
             blur_label.setStyleSheet("color: yellow; background: #222;")
 
     def add_image(self, img_name: str):
+        logging.info("[ImageGrid] Adding image: %s", img_name)
         if img_name in self.image_name_to_widgets:
             return
         if len(self.image_labels) >= self.MAX_IMAGES:

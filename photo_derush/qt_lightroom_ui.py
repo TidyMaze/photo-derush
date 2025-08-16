@@ -13,6 +13,7 @@ from PySide6.QtCore import QTimer
 import threading
 from precompute import prepare_images_and_groups, MAX_IMAGES as PREP_MAX, list_images
 import logging
+import queue
 
 def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None, image_info=None):
     app = QApplication.instance() or QApplication(sys.argv)
@@ -40,35 +41,59 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
     win = LightroomMainWindow([], directory, empty_sorted, image_info={})
     win.status.showMessage("Preparing images in background…")
     win.show()
+
+    msg_queue = queue.Queue()
+    stop_flag = {'done': False}
+
+    def poll_queue():
+        processed_any = False
+        try:
+            while True:
+                msg = msg_queue.get_nowait()
+                processed_any = True
+                mtype = msg.get('type')
+                if mtype == 'image':
+                    img_name = msg['name']
+                    logging.debug("[AsyncLoad] (poll) Adding image %s", img_name)
+                    if win.image_grid:
+                        win.image_grid.add_image(img_name)
+                elif mtype == 'grouping':
+                    logging.info("[AsyncLoad] (poll) Applying grouping metadata")
+                    win.update_grouping(msg['image_info'])
+                    win.status.showMessage(f"Loaded {len(win.image_grid.image_labels)} images (groups ready)")
+                elif mtype == 'error':
+                    win.status.showMessage(f"Background load failed: {msg['error']}")
+                elif mtype == 'done':
+                    stop_flag['done'] = True
+                msg_queue.task_done()
+        except queue.Empty:
+            pass
+        if not stop_flag['done']:
+            QTimer.singleShot(50, poll_queue)
+        elif processed_any:
+            win.status.showMessage(win.status.currentMessage() or "Load complete")
+
+    QTimer.singleShot(50, poll_queue)
+
     def worker():
         try:
             images = list_images(directory)
             subset = images[:max_images]
-            logging.info("[AsyncLoad] (stream) Found %d images, streaming first %d", len(images), len(subset))
-            # Set sorted images early
-            def set_sorted():
-                win.sorted_images = subset
-            QTimer.singleShot(0, set_sorted)
-            # Stream thumbnails quickly
+            logging.info("[AsyncLoad] (worker) Found %d images, streaming first %d", len(images), len(subset))
+            # Provide sorted list early
+            msg_queue.put({'type': 'sorted', 'list': subset})
             for img in subset:
-                def add(img_name=img):
-                    if hasattr(win, 'image_grid') and win.image_grid:
-                        win.image_grid.add_image(img_name)
-                QTimer.singleShot(0, add)
-            # After streaming, do full hashing/grouping
+                msg_queue.put({'type': 'image', 'name': img})
+            # Hashing & grouping
             images2, image_info, stats = prepare_images_and_groups(directory, max_images)
-
-            logging.info("[AsyncLoad] (stream) Prepared %d images with stats: %s", len(images2), stats)
-
-            def apply_grouping():
-                win.update_grouping(image_info)
-                win.status.showMessage(f"Loaded {len(subset)} images (groups ready)")
-            QTimer.singleShot(0, apply_grouping)
+            logging.info("[AsyncLoad] (worker) Grouping stats: %s", stats)
+            msg_queue.put({'type': 'grouping', 'image_info': image_info})
+            msg_queue.put({'type': 'done'})
         except Exception as e:
             logging.exception("[AsyncLoad] Worker failed: %s", e)
-            def fail():
-                win.status.showMessage(f"Background load failed: {e}")
-            QTimer.singleShot(0, fail)
+            msg_queue.put({'type': 'error', 'error': str(e)})
+            msg_queue.put({'type': 'done'})
+
     t = threading.Thread(target=worker, daemon=True)
     t.start()
     app.exec()
