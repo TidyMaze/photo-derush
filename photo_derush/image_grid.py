@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLa
 from PySide6.QtCore import Qt
 from .widgets import HoverEffectLabel
 from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
+from .image_manager import image_manager
 import sys
 sys.path.append('..')
 from ml.features import feature_vector
@@ -76,18 +77,11 @@ class ImageGrid(QWidget):
         """Create thumbnail UI row (image + 3 labels) for given image name."""
         import os
         img_path = os.path.join(self.directory, img_name)
-        thumb_path = os.path.join(self.directory, 'thumbnails', img_name)
-        os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
-        from PIL import Image
-        try:
-            if not os.path.exists(thumb_path):
-                img = Image.open(img_path)
-                img.thumbnail((self.THUMB_SIZE, self.THUMB_SIZE))
-                img.save(thumb_path)
-            img = Image.open(thumb_path)
-        except Exception:
-            return  # skip broken image
-        pix = pil2pixmap(img)
+        # Use ImageManager to get/create thumbnail (cached in-memory + persisted)
+        pil_thumb = image_manager.get_thumbnail(img_path, (self.THUMB_SIZE, self.THUMB_SIZE))
+        if pil_thumb is None:
+            return  # skip if cannot load
+        pix = pil2pixmap(pil_thumb)
         top_label = QLabel("")
         top_label.setStyleSheet(f"background: {color}; min-height: 8px;")
         date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
