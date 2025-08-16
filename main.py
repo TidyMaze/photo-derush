@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import logging
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt, open_full_image_qt
+from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt_async
 import time
 
 # Configure logging if not already configured
@@ -244,18 +245,9 @@ def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
 
 def main():
     directory = '/Users/yannrolland/Pictures/photo-dataset'
-    print("Welcome to Photo Derush Script!")
-    images, image_info, stats = prepare_images_and_groups(directory, MAX_IMAGES)
-    if not images:
-        print("No images found.")
-        return
-    logging.info(
-        "[Prep] Summary: %d images, %d duplicate groups (%.2fs)",
-        stats["total_images"], stats["duplicate_group_count"], stats["duration_seconds"],
-    )
-    if len(images) > 0:
-        from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt
-        show_lightroom_ui_qt(images[:MAX_IMAGES], directory, image_info=image_info)
+    print("Welcome to Photo Derush Script (async mode)!")
+    # Launch UI immediately; heavy preprocessing happens in background thread.
+    show_lightroom_ui_qt_async(directory, MAX_IMAGES)
 
 if __name__ == "__main__":
     import sys

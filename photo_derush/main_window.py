@@ -13,7 +13,7 @@ import logging
 class LightroomMainWindow(QMainWindow):
     def __init__(self, image_paths, directory, get_sorted_images, image_info=None):
         super().__init__()
-        self.directory = directory  # ensure available before learner init
+        self.directory = directory
         self.setWindowTitle("Photo Derush (Qt)")
         self.resize(1400, 800)
         self.status = QStatusBar()
@@ -26,23 +26,16 @@ class LightroomMainWindow(QMainWindow):
         self.left_panel = QWidget()
         self.sort_by_group = False
         self.image_info = image_info or {}
-        def get_sorted_images():
-            if self.sort_by_group and self.image_info:
-                # Sort by group, then by filename
-                def group_key(img):
-                    info = self.image_info.get(img, {})
-                    group = info.get("group")
-                    return (group if group is not None else 999999, img)
-                return sorted(image_paths, key=group_key)
-            return image_paths
         self.current_img_idx = 0
         self.sorted_images = image_paths
         self.learner = None
         self.labels_map = self._build_labels_map_from_log()
-        self._init_learner()
-        # Create image grid once with callbacks
-        self.image_grid = ImageGrid(image_paths, directory, self.info_panel, self.status, get_sorted_images,
-                                    image_info=image_info, on_open_fullscreen=self.open_fullscreen,
+        # Do not init learner if no images yet
+        if self.sorted_images:
+            self._init_learner()
+        # create grid
+        self.image_grid = ImageGrid(self.sorted_images, directory, self.info_panel, self.status, self._compute_sorted_images,
+                                    image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
                                     on_select=self.on_select_image, labels_map=self.labels_map)
         self.splitter.addWidget(self.image_grid)
         self.splitter.addWidget(self.info_panel)
@@ -56,6 +49,30 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.export_csv_clicked.connect(self.on_export_csv_clicked)
         self.toolbar.reset_model_clicked.connect(self.on_reset_model_clicked)
         self.logger = logging.getLogger(__name__)
+
+    def _compute_sorted_images(self):
+        if self.sort_by_group and self.image_info:
+            def group_key(img):
+                info = self.image_info.get(img, {})
+                group = info.get("group")
+                return (group if group is not None else 999999, img)
+            return sorted(self.sorted_images, key=group_key)
+        return self.sorted_images
+
+    def load_images(self, image_paths, image_info):
+        self.logger.info("[AsyncLoad] Applying prepared images: %d", len(image_paths))
+        self.image_info = image_info or {}
+        self.sorted_images = image_paths
+        # re-create grid
+        if self.image_grid is not None:
+            self.splitter.widget(0).deleteLater()
+        self.image_grid = ImageGrid(self.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
+                                    image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
+                                    on_select=self.on_select_image, labels_map=self.labels_map)
+        self.splitter.insertWidget(0, self.image_grid)
+        if self.learner is None and self.sorted_images:
+            self._init_learner()
+        self.refresh_keep_prob()
 
     def _init_learner(self):
         # Use first image to get feature size
@@ -161,7 +178,8 @@ class LightroomMainWindow(QMainWindow):
 
     def on_sort_by_group_toggled(self, checked):
         self.sort_by_group = checked
-        self.image_grid.populate_grid()
+        if self.image_grid:
+            self.image_grid.populate_grid()
     def closeEvent(self, event):
         QApplication.quit()
         super().closeEvent(event)
