@@ -2,6 +2,12 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLa
 from PySide6.QtCore import Qt
 from .widgets import HoverEffectLabel
 from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
+import sys
+sys.path.append('..')
+from ml.features import feature_vector
+from ml.personal_learner import PersonalLearner
+from ml.persistence import load_model, save_model
+import os
 
 class ImageGrid(QWidget):
     def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, *args, **kwargs):
@@ -31,6 +37,26 @@ class ImageGrid(QWidget):
         layout.addWidget(self.scroll)
         self.setLayout(layout)
         self.populate_grid()
+        self.learner = None
+        self.feature_keys = None
+        self._init_learner()
+
+    def _init_learner(self):
+        # Try to load model, else create new
+        sample_img = None
+        for img in self.image_paths:
+            sample_img = os.path.join(self.directory, img)
+            break
+        if sample_img:
+            fv, keys = feature_vector(sample_img)
+            self.feature_keys = keys
+            model = load_model()
+            if model is not None:
+                self.learner = model
+            else:
+                self.learner = PersonalLearner(n_features=len(fv))
+        else:
+            self.learner = None
 
     def clear_grid(self):
         for i in reversed(range(self.grid.count())):
@@ -99,7 +125,7 @@ class ImageGrid(QWidget):
             lbl = HoverEffectLabel()
             lbl.setPixmap(pix)
             lbl.setMinimumSize(self.THUMB_SIZE, self.THUMB_SIZE)
-            lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path, hash_str=hash_str, group_str=group_str):
                 def handler(e):
@@ -111,7 +137,13 @@ class ImageGrid(QWidget):
                     sharpness_metrics = compute_sharpness_features(img_path)
                     aesthetic_score = 42
                     metrics = (blur_score, sharpness_metrics, aesthetic_score)
-                    self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics)
+                    # --- Feature extraction and keep probability ---
+                    keep_prob = None
+                    if self.learner is not None:
+                        fv, _ = feature_vector(img_path)
+                        if fv is not None:
+                            keep_prob = float(self.learner.predict_keep_prob([fv])[0])
+                    self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
                 return handler
             lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path, hash_str, group_str)
             self.grid.addWidget(lbl, (idx//self.col_count)*4, idx%self.col_count, alignment=Qt.AlignmentFlag.AlignCenter)

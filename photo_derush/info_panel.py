@@ -14,7 +14,7 @@ class InfoPanel(QWidget):
         layout.addWidget(self.text_edit)
         self.setLayout(layout)
 
-    def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None):
+    def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None, keep_prob=None):
         exif = extract_exif(img_path)
         # Define important EXIF fields in order, with emojis
         important_fields = [
@@ -103,8 +103,13 @@ class InfoPanel(QWidget):
         file_info += f"<b>Group ID:</b> {group_idx}<br>"
         file_info += f"<b>Group Hash:</b> {group_hash}<br>"
         file_info += f"<b>Image Hash:</b> {image_hash}</div>"
+        # Keep probability section
+        if keep_prob is not None:
+            prob_str = f"<div style='margin-bottom:10px; font-size:16pt; color:#4caf50;'><b>Keep Probability:</b> {keep_prob:.2%}</div>"
+        else:
+            prob_str = ""
         # EXIF section
         exif_section = f"<div style='margin-top:10px;'><b>EXIF</b><br>{exif_table}{exif_more}</div>"
         # Combine all sections
-        html = file_info + metrics_str + exif_section
+        html = prob_str + file_info + metrics_str + exif_section
         self.text_edit.setHtml(html)

@@ -2,6 +2,11 @@ from PySide6.QtWidgets import QMainWindow, QStatusBar, QSplitter, QWidget, QAppl
 from .toolbar import SettingsToolbar
 from .info_panel import InfoPanel
 from .image_grid import ImageGrid
+import os
+import json
+from ml.features import feature_vector
+from ml.personal_learner import PersonalLearner
+from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log, iter_events
 
 class LightroomMainWindow(QMainWindow):
     def __init__(self, image_paths, directory, get_sorted_images, image_info=None):
@@ -33,6 +38,92 @@ class LightroomMainWindow(QMainWindow):
         self.splitter.setSizes([1000, 400])
         self.toolbar.zoom_changed.connect(self.image_grid.set_cell_size)
         self.toolbar.sort_by_group_action.toggled.connect(self.on_sort_by_group_toggled)
+        self.current_img_idx = 0
+        self.sorted_images = image_paths
+        self.learner = None
+        self._init_learner()
+        self.toolbar.keep_clicked.connect(self.on_keep_clicked)
+        self.toolbar.trash_clicked.connect(self.on_trash_clicked)
+        self.toolbar.unsure_clicked.connect(self.on_unsure_clicked)
+        self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_clicked)
+        self.toolbar.export_csv_clicked.connect(self.on_export_csv_clicked)
+        self.toolbar.reset_model_clicked.connect(self.on_reset_model_clicked)
+
+    def _init_learner(self):
+        # Use first image to get feature size
+        if self.sorted_images:
+            fv, _ = feature_vector(os.path.join(self.directory, self.sorted_images[0]))
+            self.learner = PersonalLearner(n_features=len(fv))
+            rebuild_model_from_log(self.learner)
+        else:
+            self.learner = None
+
+    def get_current_image(self):
+        if 0 <= self.current_img_idx < len(self.sorted_images):
+            return self.sorted_images[self.current_img_idx]
+        return None
+
+    def on_keep_clicked(self):
+        self._label_current_image(1)
+    def on_trash_clicked(self):
+        self._label_current_image(0)
+    def on_unsure_clicked(self):
+        self._label_current_image(-1)
+
+    def _label_current_image(self, label):
+        img_name = self.get_current_image()
+        if img_name is None:
+            return
+        img_path = os.path.join(self.directory, img_name)
+        fv, _ = feature_vector(img_path)
+        event = {'image': img_name, 'path': img_path, 'features': fv.tolist(), 'label': label}
+        append_event(event)
+        if label in (0, 1):
+            self.learner.partial_fit([fv], [label])
+            save_model(self.learner)
+        self.refresh_keep_prob()
+
+    def refresh_keep_prob(self):
+        img_name = self.get_current_image()
+        if img_name is None:
+            return
+        img_path = os.path.join(self.directory, img_name)
+        fv, _ = feature_vector(img_path)
+        keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
+        self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob)
+
+    def on_predict_sort_clicked(self):
+        # Sort remaining images by keep probability (desc)
+        scored = []
+        for img_name in self.sorted_images:
+            img_path = os.path.join(self.directory, img_name)
+            fv, _ = feature_vector(img_path)
+            prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else 0.5
+            scored.append((prob, img_name))
+        scored.sort(reverse=True)
+        self.sorted_images = [img for _, img in scored]
+        self.image_grid.image_paths = self.sorted_images
+        self.image_grid.populate_grid()
+
+    def on_export_csv_clicked(self):
+        # Export all labeled images with keep_prob
+        rows = []
+        for event in iter_events():
+            img_path = event['path']
+            label = event['label']
+            fv = event['features']
+            prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else 0.5
+            rows.append({'path': img_path, 'label': label, 'keep_prob': prob})
+        with open('labels.csv', 'w') as f:
+            f.write('path,label,keep_prob\n')
+            for row in rows:
+                f.write(f"{row['path']},{row['label']},{row['keep_prob']:.4f}\n")
+
+    def on_reset_model_clicked(self):
+        clear_model_and_log()
+        self._init_learner()
+        self.refresh_keep_prob()
+
     def on_sort_by_group_toggled(self, checked):
         self.sort_by_group = checked
         self.image_grid.populate_grid()
