@@ -11,6 +11,7 @@ from ml.persistence import save_model, append_event, rebuild_model_from_log, cle
 class LightroomMainWindow(QMainWindow):
     def __init__(self, image_paths, directory, get_sorted_images, image_info=None):
         super().__init__()
+        self.directory = directory  # ensure available before learner init
         self.setWindowTitle("Photo Derush (Qt)")
         self.resize(1400, 800)
         self.status = QStatusBar()
