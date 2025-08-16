@@ -63,14 +63,16 @@ class LightroomMainWindow(QMainWindow):
         self.logger.info("[AsyncLoad] Applying prepared images: %d", len(image_paths))
         self.image_info = image_info or {}
         self.sorted_images = image_paths
-        if self.image_grid is not None:
-            self.splitter.widget(0).deleteLater()
-        self.image_grid = ImageGrid(self.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
-                                    image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
-                                    on_select=self.on_select_image, labels_map=self.labels_map)
-        self.splitter.insertWidget(0, self.image_grid)
-        self.splitter.setSizes([1000, 400])
-        # Log population stats
+        if self.image_grid is None:
+            self.image_grid = ImageGrid(self.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
+                                        image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
+                                        on_select=self.on_select_image, labels_map=self.labels_map)
+            self.splitter.insertWidget(0, self.image_grid)
+            self.splitter.setSizes([1000, 400])
+        else:
+            self.image_grid.image_paths = self.sorted_images
+            self.image_grid.image_info = self.image_info
+            self.image_grid.populate_grid()
         try:
             count = len(getattr(self.image_grid, 'image_labels', []))
             self.logger.info("[AsyncLoad] Grid populated with %d thumbnails", count)
