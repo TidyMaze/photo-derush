@@ -44,6 +44,7 @@ class ImageGrid(QWidget):
         self.on_open_fullscreen = on_open_fullscreen
         self.on_select = on_select
         self.labels_map = labels_map or {}
+        self.base_bottom_texts = {}
         # Do not populate yet; caller may stream images
         if image_paths:
             self.populate_grid()
@@ -55,14 +56,19 @@ class ImageGrid(QWidget):
         for img in self.image_paths:
             sample_img = os.path.join(self.directory, img)
             break
-        if sample_img:
-            fv, keys = feature_vector(sample_img)
-            self.feature_keys = keys
-            model = load_model()
-            if model is not None:
-                self.learner = model
+        if sample_img and os.path.exists(sample_img):
+            fv_tuple = feature_vector(sample_img)
+            if fv_tuple:
+                fv, keys = fv_tuple
+                self.feature_keys = keys
+                model = load_model()
+                if model is not None:
+                    self.learner = model
+                else:
+                    self.learner = PersonalLearner(n_features=len(fv))
             else:
-                self.learner = PersonalLearner(n_features=len(fv))
+                # Feature extraction failed; defer learner init
+                self.learner = None
         else:
             self.learner = None
 
@@ -86,6 +92,7 @@ class ImageGrid(QWidget):
         top_label.setStyleSheet(f"background: {color}; min-height: 8px;")
         date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}\nGroup: {group_str}")
+        self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: white; background: #222;")
         blur_label = QLabel("")
         # Badge / label state
@@ -205,3 +212,14 @@ class ImageGrid(QWidget):
         color = '#444444'
         self._add_thumbnail_row(img_name, idx, color=color, hash_str=info.get('hash', '...'), group_str=str(info.get('group', '...')))
         self.status_bar.showMessage(f"Loaded {len(self.image_labels)} images (streaming)")
+
+    def update_keep_probabilities(self, prob_map: dict):
+        """Append or update keep probability line in bottom labels."""
+        for img_name, widgets in self.image_name_to_widgets.items():
+            _, _, bottom_label, _ = widgets
+            base = self.base_bottom_texts.get(img_name, bottom_label.text().split('\nProb:')[0])
+            prob = prob_map.get(img_name)
+            if prob is not None:
+                bottom_label.setText(f"{base}\nProb: {prob:.2f}")
+            else:
+                bottom_label.setText(base)

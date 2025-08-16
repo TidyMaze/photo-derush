@@ -16,6 +16,51 @@ if not logging.getLogger().handlers:
 
 MAX_IMAGES = 200
 
+# Added for tests expecting this helper
+_thumbnail_mem_cache = {}
+
+def cache_thumbnail(src_path: str, thumb_path: str):
+    """Return a PIL image object for thumbnail and whether it was loaded from cache.
+    If disk thumbnail exists and is up-to-date, load it. Otherwise create via ImageManager and save.
+    Also memoize in-process to avoid repeated disk hits within a run.
+    """
+    logger = logging.getLogger(__name__)
+    try:
+        mtime = os.path.getmtime(src_path)
+    except OSError:
+        logger.warning("[cache_thumbnail] Source missing: %s", src_path)
+        return None, False
+    mem_key = (src_path, mtime)
+    if mem_key in _thumbnail_mem_cache:
+        logger.info("Loaded cached thumbnail for %s", src_path)
+        return _thumbnail_mem_cache[mem_key], True
+    # Ensure dir
+    os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+    disk_ok = False
+    if os.path.exists(thumb_path):
+        try:
+            if os.path.getmtime(thumb_path) >= mtime:
+                from PIL import Image
+                img = Image.open(thumb_path)
+                img.load()
+                _thumbnail_mem_cache[mem_key] = img
+                logger.info("Loaded cached thumbnail for %s", src_path)
+                return img, True
+        except Exception as e:  # noqa: PERF203
+            logger.info("[cache_thumbnail] Failed loading disk cache %s: %s (will recreate)", thumb_path, e)
+    # Create new thumbnail using ImageManager (which also persists)
+    thumb_img = image_manager.get_thumbnail(src_path, (200, 200))
+    if thumb_img is not None:
+        try:
+            thumb_img.save(thumb_path)
+        except Exception as e:  # noqa: PERF203
+            logger.info("[cache_thumbnail] Could not save thumbnail %s: %s", thumb_path, e)
+        _thumbnail_mem_cache[mem_key] = thumb_img
+        logger.info("Created and cached thumbnail for %s", src_path)
+        return thumb_img, False
+    logger.warning("[cache_thumbnail] Could not create thumbnail for %s", src_path)
+    return None, False
+
 def list_images(directory):
     exts = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
     return [f for f in os.listdir(directory)

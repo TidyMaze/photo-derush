@@ -60,13 +60,19 @@ class ImageManager:
         base = self.get_image(path)
         if base is None:
             return None
+        # Create working image (try copy, else use base directly)
         try:
-            # Work on a copy to preserve original object dimensions
-            thumb = base.copy()
-            thumb.thumbnail(size)
-        except Exception as e:
-            logger.warning("[ImageManager] Failed to make thumbnail for %s: %s", path, e)
+            work_img = base.copy()
+        except Exception as e:  # noqa: PERF203
+            logger.warning("[ImageManager] copy() failed for %s: %r (will use original)", path, e)
+            work_img = base
+        # Now attempt to thumbnail
+        try:
+            work_img.thumbnail(size)
+        except Exception as e:  # noqa: PERF203
+            logger.warning("[ImageManager] Failed to make thumbnail for %s: %r", path, e)
             return None
+        thumb = work_img
         # Persist to disk thumbnail folder (mirrors previous behaviour) for reuse outside cache
         try:
             thumb_dir = os.path.join(os.path.dirname(path), 'thumbnails')

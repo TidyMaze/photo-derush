@@ -9,6 +9,7 @@ from ml.features import feature_vector
 from ml.personal_learner import PersonalLearner
 from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log, iter_events
 import logging
+import numpy as np
 
 class LightroomMainWindow(QMainWindow):
     def __init__(self, image_paths, directory, get_sorted_images, image_info=None):
@@ -30,6 +31,7 @@ class LightroomMainWindow(QMainWindow):
         self.sorted_images = image_paths
         self.learner = None
         self.labels_map = self._build_labels_map_from_log()
+        self.logger = logging.getLogger(__name__)
         # Do not init learner if no images yet
         if self.sorted_images:
             self._init_learner()
@@ -48,7 +50,6 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_clicked)
         self.toolbar.export_csv_clicked.connect(self.on_export_csv_clicked)
         self.toolbar.reset_model_clicked.connect(self.on_reset_model_clicked)
-        self.logger = logging.getLogger(__name__)
 
     def _compute_sorted_images(self):
         if self.sort_by_group and self.image_info:
@@ -170,7 +171,33 @@ class LightroomMainWindow(QMainWindow):
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
         if self.learner is not None:
+            # Single image refresh for info panel
             self.refresh_keep_prob()
+            # Batch refresh all visible thumbs (always refresh after any label change)
+            self._refresh_all_keep_probs()
+
+    def _refresh_all_keep_probs(self):
+        if self.learner is None or not self.image_grid:
+            return
+        names = []
+        vectors = []
+        # Only need probabilities for images currently in grid (respect MAX_IMAGES)
+        for img_name in self.image_grid.image_paths[:self.image_grid.MAX_IMAGES]:
+            img_path = os.path.join(self.directory, img_name)
+            fv_tuple = feature_vector(img_path)
+            if fv_tuple is None:
+                continue
+            fv, _ = fv_tuple
+            names.append(img_name)
+            vectors.append(fv)
+        if not vectors:
+            return
+        try:
+            probs = self.learner.predict_keep_prob(vectors)
+            prob_map = {n: float(p) for n, p in zip(names, probs)}
+            self.image_grid.update_keep_probabilities(prob_map)
+        except Exception as e:
+            self.logger.warning("[Predict] Failed batch probability refresh: %s", e)
 
     def refresh_keep_prob(self):
         img_name = self.get_current_image()
