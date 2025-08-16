@@ -39,10 +39,12 @@ def rebuild_model_from_log(learner):
     X, y = [], []
     for event in iter_events():
         if 'features' in event and 'label' in event:
-            X.append(event['features'])
-            y.append(event['label'])
+            label = event['label']
+            # Only use definitive labels (0 trash, 1 keep) for model training
+            if label in (0, 1):
+                X.append(event['features'])
+                y.append(label)
     if X and y:
         learner.partial_fit(X, y)
         save_model(learner)
     return learner
-
