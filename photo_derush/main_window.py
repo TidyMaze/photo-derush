@@ -1,19 +1,46 @@
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QSplitter, QWidget, QApplication
+from PySide6.QtWidgets import QMainWindow, QStatusBar, QSplitter, QWidget
 from .toolbar import SettingsToolbar
 from .info_panel import InfoPanel
 from .image_grid import ImageGrid
 from .viewer import open_full_image_qt
 import os
 import json
-from ml.features import feature_vector
+from ml.features_cv import compute_feature_vector
+# Backward compatibility: expose feature_vector symbol (tests may monkeypatch it)
+def feature_vector(path):  # pragma: no cover - legacy shim
+    return compute_feature_vector(path)
 from ml.personal_learner import PersonalLearner
-from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log, iter_events
+from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log
 from ml.persistence import load_model
 from ml.persistence import load_feature_cache, persist_feature_cache_entry
 # import helpers for latest-only logic
 from ml.persistence import latest_labeled_events, load_latest_labeled_samples
 import logging
 import numpy as np
+from PySide6.QtCore import QRunnable, QObject, Signal, QThreadPool
+import time
+
+
+class _FeatureResultEmitter(QObject):
+    finished = Signal(str, float, object, list)  # path, mtime, vector, keys
+
+
+class _FeatureTask(QRunnable):
+    def __init__(self, path, mtime, emitter):
+        super().__init__()
+        self.path = path
+        self.mtime = mtime
+        self.emitter = emitter
+
+    def run(self):  # Executes in worker thread
+        try:
+            vec, keys = compute_feature_vector(self.path)
+            self.emitter.finished.emit(self.path, self.mtime, vec, keys)
+        except Exception:
+            import logging as _logging
+            _logging.exception('[FeatureAsync] Extraction failed for %s', self.path)
+            self.emitter.finished.emit(self.path, self.mtime, None, [])
+
 
 class LightroomMainWindow(QMainWindow):
     def __init__(self, image_paths, directory, get_sorted_images, image_info=None):
@@ -37,6 +64,11 @@ class LightroomMainWindow(QMainWindow):
         self.labels_map = self._build_labels_map_from_log()
         self.logger = logging.getLogger(__name__)
         self._feature_cache = {}  # path -> (mtime, (fv, keys))
+        self._feature_emitter = _FeatureResultEmitter()
+        self._feature_emitter.finished.connect(self._on_async_feature_extracted)
+        self._thread_pool = QThreadPool.globalInstance()
+        self._pending_feature_tasks = set()
+        self._last_model_save_ts = 0.0
         # Load persisted feature cache (best-effort)
         try:
             persisted_cache = load_feature_cache()
@@ -55,7 +87,7 @@ class LightroomMainWindow(QMainWindow):
         # create grid
         self.image_grid = ImageGrid(self.sorted_images, directory, self.info_panel, self.status, self._compute_sorted_images,
                                     image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
-                                    on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector)
+                                    on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector_sync)
         # Share learner instance with grid (avoid separate untrained model)
         self.image_grid.learner = self.learner
         self.splitter.addWidget(self.image_grid)
@@ -78,6 +110,9 @@ class LightroomMainWindow(QMainWindow):
         # After initialization, populate probabilities for all images (neutral if no learner)
         if self.sorted_images:
             self._refresh_all_keep_probs()
+            first = self.get_current_image()
+            if first:
+                self._schedule_feature_extraction(os.path.join(self.directory, first))
 
     def _compute_sorted_images(self):
         if self.sort_by_group and self.image_info:
@@ -95,7 +130,7 @@ class LightroomMainWindow(QMainWindow):
         if self.image_grid is None:
             self.image_grid = ImageGrid(self.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
                                         image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
-                                        on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector)
+                                        on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector_sync)
             # Share learner instance with grid (avoid separate untrained model)
             self.image_grid.learner = self.learner
             self.splitter.insertWidget(0, self.image_grid)
@@ -182,7 +217,7 @@ class LightroomMainWindow(QMainWindow):
         # Derive from first image if possible (untrained)
         if self.sorted_images:
             first_path = os.path.join(self.directory, self.sorted_images[0])
-            fv_tuple = self._get_feature_vector(first_path)
+            fv_tuple = self._get_feature_vector_sync(first_path)
             if fv_tuple is not None:
                 fv0, _ = fv_tuple
                 self.logger.info("[Learner] Initializing size from first image only (%d dims, untrained; waiting for threshold)", len(fv0))
@@ -216,43 +251,84 @@ class LightroomMainWindow(QMainWindow):
                 labels[os.path.basename(img)] = lbl
         return labels
 
-    def _get_feature_vector(self, img_path):
-        """Return (vector, keys) with simple mtime-based cache; None on failure."""
-        if not hasattr(self, '_feature_cache'):
-            self._feature_cache = {}
+    def _on_async_feature_extracted(self, path, mtime, vec, keys):
+        self._pending_feature_tasks.discard(path)
+        if vec is None:
+            return
+        self._feature_cache[path] = (mtime, (vec, keys))
+        try:
+            persist_feature_cache_entry(path, mtime, vec, keys)
+        except Exception as e:  # noqa: PERF203
+            self.logger.info('[FeatureCache] Persist entry failed (async) for %s: %s', path, e)
+        # If current image, refresh panel probability
+        if self.get_current_image() and os.path.basename(path) == self.get_current_image():
+            self.refresh_keep_prob()
+        # Update grid probability incrementally
+        if self.image_grid and self.learner is not None:
+            try:
+                prob = float(self.learner.predict_keep_prob([vec])[0])
+                self.image_grid.update_keep_probabilities({os.path.basename(path): prob})
+            except Exception as e:  # noqa: PERF203
+                self.logger.info('[FeatureAsync] Prob update failed for %s: %s', path, e)
+
+    def _get_feature_vector_sync(self, img_path):
         try:
             mtime = os.path.getmtime(img_path)
         except OSError:
             return None
         cached = self._feature_cache.get(img_path)
         if cached and cached[0] == mtime:
-            self.logger.info('[FeatureCache] HIT path=%s', img_path)
             return cached[1]
-        # Cache miss (either not present or stale)
-        if cached:
-            self.logger.info('[FeatureCache] MISS (stale) path=%s old_mtime=%s new_mtime=%s', img_path, cached[0], mtime)
-        else:
-            self.logger.info('[FeatureCache] MISS (new) path=%s', img_path)
-        fv_tuple = feature_vector(img_path)
-        if fv_tuple is None:
-            self.logger.info('[FeatureCache] Extraction failed path=%s', img_path)
-            return None
-        self._feature_cache[img_path] = (mtime, fv_tuple)
-        fv, keys = fv_tuple
-        self.logger.info('[FeatureCache] ADD path=%s dims=%d', img_path, len(fv) if fv is not None else -1)
-        # Persist single entry (best-effort, async not required given small size)
+        vec, keys = compute_feature_vector(img_path)
+        self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
-            persist_feature_cache_entry(img_path, mtime, fv, keys)
-        except Exception as e:
+            persist_feature_cache_entry(img_path, mtime, vec, keys)
+        except Exception as e:  # noqa: PERF203
             self.logger.info('[FeatureCache] Persist entry failed for %s: %s', img_path, e)
-        return fv_tuple
+        return (vec, keys)
+
+    def _get_feature_vector(self, img_path, require_sync=False):
+        try:
+            mtime = os.path.getmtime(img_path)
+        except OSError:
+            return None
+        cached = self._feature_cache.get(img_path)
+        if cached and cached[0] == mtime:
+            return cached[1]
+        if require_sync:
+            return self._get_feature_vector_sync(img_path)
+        self._schedule_feature_extraction(img_path)
+        return None
+
+    def _schedule_feature_extraction(self, img_path):
+        try:
+            mtime = os.path.getmtime(img_path)
+        except OSError:
+            return False
+        cached = self._feature_cache.get(img_path)
+        if cached and cached[0] == mtime:
+            return False
+        if img_path in self._pending_feature_tasks:
+            return False
+        self._pending_feature_tasks.add(img_path)
+        task = _FeatureTask(img_path, mtime, self._feature_emitter)
+        self.logger.debug('[FeatureAsync] Scheduling extraction path=%s', img_path)
+        self._thread_pool.start(task)
+        return True
+
+    # --------------------------------------------------------------------
+    def _debounced_save_model(self, force=False, min_interval=0.5):
+        now = time.time()
+        if force or (now - self._last_model_save_ts) >= min_interval:
+            save_model(self.learner)
+            self._last_model_save_ts = now
 
     def _label_current_image(self, label):
         img_name = self.get_current_image()
         if img_name is None:
             return
         img_path = os.path.join(self.directory, img_name)
-        fv_tuple = self._get_feature_vector(img_path)
+        fv_tuple = self._get_feature_vector_sync(img_path)
         if fv_tuple is None:
             import logging as _logging
             _logging.warning("[Learner] Feature extraction failed for %s; skipping label", img_path)
@@ -283,7 +359,7 @@ class LightroomMainWindow(QMainWindow):
                         self.logger.info("[Training] Cold-start threshold reached (class0=%d class1=%d). Performing initial full training.", counts[0], counts[1])
                         rebuild_model_from_log(self.learner)
                         self._cold_start_completed = True
-                        save_model(self.learner)
+                        self._debounced_save_model(force=True)
                         self.logger.info("[Training] Initial full training complete and model saved")
                     else:
                         self.logger.info("[Training] Skipping update (cold-start threshold not met: class0=%d class1=%d need %d each)", counts[0], counts[1], MIN_CLASS_SAMPLES)
@@ -291,7 +367,7 @@ class LightroomMainWindow(QMainWindow):
                     # Incremental update with just the new sample
                     self.logger.info("[Training] Incremental update for image=%s label=%s", img_name, label)
                     self.learner.partial_fit([fv], [label])
-                    save_model(self.learner)
+                    self._debounced_save_model()
                     self.logger.info("[Training] Model saved after incremental update")
                     # Evaluate after update
                     self._evaluate_model()
@@ -384,7 +460,7 @@ class LightroomMainWindow(QMainWindow):
             self.logger.info("[Predict] Skipping keep_prob refresh (no learner)")
             return
         img_path = os.path.join(self.directory, img_name)
-        fv_tuple = self._get_feature_vector(img_path)
+        fv_tuple = self._get_feature_vector_sync(img_path)
         if fv_tuple is None:
             self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
             return
@@ -487,23 +563,25 @@ class LightroomMainWindow(QMainWindow):
 
     def on_export_csv_clicked(self):
         rows = []
-        latest = latest_labeled_events()
-        for img, ev in latest.items():
-            img_path = ev.get('path') or img
-            label = ev.get('label')
-            feats = ev.get('features')
-            prob = 0.5
-            if self.learner is not None and feats is not None:
-                try:
-                    prob = float(self.learner.predict_keep_prob([feats])[0])
-                except Exception:
-                    pass
-            rows.append({'path': img_path, 'label': label, 'keep_prob': prob})
+        for img_name in self.sorted_images:
+            path = os.path.join(self.directory, img_name)
+            label = self.labels_map.get(img_name, '')
+            prob_str = ''
+            if self.learner is not None:
+                fv_tuple = self._get_feature_vector_sync(path)
+                if fv_tuple is not None:
+                    fv, _ = fv_tuple
+                    try:
+                        prob = float(self.learner.predict_keep_prob([fv])[0])
+                        prob_str = f"{prob:.4f}"
+                    except Exception:  # noqa: PERF203
+                        prob_str = ''
+            rows.append((path, label, prob_str))
         try:
             with open('labels.csv', 'w') as f:
                 f.write('path,label,keep_prob\n')
-                for r in rows:
-                    f.write(f"{r['path']},{r['label']},{r['keep_prob']:.4f}\n")
+                for p, l, pr in rows:
+                    f.write(f"{p},{l},{pr}\n")
             self.logger.info('[Export] Wrote labels.csv with %d rows', len(rows))
         except Exception as e:
             self.logger.warning('[Export] Failed writing labels.csv: %s', e)
@@ -518,7 +596,7 @@ class LightroomMainWindow(QMainWindow):
             self.image_grid.populate_grid()
         if self.sorted_images:
             first_path = os.path.join(self.directory, self.sorted_images[0])
-            fv_tuple = self._get_feature_vector(first_path)
+            fv_tuple = self._get_feature_vector_sync(first_path)
             if fv_tuple is not None:
                 fv0, _ = fv_tuple
                 self.learner = PersonalLearner(n_features=len(fv0))
