@@ -4,12 +4,15 @@ import logging
 import numpy as np
 import imagehash
 from PIL import Image
+from photo_derush.image_manager import image_manager
 import faiss
 
 MAX_IMAGES = 200  # reused if needed
 
 def compute_dhash(image_path):
-    img = Image.open(image_path)
+    img = image_manager.get_image(image_path)
+    if img is None:
+        raise FileNotFoundError(f"Cannot open image for dhash: {image_path}")
     return imagehash.dhash(img)
 
 def compute_duplicate_groups(hashes):
@@ -99,4 +102,3 @@ def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
     image_info = {img: {"hash": hash_map.get(idx), "group": group_ids.get(idx)} for idx, img in enumerate(images)}
     stats = {"total_images": len(images), "duplicate_group_count": duplicate_group_count, "duration_seconds": duration}
     return images, image_info, stats
-
