@@ -36,12 +36,13 @@ class ImageGrid(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self.scroll)
         self.setLayout(layout)
-        self.populate_grid()
         self.learner = None
         self.feature_keys = None
         self.on_open_fullscreen = on_open_fullscreen
         self.on_select = on_select
         self.labels_map = labels_map or {}
+        # Populate after labels_map exists
+        self.populate_grid()
         self._init_learner()
 
     def _init_learner(self):
