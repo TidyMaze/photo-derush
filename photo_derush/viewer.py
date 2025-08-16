@@ -1,15 +1,26 @@
 from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QApplication, QPushButton, QHBoxLayout, QWidget, QSizePolicy
 from PySide6.QtCore import Qt
-from PIL import Image
 from .utils import pil2pixmap
+from .image_manager import image_manager
 
 def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None):
     dlg = QDialog()
     dlg.setWindowTitle("Full Image Viewer")
     dlg.setWindowFlag(Qt.WindowType.Window)
     dlg.setWindowState(Qt.WindowState.WindowFullScreen)
-    img = Image.open(img_path)
+    img = image_manager.get_image(img_path)
+    if img is None:
+        # Show a placeholder dialog indicating failure
+        placeholder = QLabel(f"Failed to load image:\n{img_path}")
+        placeholder.setStyleSheet("color:#f55; background:#222; padding:40px; font-size:18px;")
+        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout = QVBoxLayout()
+        layout.addWidget(placeholder)
+        dlg.setLayout(layout)
+        dlg.exec()
+        return
     screen = QApplication.primaryScreen().geometry()
+    img = img.copy()
     img.thumbnail((screen.width(), screen.height()))
     pix = pil2pixmap(img)
     lbl = QLabel()

@@ -2,7 +2,8 @@ import os
 import threading
 import logging
 from typing import Dict, Tuple
-from PIL import Image
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,13 @@ class ImageManager:
                 return cached[1]
             try:
                 img = Image.open(path)
-                # Force lazy loader remains okay; don't .load() unless needed.
+                img.load()  # force load so we can close fp
+                if hasattr(img, 'fp') and img.fp:
+                    try:
+                        img.fp.close()
+                    except Exception:
+                        pass
+                    img.fp = None
                 self._orig[path] = (mtime, img)
                 return img
             except Exception as e:
@@ -80,4 +87,3 @@ class ImageManager:
             logger.info("[ImageManager] Caches cleared")
 
 image_manager = ImageManager()
-

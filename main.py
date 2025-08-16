@@ -188,19 +188,36 @@ def duplicate_slayer(image_dir, trash_dir, show_ui=True):
     return kept, [os.path.join(trash_dir, t) for t in trashed]
 
 def cache_thumbnail(img_path, thumb_path, size=(150, 150)):
-    """Load thumbnail from cache or create and cache it."""
-    from PIL import Image
+    """Load thumbnail from cache or create and cache it using ImageManager.
+    Returns (PIL.Image|None, cached_bool)
+    """
     import logging
+    # If thumbnail file already exists, try loading it (fast path)
     if os.path.exists(thumb_path):
-        img = Image.open(thumb_path)
-        logging.info(f"Loaded cached thumbnail for {os.path.basename(thumb_path)}")
-        return img, True
-    else:
-        img = Image.open(img_path)
-        img.thumbnail(size)
-        img.save(thumb_path)
+        img = image_manager.get_image(thumb_path)
+        if img is None:  # fallback in case existing file is corrupted
+            img = image_manager.get_thumbnail(img_path, size)
+            if img:
+                try:
+                    img.save(thumb_path)
+                except Exception:
+                    pass
+        if img is not None:
+            logging.info(f"Loaded cached thumbnail for {os.path.basename(thumb_path)}")
+            return img, True
+        return None, True  # corrupted but report as cached
+    # Need to build thumbnail
+    img = image_manager.get_thumbnail(img_path, size)
+    if img is not None:
+        try:
+            os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+            img.save(thumb_path)
+        except Exception:
+            pass
         logging.info(f"Created and cached thumbnail for {os.path.basename(thumb_path)}")
         return img, False
+    logging.warning(f"Failed to create thumbnail for {img_path}")
+    return None, False
 
 def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
     """Prepare images and their hash/group metadata before launching the UI.

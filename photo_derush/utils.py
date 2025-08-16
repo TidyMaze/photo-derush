@@ -4,6 +4,7 @@ import cv2
 from PIL import Image, ExifTags
 import imagehash
 import logging
+from .image_manager import image_manager
 
 def pil2pixmap(img: Image.Image):
     from PySide6.QtGui import QPixmap, QImage
@@ -32,7 +33,10 @@ def compute_sharpness_features(img_path):
 
 def compute_perceptual_hash(img_path):
     try:
-        img = Image.open(img_path)
+        img = image_manager.get_image(img_path)
+        if img is None:
+            logging.warning(f"Could not compute perceptual hash for {img_path}: image not loadable")
+            return None
         return imagehash.phash(img)
     except Exception as e:
         logging.warning(f"Could not compute perceptual hash for {img_path}: {e}")
@@ -40,8 +44,11 @@ def compute_perceptual_hash(img_path):
 
 def extract_exif(img_path):
     try:
-        img = Image.open(img_path)
-        exif_data = img._getexif()
+        img = image_manager.get_image(img_path)
+        if img is None:
+            logging.warning(f"Could not extract EXIF for {img_path}: image not loadable")
+            return {}
+        exif_data = getattr(img, '_getexif', lambda: None)()
         if not exif_data:
             return {}
         exif = {}
