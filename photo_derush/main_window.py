@@ -162,10 +162,10 @@ class LightroomMainWindow(QMainWindow):
         if label in (0, 1):
             self._ensure_learner(fv)
             if self.learner is not None:
-                self.logger.debug("[Training] Incremental update for image=%s label=%s", img_name, label)
+                self.logger.info("[Training] Incremental update for image=%s label=%s", img_name, label)
                 self.learner.partial_fit([fv], [label])
                 save_model(self.learner)
-                self.logger.debug("[Training] Model saved after update")
+                self.logger.info("[Training] Model saved after update")
         # update UI badge
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
@@ -178,7 +178,7 @@ class LightroomMainWindow(QMainWindow):
             return
         self._ensure_learner()  # May initialize (untrained) or rebuild from log
         if self.learner is None:
-            self.logger.debug("[Predict] Skipping keep_prob refresh (no learner)")
+            self.logger.info("[Predict] Skipping keep_prob refresh (no learner)")
             return
         img_path = os.path.join(self.directory, img_name)
         fv_tuple = feature_vector(img_path)
@@ -186,7 +186,7 @@ class LightroomMainWindow(QMainWindow):
             self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
             return
         fv, _ = fv_tuple
-        self.logger.debug("[Predict] Computing keep probability for image=%s", img_name)
+        self.logger.info("[Predict] Computing keep probability for image=%s", img_name)
         keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
         self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
         self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob)

@@ -22,20 +22,20 @@ class PersonalLearner:
         else:
             logger.info("[Learner] Incremental partial_fit: %d samples, classes=%s", len(X), np.unique(y))
             self.model.partial_fit(X, y)
-        logger.debug("[Learner] partial_fit complete (was_initialized=%s, now_initialized=%s)", init_before, self._is_initialized)
+        logger.info("[Learner] partial_fit complete (was_initialized=%s, now_initialized=%s)", init_before, self._is_initialized)
 
     def predict_proba(self, X):
         X = np.asarray(X, dtype=np.float64)
         if not self._is_initialized:
-            logger.debug("[Learner] predict_proba called before initialization (%d samples) -> uniform", len(X))
+            logger.info("[Learner] predict_proba called before initialization (%d samples) -> uniform", len(X))
             return np.full((len(X), 2), 0.5)
-        logger.debug("[Learner] predict_proba on %d samples", len(X))
+        logger.info("[Learner] predict_proba on %d samples", len(X))
         return self.model.predict_proba(X)
 
     def predict_keep_prob(self, X):
         proba = self.predict_proba(X)
         keep_probs = proba[:, 1]
-        logger.debug("[Learner] predict_keep_prob -> min=%.4f max=%.4f avg=%.4f", float(np.min(keep_probs)), float(np.max(keep_probs)), float(np.mean(keep_probs)))
+        logger.info("[Learner] predict_keep_prob -> min=%.4f max=%.4f avg=%.4f", float(np.min(keep_probs)), float(np.max(keep_probs)), float(np.mean(keep_probs)))
         return keep_probs
 
     def save(self, path):

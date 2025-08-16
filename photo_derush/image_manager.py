@@ -75,7 +75,7 @@ class ImageManager:
             if not (os.path.exists(thumb_path) and os.path.getmtime(thumb_path) >= mtime):
                 thumb.save(thumb_path)
         except Exception as e:
-            logger.debug("[ImageManager] Could not persist thumbnail for %s: %s", path, e)
+            logger.info("[ImageManager] Could not persist thumbnail for %s: %s", path, e)
         with self._lock:
             self._thumbs[key] = (mtime, thumb)
         return thumb
