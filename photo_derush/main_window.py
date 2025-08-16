@@ -167,6 +167,8 @@ class LightroomMainWindow(QMainWindow):
                 self.learner.partial_fit([fv], [label])
                 save_model(self.learner)
                 self.logger.info("[Training] Model saved after update")
+                # Evaluate immediately after training update
+                self._evaluate_model()
         # update UI badge
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
@@ -175,6 +177,57 @@ class LightroomMainWindow(QMainWindow):
             self.refresh_keep_prob()
             # Batch refresh all visible thumbs (always refresh after any label change)
             self._refresh_all_keep_probs()
+
+    def _evaluate_model(self):
+        """Evaluate current learner on all definitive labeled events (0/1) and log metrics using sklearn helpers.
+        Metrics: samples, positive rate, accuracy, precision, recall, f1, log_loss, brier score.
+        Safe for single-class (handles zero_division). Silent if no data.
+        """
+        if self.learner is None:
+            return
+        X = []
+        y = []
+        for event in iter_events():
+            lbl = event.get('label')
+            feats = event.get('features')
+            if lbl in (0, 1) and isinstance(feats, list):
+                X.append(feats)
+                y.append(lbl)
+        if not X:
+            return
+        import numpy as _np
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, log_loss, brier_score_loss
+        X_np = _np.asarray(X, dtype=_np.float64)
+        y_np = _np.asarray(y, dtype=_np.int64)
+        try:
+            probs = self.learner.predict_keep_prob(X_np)
+            preds = (probs >= 0.5).astype(int)
+            pos_rate = float(y_np.mean())
+            acc = float(accuracy_score(y_np, preds))
+            # Handle single-class gracefully
+            try:
+                prec = float(precision_score(y_np, preds, zero_division=0))
+                rec = float(recall_score(y_np, preds, zero_division=0))
+                f1 = float(f1_score(y_np, preds, zero_division=0))
+            except Exception:  # noqa: PERF203
+                prec = rec = f1 = 0.0
+            # log_loss may fail with single class; guard
+            try:
+                ll = float(log_loss(y_np, _np.vstack([1-probs, probs]).T, labels=[0,1]))
+            except Exception:  # noqa: PERF203
+                ll = float('nan')
+            try:
+                brier = float(brier_score_loss(y_np, probs))
+            except Exception:  # noqa: PERF203
+                brier = float('nan')
+            self.logger.info(
+                "[Eval] samples=%d pos_rate=%.4f acc=%.4f prec=%.4f rec=%.4f f1=%.4f logloss=%s brier=%s",
+                len(y_np), pos_rate, acc, prec, rec, f1,
+                f"{ll:.4f}" if _np.isfinite(ll) else "nan",
+                f"{brier:.4f}" if _np.isfinite(brier) else "nan"
+            )
+        except Exception as e:  # noqa: PERF203
+            self.logger.warning("[Eval] Failed evaluation: %s", e)
 
     def _refresh_all_keep_probs(self):
         if self.learner is None or not self.image_grid:
