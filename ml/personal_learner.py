@@ -48,7 +48,7 @@ class PersonalLearner:
                 tail_note = ""
             logger.info("[Learner][Preview] Training batch (n=%d, n_features=%d):\n%s%s", len(_df), X.shape[1], _display.to_string(index=False), tail_note)
         except Exception as e:  # noqa: PERF203
-            logger.debug("[Learner][Preview] Skipped DataFrame preview: %s", e)
+            logger.info("[Learner][Preview] Skipped DataFrame preview: %s", e)
         # Update scaler incrementally before model update
         self.scaler.partial_fit(X)
         Xs = self.scaler.transform(X)

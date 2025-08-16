@@ -43,8 +43,10 @@ class LightroomMainWindow(QMainWindow):
             if persisted_cache:
                 self._feature_cache.update(persisted_cache)
                 self.logger.info('[FeatureCache] Loaded %d cached feature vectors', len(persisted_cache))
+            else:
+                self.logger.info('[FeatureCache] No persisted feature vectors loaded (empty or missing)')
         except Exception as e:
-            self.logger.debug('[FeatureCache] Failed loading persisted cache: %s', e)
+            self.logger.info('[FeatureCache] Failed loading persisted cache: %s', e)
         # Cold-start training gate (require min samples per class before training)
         self._cold_start_completed = False
         # Do not init learner if no images yet
@@ -222,17 +224,25 @@ class LightroomMainWindow(QMainWindow):
             return None
         cached = self._feature_cache.get(img_path)
         if cached and cached[0] == mtime:
+            self.logger.info('[FeatureCache] HIT path=%s', img_path)
             return cached[1]
+        # Cache miss (either not present or stale)
+        if cached:
+            self.logger.info('[FeatureCache] MISS (stale) path=%s old_mtime=%s new_mtime=%s', img_path, cached[0], mtime)
+        else:
+            self.logger.info('[FeatureCache] MISS (new) path=%s', img_path)
         fv_tuple = feature_vector(img_path)
         if fv_tuple is None:
+            self.logger.info('[FeatureCache] Extraction failed path=%s', img_path)
             return None
         self._feature_cache[img_path] = (mtime, fv_tuple)
+        fv, keys = fv_tuple
+        self.logger.info('[FeatureCache] ADD path=%s dims=%d', img_path, len(fv) if fv is not None else -1)
         # Persist single entry (best-effort, async not required given small size)
         try:
-            fv, keys = fv_tuple
             persist_feature_cache_entry(img_path, mtime, fv, keys)
         except Exception as e:
-            self.logger.debug('[FeatureCache] Persist entry failed for %s: %s', img_path, e)
+            self.logger.info('[FeatureCache] Persist entry failed for %s: %s', img_path, e)
         return fv_tuple
 
     def _label_current_image(self, label):

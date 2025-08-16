@@ -45,9 +45,9 @@ def iter_events():
                     if isinstance(obj, dict):
                         yield obj
                     else:
-                        logger.debug('[iter_events] Skipping non-dict JSON line')
+                        logger.info('[iter_events] Skipping non-dict JSON line')
                 except Exception:
-                    logger.debug('[iter_events] Skipping malformed JSON line')
+                    logger.info('[iter_events] Skipping malformed JSON line')
     except FileNotFoundError:
         return
 
@@ -173,4 +173,4 @@ def persist_feature_cache_entry(path: str, mtime: float, fv, keys):
             json.dump(existing, f)
         os.replace(tmp, FEATURE_CACHE_PATH)
     except Exception:
-        logger.debug('[FeatureCache] Failed to persist entry for %s', path)
+        logger.info('[FeatureCache] Failed to persist entry for %s', path)
