@@ -105,8 +105,22 @@ def compute_duplicate_groups(hashes):
     current_group = 1
     clusters = []
     assigned = set()
-    for i in range(len(hashes_np)):
+    total = len(hashes_np)
+    if total == 0:
+        return {}, {}, {}
+    log_interval = max(1, total // 20)  # aim for ~20 logs
+    import time as _time
+    start_group_time = _time.perf_counter()
+    logging.info("[Grouping] Starting duplicate grouping over %d hashes", total)
+    for i in range(total):
         if i in assigned:
+            # still log periodic progress
+            if (i + 1) % log_interval == 0 or (i + 1) == total:
+                elapsed = _time.perf_counter() - start_group_time
+                logging.info(
+                    "[Grouping] %d/%d (%.1f%%) processed (elapsed %.1fs)",
+                    i + 1, total, (i + 1) / total * 100.0, elapsed
+                )
             continue
         res = index.range_search(hashes_np[i][np.newaxis, :], 5)
         lims, D, I = res
@@ -119,6 +133,13 @@ def compute_duplicate_groups(hashes):
             group_cardinality[current_group] = len(cluster)
             clusters.append(list(cluster))
             current_group += 1
+        # progress log
+        if (i + 1) % log_interval == 0 or (i + 1) == total:
+            elapsed = _time.perf_counter() - start_group_time
+            logging.info(
+                "[Grouping] %d/%d (%.1f%%) processed, groups=%d (elapsed %.1fs)",
+                i + 1, total, (i + 1) / total * 100.0, current_group - 1, elapsed
+            )
     for idx in range(len(hashes)):
         if idx not in group_ids:
             group_ids[idx] = None
@@ -127,6 +148,8 @@ def compute_duplicate_groups(hashes):
             hash_map[idx] = ''.join(f'{b:02x}' for b in h)
         else:
             hash_map[idx] = None
+    total_elapsed = _time.perf_counter() - start_group_time
+    logging.info("[Grouping] Completed in %.2fs. Groups=%d", total_elapsed, current_group - 1)
     return group_ids, group_cardinality, hash_map
 
 def main_duplicate_detection(clusters=None, image_hashes=None):
@@ -185,12 +208,13 @@ def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
     logging.info("[Prep] Found %d images in %s", len(images), directory)
     if not images:
         return [], {}, {"total_images": 0, "duplicate_group_count": 0, "duration_seconds": 0.0}
-    # Hash + group computation
     logging.info("[Hashing] Starting hash + group computation for %d images", len(images))
     start_hash_time = time.perf_counter()
     image_hashes = {}
     hashes = []
-    for img in images:
+    total = len(images)
+    log_interval = max(1, total // 20)  # target ~20 progress updates
+    for idx, img in enumerate(images):
         img_path = os.path.join(directory, img)
         try:
             dh = compute_dhash(img_path)
@@ -198,24 +222,24 @@ def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
             hash_arr = np.frombuffer(h_bytes, dtype='uint8')
             image_hashes[img] = hash_arr
             hashes.append(hash_arr)
-        except Exception:  # noqa: PERF203
+        except Exception as ex:  # noqa: PERF203
+            logging.warning("[Hashing] Failed for %s: %s", img, ex)
             image_hashes[img] = None
             hashes.append(None)
+        if (idx + 1) % log_interval == 0 or (idx + 1) == total:
+            elapsed = time.perf_counter() - start_hash_time
+            logging.info(
+                "[Hashing] %d/%d (%.1f%%) hashed (elapsed %.1fs)",
+                idx + 1, total, (idx + 1) / total * 100.0, elapsed
+            )
     group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
     duration = time.perf_counter() - start_hash_time
     duplicate_group_count = len([g for g in set(group_ids.values()) if g is not None])
-    logging.info(
-        "[Hashing] Finished hash + group computation in %.2fs. Duplicate groups: %d", duration, duplicate_group_count
-    )
-    # image_info mapping
+    logging.info("[Hashing] Finished hash + group computation in %.2fs. Duplicate groups: %d", duration, duplicate_group_count)
     image_info = {}
     for idx, img in enumerate(images):
         image_info[img] = {"hash": hash_map.get(idx), "group": group_ids.get(idx)}
-    stats = {
-        "total_images": len(images),
-        "duplicate_group_count": duplicate_group_count,
-        "duration_seconds": duration,
-    }
+    stats = {"total_images": len(images), "duplicate_group_count": duplicate_group_count, "duration_seconds": duration}
     return images, image_info, stats
 
 def main():
