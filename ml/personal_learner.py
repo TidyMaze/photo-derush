@@ -8,6 +8,10 @@ class PersonalLearner:
     def __init__(self, n_features, classes=[0, 1]):
         self.n_features = n_features
         self.classes = np.array(classes)
+        # Big banner log for new model creation
+        logger.info("=" * 72)
+        logger.info("[ModelInit] NEW PersonalLearner created n_features=%d classes=%s", n_features, self.classes.tolist())
+        logger.info("=" * 72)
         self.model = SGDClassifier(loss="log_loss", max_iter=1, warm_start=True)
         self._is_initialized = False
 
