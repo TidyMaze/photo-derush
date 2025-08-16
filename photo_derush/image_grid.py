@@ -46,6 +46,7 @@ class ImageGrid(QWidget):
         self.base_bottom_texts = {}
         self._logged_keep_prob_images: set[str] = set()  # track images already logged for keep probability
         self._get_feature_vector_fn = get_feature_vector_fn
+        self._last_prob_map = {}
         # Do not populate yet; caller may stream images
         if image_paths:
             self.populate_grid()
@@ -175,6 +176,9 @@ class ImageGrid(QWidget):
             group_str = group if group is not None else '...'
             self._add_thumbnail_row(img_name, idx, color=color, hash_str=hash_str, group_str=group_str)
         self.status_bar.showMessage(f"Loaded {num_images} images (thumbnails only, grouping pending)")
+        # Re-apply last known probabilities if available
+        if self._last_prob_map:
+            self.update_keep_probabilities(self._last_prob_map)
 
     def set_cell_size(self, size):
         self.THUMB_SIZE = size
@@ -218,6 +222,7 @@ class ImageGrid(QWidget):
     def update_keep_probabilities(self, prob_map: dict):
         """Append or update keep probability line in bottom labels.
         Logs keep probability only once per image (first time it's set)."""
+        self._last_prob_map = prob_map or {}
         for img_name, widgets in self.image_name_to_widgets.items():
             _, _, bottom_label, _ = widgets
             base = self.base_bottom_texts.get(img_name, bottom_label.text().split('\nProb:')[0])
