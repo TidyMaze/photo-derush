@@ -7,6 +7,7 @@ import cv2
 import logging
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt, open_full_image_qt
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt_async
+from photo_derush.image_manager import image_manager
 import time
 
 # Configure logging if not already configured
@@ -51,7 +52,9 @@ def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=No
     show_lightroom_ui_qt(image_paths, directory, trashed_paths, trashed_dir, on_window_opened=on_window_opened)
 
 def compute_dhash(image_path):
-    img = Image.open(image_path)
+    img = image_manager.get_image(image_path)
+    if img is None:
+        raise FileNotFoundError(f"Cannot open image for dhash: {image_path}")
     return imagehash.dhash(img)
 
 def cluster_duplicates(image_paths, directory, hamming_thresh=5):
