@@ -129,7 +129,12 @@ class LightroomMainWindow(QMainWindow):
         event = {'image': img_name, 'path': img_path, 'features': fv.tolist(), 'label': label}
         append_event(event)
         self.labels_map[img_name] = label
-        if label in (0, 1):
+        # Lazy init learner on first definitive label
+        if label in (0, 1) and self.learner is None:
+            self.logger.info("[Learner] Lazy init on first definitive label")
+            self.learner = PersonalLearner(n_features=len(fv))
+            rebuild_model_from_log(self.learner)
+        if label in (0, 1) and self.learner is not None:
             self.logger.debug("[Training] Starting incremental update for image=%s label=%s", img_name, label)
             self.learner.partial_fit([fv], [label])
             save_model(self.learner)
@@ -137,17 +142,39 @@ class LightroomMainWindow(QMainWindow):
         # update UI badge
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
-        self.refresh_keep_prob()
+        # Only refresh probability if model exists and label is definitive
+        if self.learner is not None:
+            self.refresh_keep_prob()
 
     def refresh_keep_prob(self):
         img_name = self.get_current_image()
         if img_name is None:
             return
+        if self.learner is None:
+            # Attempt lazy init if we have at least one labeled 0/1 sample in log
+            # or at least one image to derive feature length
+            for event in iter_events():
+                if event.get('label') in (0,1) and 'features' in event:
+                    fv = event['features']
+                    self.learner = PersonalLearner(n_features=len(fv))
+                    rebuild_model_from_log(self.learner)
+                    break
+            if self.learner is None and self.sorted_images:
+                # Try derive n_features from first image but don't train
+                first_path = os.path.join(self.directory, self.sorted_images[0])
+                fv_tuple = feature_vector(first_path)
+                if fv_tuple is not None:
+                    fv0,_ = fv_tuple
+                    self.learner = PersonalLearner(n_features=len(fv0))
+            if self.learner is None:
+                self.logger.debug("[Predict] Skipping keep_prob refresh (no learner yet)")
+                return
         img_path = os.path.join(self.directory, img_name)
-        fv, _ = feature_vector(img_path)
-        if fv is None:
+        fv_tuple = feature_vector(img_path)
+        if fv_tuple is None:
             self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
             return
+        fv,_ = fv_tuple
         self.logger.debug("[Predict] Computing keep probability for image=%s", img_name)
         keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
         self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
