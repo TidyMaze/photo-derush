@@ -8,6 +8,7 @@ import json
 from ml.features import feature_vector
 from ml.personal_learner import PersonalLearner
 from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log, iter_events
+from ml.persistence import load_model
 import logging
 import numpy as np
 
@@ -39,6 +40,8 @@ class LightroomMainWindow(QMainWindow):
         self.image_grid = ImageGrid(self.sorted_images, directory, self.info_panel, self.status, self._compute_sorted_images,
                                     image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
                                     on_select=self.on_select_image, labels_map=self.labels_map)
+        # Share learner instance with grid (avoid separate untrained model)
+        self.image_grid.learner = self.learner
         self.splitter.addWidget(self.image_grid)
         self.splitter.addWidget(self.info_panel)
         self.splitter.setSizes([1000, 400])
@@ -68,6 +71,8 @@ class LightroomMainWindow(QMainWindow):
             self.image_grid = ImageGrid(self.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
                                         image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
                                         on_select=self.on_select_image, labels_map=self.labels_map)
+            # Share learner instance with grid (avoid separate untrained model)
+            self.image_grid.learner = self.learner
             self.splitter.insertWidget(0, self.image_grid)
             self.splitter.setSizes([1000, 400])
         else:
@@ -88,17 +93,32 @@ class LightroomMainWindow(QMainWindow):
         """Guarantee self.learner is initialized.
         Order of attempts:
           1. If already initialized -> return.
-          2. If provided fv (numpy array) -> init with its length and rebuild from log.
-          3. Scan event log for a definitive labeled sample (0/1) -> infer n_features & rebuild.
-          4. Derive feature length from first available image (no training yet).
+          2. If saved model exists -> load it and return.
+          3. If provided fv (definitive label path) -> init with its length and rebuild from log.
+          4. Scan event log for a definitive labeled sample (0/1) -> infer n_features & rebuild.
+          5. Derive feature length from first available image (no training yet).
         """
         if self.learner is not None:
+            return
+        # Try load persisted model first (fast path, preserves prior incremental state)
+        try:
+            persisted = load_model()
+        except Exception as e:  # noqa: PERF203
+            persisted = None
+            self.logger.warning("[Learner] Failed to load persisted model: %s", e)
+        if persisted is not None:
+            self.learner = persisted
+            if hasattr(self, 'image_grid'):
+                self.image_grid.learner = self.learner
+            self.logger.info("[Learner] Loaded persisted model")
             return
         # If we were given a fresh feature vector (definitive label path)
         if fv is not None:
             self.logger.info("[Learner] Initializing from provided feature vector (%d dims)", len(fv))
             self.learner = PersonalLearner(n_features=len(fv))
             rebuild_model_from_log(self.learner)
+            if hasattr(self, 'image_grid'):
+                self.image_grid.learner = self.learner
             return
         # Try rebuild from log (look for 0/1 labels)
         for event in iter_events():
@@ -107,6 +127,8 @@ class LightroomMainWindow(QMainWindow):
                 self.logger.info("[Learner] Initializing from log replay (%d dims)", len(feats))
                 self.learner = PersonalLearner(n_features=len(feats))
                 rebuild_model_from_log(self.learner)
+                if hasattr(self, 'image_grid'):
+                    self.image_grid.learner = self.learner
                 return
         # Derive from first image if possible
         if self.sorted_images:
@@ -116,6 +138,8 @@ class LightroomMainWindow(QMainWindow):
                 fv0, _ = fv_tuple
                 self.logger.info("[Learner] Initializing size from first image only (%d dims, untrained)", len(fv0))
                 self.learner = PersonalLearner(n_features=len(fv0))
+                if hasattr(self, 'image_grid'):
+                    self.image_grid.learner = self.learner
 
     def _init_learner(self):
         # Backwards-compat entry point – now just ensures learner.
@@ -167,6 +191,9 @@ class LightroomMainWindow(QMainWindow):
                 self.learner.partial_fit([fv], [label])
                 save_model(self.learner)
                 self.logger.info("[Training] Model saved after update")
+                # Keep grid learner in sync (avoid stale or separate model instance)
+                if hasattr(self, 'image_grid') and getattr(self.image_grid, 'learner', None) is not self.learner:
+                    self.image_grid.learner = self.learner
                 # Evaluate immediately after training update
                 self._evaluate_model()
         # update UI badge
@@ -302,6 +329,8 @@ class LightroomMainWindow(QMainWindow):
         clear_model_and_log()
         self.learner = None
         self._ensure_learner()
+        if hasattr(self, 'image_grid'):
+            self.image_grid.learner = self.learner
         self.refresh_keep_prob()
 
     def on_sort_by_group_toggled(self, checked):
