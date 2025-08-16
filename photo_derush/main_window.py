@@ -326,11 +326,27 @@ class LightroomMainWindow(QMainWindow):
                 f.write(f"{row['path']},{row['label']},{row['keep_prob']:.4f}\n")
 
     def on_reset_model_clicked(self):
-        clear_model_and_log()
+        # Preserve event log; only delete persisted model so we can start fresh while keeping history.
+        clear_model_and_log(delete_log=False)
+        self.logger.info("="*60)
+        self.logger.info("[Reset] Cleared persisted model ONLY (log preserved). Starting brand-new untrained learner with fresh scaler.")
+        self.logger.info("="*60)
+        # New empty learner (do NOT rebuild from log to keep it truly fresh)
         self.learner = None
-        self._ensure_learner()
+        # Clear in-memory labels so UI badges reflect fresh state (log still holds history)
+        self.labels_map = {}
         if hasattr(self, 'image_grid'):
-            self.image_grid.learner = self.learner
+            self.image_grid.labels_map = self.labels_map
+            self.image_grid.populate_grid()
+        # Determine feature dimension from first image (if any)
+        if self.sorted_images:
+            first_path = os.path.join(self.directory, self.sorted_images[0])
+            fv_tuple = feature_vector(first_path)
+            if fv_tuple is not None:
+                fv0, _ = fv_tuple
+                self.learner = PersonalLearner(n_features=len(fv0))
+                if hasattr(self, 'image_grid'):
+                    self.image_grid.learner = self.learner
         self.refresh_keep_prob()
 
     def on_sort_by_group_toggled(self, checked):

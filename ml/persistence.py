@@ -29,11 +29,12 @@ def iter_events():
         for line in f:
             yield json.loads(line)
 
-def clear_model_and_log():
+def clear_model_and_log(delete_log: bool = True):
     with _save_lock:
         if os.path.exists(MODEL_PATH):
             os.remove(MODEL_PATH)
-        # Do not delete log by default (for rebuild)
+        if delete_log and os.path.exists(LOG_PATH):
+            os.remove(LOG_PATH)
 
 def rebuild_model_from_log(learner):
     X, y = [], []
