@@ -290,14 +290,20 @@ class LightroomMainWindow(QMainWindow):
             img_path = os.path.join(self.directory, img_name)
             fv_tuple = feature_vector(img_path)
             if fv_tuple is None:
+                logging.warning("[Predict] Feature extraction failed for %s; skipping", img_path)
                 continue
+
+            logging.info("[Predict] Extracting feature vector for image=%s", img_name)
+
             fv, _ = fv_tuple
             names.append(img_name)
             vectors.append(fv)
         if not vectors:
             return
         try:
+            logging.info("[Predict] Predicting keep probabilities for %d images", len(vectors))
             probs = self.learner.predict_keep_prob(vectors)
+            logging.info("[Predict] Computed keep probabilities for %d images", len(probs))
             prob_map = {n: float(p) for n, p in zip(names, probs)}
             self.image_grid.update_keep_probabilities(prob_map)
         except Exception as e:
