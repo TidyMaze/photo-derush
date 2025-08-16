@@ -241,6 +241,7 @@ class LightroomMainWindow(QMainWindow):
             self.refresh_keep_prob()
             # Batch refresh all visible thumbs (always refresh after any label change)
             self._refresh_all_keep_probs()
+            logging.info("[Label] Updated keep probabilities for all images in grid after labeling %s", img_name)
 
     def _evaluate_model(self):
         """Evaluate current learner on latest definitive labeled events (0/1) only."""
@@ -320,6 +321,7 @@ class LightroomMainWindow(QMainWindow):
         keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
         self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
         self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob)
+        logging.info("[Predict] Updated keep_prob for image=%s: %.4f", img_name, keep_prob)
 
     def on_predict_sort_clicked(self):
         # Sort remaining images by keep probability (desc)
