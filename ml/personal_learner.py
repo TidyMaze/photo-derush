@@ -20,6 +20,23 @@ class PersonalLearner:
     def partial_fit(self, X, y):
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.int64)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        # Show feature batch as DataFrame before any scaling/training
+        try:
+            import pandas as _pd
+            cols = {f"f{i}": X[:, i] for i in range(X.shape[1])}
+            cols['label'] = y
+            _df = _pd.DataFrame(cols)
+            if len(_df) > 20:
+                _display = _df.head(20)
+                tail_note = f"\n[... truncated {len(_df)-20} more rows ...]"
+            else:
+                _display = _df
+                tail_note = ""
+            logger.info("[Learner][Preview] Training batch (n=%d, n_features=%d):\n%s%s", len(_df), X.shape[1], _display.to_string(index=False), tail_note)
+        except Exception as e:  # noqa: PERF203
+            logger.debug("[Learner][Preview] Skipped DataFrame preview: %s", e)
         # Update scaler incrementally before model update
         self.scaler.partial_fit(X)
         Xs = self.scaler.transform(X)
