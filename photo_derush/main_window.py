@@ -8,6 +8,7 @@ import json
 from ml.features import feature_vector
 from ml.personal_learner import PersonalLearner
 from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log, iter_events
+import logging
 
 class LightroomMainWindow(QMainWindow):
     def __init__(self, image_paths, directory, get_sorted_images, image_info=None):
@@ -53,6 +54,7 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_clicked)
         self.toolbar.export_csv_clicked.connect(self.on_export_csv_clicked)
         self.toolbar.reset_model_clicked.connect(self.on_reset_model_clicked)
+        self.logger = logging.getLogger(__name__)
 
     def _init_learner(self):
         # Use first image to get feature size
@@ -82,15 +84,18 @@ class LightroomMainWindow(QMainWindow):
         img_path = os.path.join(self.directory, img_name)
         fv_tuple = feature_vector(img_path)
         if fv_tuple is None:
-            import logging
-            logging.warning("[Learner] Feature extraction failed for %s; skipping label", img_path)
+            import logging as _logging
+            _logging.warning("[Learner] Feature extraction failed for %s; skipping label", img_path)
             return
         fv, _ = fv_tuple
+        self.logger.info("[Label] User set label=%s for image=%s", label, img_name)
         event = {'image': img_name, 'path': img_path, 'features': fv.tolist(), 'label': label}
         append_event(event)
         if label in (0, 1):
+            self.logger.debug("[Training] Starting incremental update for image=%s label=%s", img_name, label)
             self.learner.partial_fit([fv], [label])
             save_model(self.learner)
+            self.logger.debug("[Training] Model saved after update")
         self.refresh_keep_prob()
 
     def refresh_keep_prob(self):
@@ -99,7 +104,12 @@ class LightroomMainWindow(QMainWindow):
             return
         img_path = os.path.join(self.directory, img_name)
         fv, _ = feature_vector(img_path)
+        if fv is None:
+            self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
+            return
+        self.logger.debug("[Predict] Computing keep probability for image=%s", img_name)
         keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
+        self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
         self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob)
 
     def on_predict_sort_clicked(self):
