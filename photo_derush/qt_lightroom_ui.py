@@ -57,6 +57,9 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
                 QTimer.singleShot(0, add)
             # After streaming, do full hashing/grouping
             images2, image_info, stats = prepare_images_and_groups(directory, max_images)
+
+            logging.info("[AsyncLoad] (stream) Prepared %d images with stats: %s", len(images2), stats)
+
             def apply_grouping():
                 win.update_grouping(image_info)
                 win.status.showMessage(f"Loaded {len(subset)} images (groups ready)")
