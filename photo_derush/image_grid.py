@@ -41,8 +41,9 @@ class ImageGrid(QWidget):
         self.on_open_fullscreen = on_open_fullscreen
         self.on_select = on_select
         self.labels_map = labels_map or {}
-        # Populate after labels_map exists
-        self.populate_grid()
+        # Do not populate yet; caller may stream images
+        if image_paths:
+            self.populate_grid()
         self._init_learner()
 
     def _init_learner(self):
@@ -206,3 +207,88 @@ class ImageGrid(QWidget):
         else:
             blur_label.setText("")
             blur_label.setStyleSheet("color: yellow; background: #222;")
+
+    def add_image(self, img_name:str):
+        if img_name in self.image_name_to_widgets:
+            return
+        if len(self.image_labels) >= self.MAX_IMAGES:
+            return
+        self.image_paths.append(img_name)
+        idx = len(self.image_labels)
+        import os
+        img_path = os.path.join(self.directory, img_name)
+        thumb_path = os.path.join(self.directory, 'thumbnails', img_name)
+        os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+        try:
+            if not os.path.exists(thumb_path):
+                from PIL import Image
+                img = Image.open(img_path)
+                img.thumbnail((self.THUMB_SIZE, self.THUMB_SIZE))
+                img.save(thumb_path)
+            from PIL import Image
+            img = Image.open(thumb_path)
+        except Exception:
+            return
+        pix = pil2pixmap(img)
+        group = None
+        color = '#444444'
+        top_label = QLabel("")
+        top_label.setStyleSheet(f"background: {color}; min-height: 8px;")
+        date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
+        bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: ...\nGroup: ...")
+        bottom_label.setStyleSheet("color: white; background: #222;")
+        blur_label = QLabel("")
+        lbl_val = self.labels_map.get(img_name)
+        if lbl_val is not None:
+            if lbl_val == 1:
+                blur_label.setText("KEEP"); blur_label.setStyleSheet("color: #fff; background:#2e7d32; font-weight:bold; padding:2px;")
+            elif lbl_val == 0:
+                blur_label.setText("TRASH"); blur_label.setStyleSheet("color: #fff; background:#b71c1c; font-weight:bold; padding:2px;")
+            elif lbl_val == -1:
+                blur_label.setText("UNSURE"); blur_label.setStyleSheet("color: #000; background:#ffeb3b; font-weight:bold; padding:2px;")
+        else:
+            blur_label.setStyleSheet("color: yellow; background: #222;")
+        lbl = HoverEffectLabel()
+        lbl.setPixmap(pix)
+        lbl.setMinimumSize(self.THUMB_SIZE, self.THUMB_SIZE)
+        lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path):
+            def handler(e):
+                for l in self.image_labels:
+                    if isinstance(l, HoverEffectLabel):
+                        l.set_selected(False)
+                label.set_selected(True)
+                blur_score = compute_blur_score(img_path)
+                sharpness_metrics = compute_sharpness_features(img_path)
+                aesthetic_score = 42
+                metrics = (blur_score, sharpness_metrics, aesthetic_score)
+                keep_prob = None
+                if self.learner is not None:
+                    fv, _ = feature_vector(img_path)
+                    if fv is not None:
+                        keep_prob = float(self.learner.predict_keep_prob([fv])[0])
+                self.info_panel.update_info(img_name, img_path, "-", "-", "-", metrics, keep_prob=keep_prob)
+                if self.on_select:
+                    self.on_select(idx)
+            return handler
+        def mouseDoubleClickEventFactory(idx=idx, img_path=img_path):
+            def handler(e):
+                if self.on_open_fullscreen:
+                    self.on_open_fullscreen(idx, img_path)
+            return handler
+        lbl.mousePressEvent = mousePressEventFactory()
+        lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory()
+        # layout position
+        row_base = (idx // self.col_count) * 4
+        col = idx % self.col_count
+        self.grid.addWidget(lbl, row_base, col, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.grid.addWidget(top_label, row_base + 1, col)
+        self.grid.addWidget(bottom_label, row_base + 2, col)
+        self.grid.addWidget(blur_label, row_base + 3, col)
+        self.image_labels.append(lbl)
+        self.top_labels.append(top_label)
+        self.bottom_labels.append(bottom_label)
+        self.blur_labels.append(blur_label)
+        self.image_name_to_widgets[img_name] = (lbl, top_label, bottom_label, blur_label)
+        self.status_bar.showMessage(f"Loaded {len(self.image_labels)} images (streaming)")

@@ -11,7 +11,8 @@ from .main_window import LightroomMainWindow
 from .viewer import open_full_image_qt
 from PySide6.QtCore import QTimer
 import threading
-from precompute import prepare_images_and_groups, MAX_IMAGES as PREP_MAX
+from precompute import prepare_images_and_groups, MAX_IMAGES as PREP_MAX, list_images
+import logging
 
 def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None, image_info=None):
     app = QApplication.instance() or QApplication(sys.argv)
@@ -40,11 +41,31 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
     win.status.showMessage("Preparing images in background…")
     win.show()
     def worker():
-        images, image_info, stats = prepare_images_and_groups(directory, max_images)
-        def apply():
-            win.load_images(images[:max_images], image_info)
-            win.status.showMessage(f"Loaded {len(images[:max_images])} images (async) - groups computed")
-        QTimer.singleShot(0, apply)
+        try:
+            images = list_images(directory)
+            subset = images[:max_images]
+            logging.info("[AsyncLoad] (stream) Found %d images, streaming first %d", len(images), len(subset))
+            # Set sorted images early
+            def set_sorted():
+                win.sorted_images = subset
+            QTimer.singleShot(0, set_sorted)
+            # Stream thumbnails quickly
+            for img in subset:
+                def add(img_name=img):
+                    if hasattr(win, 'image_grid') and win.image_grid:
+                        win.image_grid.add_image(img_name)
+                QTimer.singleShot(0, add)
+            # After streaming, do full hashing/grouping
+            images2, image_info, stats = prepare_images_and_groups(directory, max_images)
+            def apply_grouping():
+                win.update_grouping(image_info)
+                win.status.showMessage(f"Loaded {len(subset)} images (groups ready)")
+            QTimer.singleShot(0, apply_grouping)
+        except Exception as e:
+            logging.exception("[AsyncLoad] Worker failed: %s", e)
+            def fail():
+                win.status.showMessage(f"Background load failed: {e}")
+            QTimer.singleShot(0, fail)
     t = threading.Thread(target=worker, daemon=True)
     t.start()
     app.exec()
