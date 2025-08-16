@@ -7,6 +7,7 @@ import logging
 
 MODEL_PATH = 'ml/personal_model.joblib'
 LOG_PATH = 'ml/event_log.jsonl'
+FEATURE_CACHE_PATH = 'ml/feature_cache.json'
 
 logger = logging.getLogger(__name__)
 
@@ -112,3 +113,64 @@ def compact_event_log(keep_unlabeled: bool = True):
             out.write(json.dumps(ev) + '\n')
     os.replace(tmp_path, LOG_PATH)
     logger.info('[Log] Compacted event log: %d entries (latest + %s unlabeled)', len(combined), 'with' if keep_unlabeled else 'without')
+
+def load_feature_cache():
+    """Load persisted feature cache from disk.
+    Returns dict[path] = (mtime, (fv, keys)) compatible with in-memory format.
+    Stale entries (mtime mismatch or missing file) are skipped silently.
+    """
+    cache = {}
+    if not os.path.exists(FEATURE_CACHE_PATH):
+        return cache
+    try:
+        with open(FEATURE_CACHE_PATH, 'r') as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return cache
+        for path, rec in data.items():
+            try:
+                mtime = rec.get('mtime')
+                fv = rec.get('fv')
+                keys = rec.get('keys')
+                if mtime is None or fv is None:
+                    continue
+                if not os.path.exists(path):
+                    continue
+                current_mtime = os.path.getmtime(path)
+                if abs(current_mtime - mtime) > 1e-6:
+                    continue  # file changed
+                cache[path] = (mtime, (fv, keys))
+            except Exception:
+                continue
+    except Exception:
+        return {}
+    return cache
+
+def persist_feature_cache_entry(path: str, mtime: float, fv, keys):
+    """Persist/append a single feature cache entry (atomic replace)."""
+    try:
+        existing = {}
+        if os.path.exists(FEATURE_CACHE_PATH):
+            try:
+                with open(FEATURE_CACHE_PATH, 'r') as f:
+                    existing = json.load(f) or {}
+            except Exception:
+                existing = {}
+        # Normalize vector to list
+        try:
+            import numpy as _np
+            if hasattr(fv, 'tolist'):
+                fv_ser = fv.tolist()
+            elif isinstance(fv, _np.ndarray):
+                fv_ser = fv.astype(float).tolist()
+            else:
+                fv_ser = list(fv)
+        except Exception:
+            fv_ser = fv if isinstance(fv, list) else []
+        existing[path] = {'mtime': mtime, 'fv': fv_ser, 'keys': keys}
+        tmp = FEATURE_CACHE_PATH + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(existing, f)
+        os.replace(tmp, FEATURE_CACHE_PATH)
+    except Exception:
+        logger.debug('[FeatureCache] Failed to persist entry for %s', path)

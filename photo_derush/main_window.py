@@ -9,6 +9,7 @@ from ml.features import feature_vector
 from ml.personal_learner import PersonalLearner
 from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log, iter_events
 from ml.persistence import load_model
+from ml.persistence import load_feature_cache, persist_feature_cache_entry
 # import helpers for latest-only logic
 from ml.persistence import latest_labeled_events, load_latest_labeled_samples
 import logging
@@ -36,6 +37,14 @@ class LightroomMainWindow(QMainWindow):
         self.labels_map = self._build_labels_map_from_log()
         self.logger = logging.getLogger(__name__)
         self._feature_cache = {}  # path -> (mtime, (fv, keys))
+        # Load persisted feature cache (best-effort)
+        try:
+            persisted_cache = load_feature_cache()
+            if persisted_cache:
+                self._feature_cache.update(persisted_cache)
+                self.logger.info('[FeatureCache] Loaded %d cached feature vectors', len(persisted_cache))
+        except Exception as e:
+            self.logger.debug('[FeatureCache] Failed loading persisted cache: %s', e)
         # Cold-start training gate (require min samples per class before training)
         self._cold_start_completed = False
         # Do not init learner if no images yet
@@ -218,6 +227,12 @@ class LightroomMainWindow(QMainWindow):
         if fv_tuple is None:
             return None
         self._feature_cache[img_path] = (mtime, fv_tuple)
+        # Persist single entry (best-effort, async not required given small size)
+        try:
+            fv, keys = fv_tuple
+            persist_feature_cache_entry(img_path, mtime, fv, keys)
+        except Exception as e:
+            self.logger.debug('[FeatureCache] Persist entry failed for %s: %s', img_path, e)
         return fv_tuple
 
     def _label_current_image(self, label):
