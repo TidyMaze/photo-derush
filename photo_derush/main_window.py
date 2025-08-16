@@ -38,11 +38,12 @@ class LightroomMainWindow(QMainWindow):
         self.current_img_idx = 0
         self.sorted_images = image_paths
         self.learner = None
+        self.labels_map = self._build_labels_map_from_log()
         self._init_learner()
         # Create image grid once with callbacks
         self.image_grid = ImageGrid(image_paths, directory, self.info_panel, self.status, get_sorted_images,
                                     image_info=image_info, on_open_fullscreen=self.open_fullscreen,
-                                    on_select=self.on_select_image)
+                                    on_select=self.on_select_image, labels_map=self.labels_map)
         self.splitter.addWidget(self.image_grid)
         self.splitter.addWidget(self.info_panel)
         self.splitter.setSizes([1000, 400])
@@ -77,6 +78,16 @@ class LightroomMainWindow(QMainWindow):
     def on_unsure_clicked(self):
         self._label_current_image(-1)
 
+    def _build_labels_map_from_log(self):
+        labels = {}
+        for event in iter_events():
+            img = event.get('image') or event.get('path')
+            label = event.get('label')
+            if img is not None and label is not None:
+                # keep last occurrence
+                labels[os.path.basename(img)] = label
+        return labels
+
     def _label_current_image(self, label):
         img_name = self.get_current_image()
         if img_name is None:
@@ -91,11 +102,15 @@ class LightroomMainWindow(QMainWindow):
         self.logger.info("[Label] User set label=%s for image=%s", label, img_name)
         event = {'image': img_name, 'path': img_path, 'features': fv.tolist(), 'label': label}
         append_event(event)
+        self.labels_map[img_name] = label
         if label in (0, 1):
             self.logger.debug("[Training] Starting incremental update for image=%s label=%s", img_name, label)
             self.learner.partial_fit([fv], [label])
             save_model(self.learner)
             self.logger.debug("[Training] Model saved after update")
+        # update UI badge
+        if hasattr(self, 'image_grid'):
+            self.image_grid.update_label(img_name, label)
         self.refresh_keep_prob()
 
     def refresh_keep_prob(self):

@@ -10,7 +10,7 @@ from ml.persistence import load_model, save_model
 import os
 
 class ImageGrid(QWidget):
-    def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, *args, **kwargs):
+    def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, labels_map=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.image_paths = image_paths
         self.directory = directory
@@ -41,6 +41,7 @@ class ImageGrid(QWidget):
         self.feature_keys = None
         self.on_open_fullscreen = on_open_fullscreen
         self.on_select = on_select
+        self.labels_map = labels_map or {}
         self._init_learner()
 
     def _init_learner(self):
@@ -123,7 +124,22 @@ class ImageGrid(QWidget):
             bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}\nGroup: {group_str}")
             bottom_label.setStyleSheet("color: white; background: #222;")
             blur_label = QLabel("")
-            blur_label.setStyleSheet("color: yellow; background: #222;")
+            # Set label badge if known
+            lbl_val = self.labels_map.get(img_name)
+            if lbl_val is not None:
+                if lbl_val == 1:
+                    blur_label.setText("KEEP")
+                    blur_label.setStyleSheet("color: #fff; background:#2e7d32; font-weight:bold; padding:2px;")
+                elif lbl_val == 0:
+                    blur_label.setText("TRASH")
+                    blur_label.setStyleSheet("color: #fff; background:#b71c1c; font-weight:bold; padding:2px;")
+                elif lbl_val == -1:
+                    blur_label.setText("UNSURE")
+                    blur_label.setStyleSheet("color: #000; background:#ffeb3b; font-weight:bold; padding:2px;")
+                else:
+                    blur_label.setStyleSheet("color: yellow; background: #222;")
+            else:
+                blur_label.setStyleSheet("color: yellow; background: #222;")
             lbl = HoverEffectLabel()
             lbl.setPixmap(pix)
             lbl.setMinimumSize(self.THUMB_SIZE, self.THUMB_SIZE)
@@ -170,3 +186,22 @@ class ImageGrid(QWidget):
     def set_cell_size(self, size):
         self.THUMB_SIZE = size
         self.populate_grid()
+
+    def update_label(self, img_name, label):
+        self.labels_map[img_name] = label
+        widgets = self.image_name_to_widgets.get(img_name)
+        if not widgets:
+            return
+        _, _, _, blur_label = widgets
+        if label == 1:
+            blur_label.setText("KEEP")
+            blur_label.setStyleSheet("color: #fff; background:#2e7d32; font-weight:bold; padding:2px;")
+        elif label == 0:
+            blur_label.setText("TRASH")
+            blur_label.setStyleSheet("color: #fff; background:#b71c1c; font-weight:bold; padding:2px;")
+        elif label == -1:
+            blur_label.setText("UNSURE")
+            blur_label.setStyleSheet("color: #000; background:#ffeb3b; font-weight:bold; padding:2px;")
+        else:
+            blur_label.setText("")
+            blur_label.setStyleSheet("color: yellow; background: #222;")
