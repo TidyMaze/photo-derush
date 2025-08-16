@@ -308,9 +308,6 @@ class LightroomMainWindow(QMainWindow):
             if fv_tuple is None:
                 logging.warning("[Predict] Feature extraction failed for %s; skipping", img_path)
                 continue
-
-            logging.info("[Predict] Extracting feature vector for image=%s", img_name)
-
             fv, _ = fv_tuple
             names.append(img_name)
             vectors.append(fv)

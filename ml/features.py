@@ -24,6 +24,7 @@ def extract_features(image_path):
     return features
 
 def feature_vector(image_path):
+    logging.info("[Predict] Extracting feature vector for image=%s", image_path)
     features = extract_features(image_path)
     if features is None:
         return None
