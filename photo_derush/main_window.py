@@ -9,6 +9,8 @@ from ml.features import feature_vector
 from ml.personal_learner import PersonalLearner
 from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log, iter_events
 from ml.persistence import load_model
+# import helpers for latest-only logic
+from ml.persistence import latest_labeled_events, load_latest_labeled_samples
 import logging
 import numpy as np
 
@@ -93,9 +95,10 @@ class LightroomMainWindow(QMainWindow):
 
     def _definitive_label_counts(self):
         counts = {0: 0, 1: 0}
-        for event in iter_events() or []:
-            lbl = event.get('label')
-            if lbl in (0, 1):
+        latest = latest_labeled_events()
+        for ev in latest.values():
+            lbl = ev.get('label')
+            if lbl in (0,1):
                 counts[lbl] += 1
         return counts
 
@@ -141,11 +144,12 @@ class LightroomMainWindow(QMainWindow):
             return
         # Rebuild from log path (only if threshold satisfied)
         if counts[0] >= MIN_CLASS_SAMPLES and counts[1] >= MIN_CLASS_SAMPLES:
-            # Need feature length guess from first qualifying event
-            for event in iter_events() or []:
-                if event.get('label') in (0,1) and 'features' in event:
-                    feats = event['features']
-                    self.logger.info("[Learner] Initializing from log replay (%d dims) after threshold met", len(feats))
+            # Need feature length guess from first qualifying latest event
+            latest = latest_labeled_events()
+            for ev in latest.values():
+                feats = ev.get('features')
+                if feats:
+                    self.logger.info("[Learner] Initializing from latest log replay (%d dims) after threshold met", len(feats))
                     self.learner = PersonalLearner(n_features=len(feats))
                     rebuild_model_from_log(self.learner)
                     self._cold_start_completed = True
@@ -182,12 +186,11 @@ class LightroomMainWindow(QMainWindow):
 
     def _build_labels_map_from_log(self):
         labels = {}
-        for event in iter_events():
-            img = event.get('image') or event.get('path')
-            label = event.get('label')
-            if img is not None and label is not None:
-                # keep last occurrence
-                labels[os.path.basename(img)] = label
+        latest = latest_labeled_events()
+        for img, ev in latest.items():
+            lbl = ev.get('label')
+            if lbl is not None:
+                labels[os.path.basename(img)] = lbl
         return labels
 
     def _label_current_image(self, label):
@@ -240,20 +243,10 @@ class LightroomMainWindow(QMainWindow):
             self._refresh_all_keep_probs()
 
     def _evaluate_model(self):
-        """Evaluate current learner on all definitive labeled events (0/1) and log metrics using sklearn helpers.
-        Metrics: samples, positive rate, accuracy, precision, recall, f1, log_loss, brier score.
-        Safe for single-class (handles zero_division). Silent if no data.
-        """
+        """Evaluate current learner on latest definitive labeled events (0/1) only."""
         if self.learner is None:
             return
-        X = []
-        y = []
-        for event in iter_events():
-            lbl = event.get('label')
-            feats = event.get('features')
-            if lbl in (0, 1) and isinstance(feats, list):
-                X.append(feats)
-                y.append(lbl)
+        X, y, _images = load_latest_labeled_samples()
         if not X:
             return
         import numpy as _np
@@ -265,29 +258,25 @@ class LightroomMainWindow(QMainWindow):
             preds = (probs >= 0.5).astype(int)
             pos_rate = float(y_np.mean())
             acc = float(accuracy_score(y_np, preds))
-            # Handle single-class gracefully
             try:
                 prec = float(precision_score(y_np, preds, zero_division=0))
                 rec = float(recall_score(y_np, preds, zero_division=0))
                 f1 = float(f1_score(y_np, preds, zero_division=0))
-            except Exception:  # noqa: PERF203
+            except Exception:
                 prec = rec = f1 = 0.0
-            # log_loss may fail with single class; guard
             try:
                 ll = float(log_loss(y_np, _np.vstack([1-probs, probs]).T, labels=[0,1]))
-            except Exception:  # noqa: PERF203
+            except Exception:
                 ll = float('nan')
             try:
                 brier = float(brier_score_loss(y_np, probs))
-            except Exception:  # noqa: PERF203
+            except Exception:
                 brier = float('nan')
-            self.logger.info(
-                "[Eval] samples=%d pos_rate=%.4f acc=%.4f prec=%.4f rec=%.4f f1=%.4f logloss=%s brier=%s",
-                len(y_np), pos_rate, acc, prec, rec, f1,
-                f"{ll:.4f}" if _np.isfinite(ll) else "nan",
-                f"{brier:.4f}" if _np.isfinite(brier) else "nan"
-            )
-        except Exception as e:  # noqa: PERF203
+            self.logger.info("[Eval] samples=%d pos_rate=%.4f acc=%.4f prec=%.4f rec=%.4f f1=%.4f logloss=%s brier=%s (latest labels only)",
+                             len(y_np), pos_rate, acc, prec, rec, f1,
+                             f"{ll:.4f}" if _np.isfinite(ll) else "nan",
+                             f"{brier:.4f}" if _np.isfinite(brier) else "nan")
+        except Exception as e:
             self.logger.warning("[Eval] Failed evaluation: %s", e)
 
     def _refresh_all_keep_probs(self):
@@ -346,13 +335,14 @@ class LightroomMainWindow(QMainWindow):
         self.image_grid.populate_grid()
 
     def on_export_csv_clicked(self):
-        # Export all labeled images with keep_prob
+        # Export latest labeled images with keep_prob
         rows = []
-        for event in iter_events():
-            img_path = event['path']
-            label = event['label']
-            fv = event['features']
-            prob = float(self.learner.predict_keep_prob([fv])[0]) if (self.learner is not None and fv is not None) else 0.5
+        latest = latest_labeled_events()
+        for img, ev in latest.items():
+            img_path = ev.get('path') or img
+            label = ev.get('label')
+            feats = ev.get('features')
+            prob = float(self.learner.predict_keep_prob([feats])[0]) if (self.learner is not None and feats is not None) else 0.5
             rows.append({'path': img_path, 'label': label, 'keep_prob': prob})
         with open('labels.csv', 'w') as f:
             f.write('path,label,keep_prob\n')
