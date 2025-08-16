@@ -62,6 +62,10 @@ class LightroomMainWindow(QMainWindow):
         # Backward compat original signal -> desc
         self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_desc)
 
+        # After initialization, populate probabilities for all images (neutral if no learner)
+        if self.sorted_images:
+            self._refresh_all_keep_probs()
+
     def _compute_sorted_images(self):
         if self.sort_by_group and self.image_info:
             def group_key(img):
@@ -96,6 +100,8 @@ class LightroomMainWindow(QMainWindow):
         if self.learner is None and self.sorted_images:
             self._init_learner()
         self.refresh_keep_prob()
+        # Also update probabilities for all thumbnails
+        self._refresh_all_keep_probs()
 
     def _definitive_label_counts(self):
         counts = {0: 0, 1: 0}
@@ -302,7 +308,7 @@ class LightroomMainWindow(QMainWindow):
             self.logger.warning("[Eval] Failed evaluation: %s", e)
 
     def _refresh_all_keep_probs(self):
-        if self.learner is None or not self.image_grid:
+        if not self.image_grid:
             return
         names = []
         vectors = []
@@ -316,7 +322,13 @@ class LightroomMainWindow(QMainWindow):
             fv, _ = fv_tuple
             names.append(img_name)
             vectors.append(fv)
-        if not vectors:
+        if not names:
+            return
+        if self.learner is None:
+            # Assign neutral probability
+            prob_map = {n: 0.5 for n in names}
+            self.image_grid.update_keep_probabilities(prob_map)
+            logging.info("[Predict] Assigned neutral probabilities to %d images (no learner)", len(prob_map))
             return
         try:
             logging.info("[Predict] Predicting keep probabilities for %d images", len(vectors))
