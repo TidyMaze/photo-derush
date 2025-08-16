@@ -9,8 +9,8 @@ class PersonalLearner:
         self._is_initialized = False
 
     def partial_fit(self, X, y):
-        X = np.array(X)
-        y = np.array(y)
+        X = np.asarray(X, dtype=np.float64)
+        y = np.asarray(y, dtype=np.int64)
         if not self._is_initialized:
             self.model.partial_fit(X, y, classes=self.classes)
             self._is_initialized = True
@@ -18,7 +18,7 @@ class PersonalLearner:
             self.model.partial_fit(X, y)
 
     def predict_proba(self, X):
-        X = np.array(X)
+        X = np.asarray(X, dtype=np.float64)
         if not self._is_initialized:
             # Return 0.5 for all if not trained
             return np.full((len(X), 2), 0.5)
@@ -37,4 +37,3 @@ class PersonalLearner:
     def load(path):
         import joblib
         return joblib.load(path)
-

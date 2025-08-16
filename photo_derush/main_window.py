@@ -80,7 +80,12 @@ class LightroomMainWindow(QMainWindow):
         if img_name is None:
             return
         img_path = os.path.join(self.directory, img_name)
-        fv, _ = feature_vector(img_path)
+        fv_tuple = feature_vector(img_path)
+        if fv_tuple is None:
+            import logging
+            logging.warning("[Learner] Feature extraction failed for %s; skipping label", img_path)
+            return
+        fv, _ = fv_tuple
         event = {'image': img_name, 'path': img_path, 'features': fv.tolist(), 'label': label}
         append_event(event)
         if label in (0, 1):
