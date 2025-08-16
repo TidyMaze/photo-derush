@@ -54,7 +54,6 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.keep_clicked.connect(self.on_keep_clicked)
         self.toolbar.trash_clicked.connect(self.on_trash_clicked)
         self.toolbar.unsure_clicked.connect(self.on_unsure_clicked)
-        self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_clicked)
         self.toolbar.export_csv_clicked.connect(self.on_export_csv_clicked)
         self.toolbar.reset_model_clicked.connect(self.on_reset_model_clicked)
         self.toolbar.predict_sort_desc_clicked.connect(self.on_predict_sort_desc)
@@ -348,105 +347,52 @@ class LightroomMainWindow(QMainWindow):
         logging.info("[Predict] Updated keep_prob for image=%s: %.4f", img_name, keep_prob)
 
     def _sort_by_probability(self, desc: bool = True):
-        """Sort images by predicted keep probability (desc default). Neutral 0.5 for missing features/learner."""
+        """Sort images by predicted keep probability (desc default). Neutral 0.5 for missing features/learner.
+        Sets a transient _in_sort flag to allow guards (e.g., suppress accidental fullscreen opens)."""
         if not self.sorted_images:
             return
-        # Only init learner if predictions needed and learner absent
-        if self.learner is None:
-            self._ensure_learner()
-        names = []
-        vectors = []
-        neutral = []
-        for img_name in self.sorted_images:
-            path = os.path.join(self.directory, img_name)
-            fv_tuple = self._get_feature_vector(path)
-            if fv_tuple is None:
-                neutral.append(img_name)
-                continue
-            fv, _ = fv_tuple
-            names.append(img_name)
-            vectors.append(fv)
-        prob_map = {}
-        if self.learner is not None and vectors:
-            try:
-                probs = self.learner.predict_keep_prob(vectors)
-                for n, p in zip(names, probs):
-                    prob_map[n] = float(p)
-            except Exception as e:
-                self.logger.warning("[Sort] Probability prediction failed: %s", e)
-        for n in neutral:
-            prob_map.setdefault(n, 0.5)
-        for n in names:
-            prob_map.setdefault(n, 0.5)
-        self.logger.info("[Sort] prob_map=%s mode=%s", prob_map, 'desc' if desc else 'asc')
-        self.sorted_images.sort(key=lambda n: prob_map.get(n, 0.5), reverse=desc)
-        if self.image_grid:
-            self.image_grid.image_paths = self.sorted_images
-            self.image_grid.populate_grid()
-        self.logger.info("[Sort] Completed probability sort (%s)", 'desc' if desc else 'asc')
-
-    def on_predict_sort_desc(self):
-        self._sort_by_probability(desc=True)
-
-    def on_predict_sort_asc(self):
-        self._sort_by_probability(desc=False)
-
-    def on_predict_sort_clicked(self):  # legacy path (desc)
-        self._sort_by_probability(desc=True)
-
-    def on_export_csv_clicked(self):
-        # Export latest labeled images with keep_prob
-        rows = []
-        latest = latest_labeled_events()
-        for img, ev in latest.items():
-            img_path = ev.get('path') or img
-            label = ev.get('label')
-            feats = ev.get('features')
-            prob = float(self.learner.predict_keep_prob([feats])[0]) if (self.learner is not None and feats is not None) else 0.5
-            rows.append({'path': img_path, 'label': label, 'keep_prob': prob})
-        with open('labels.csv', 'w') as f:
-            f.write('path,label,keep_prob\n')
-            for row in rows:
-                f.write(f"{row['path']},{row['label']},{row['keep_prob']:.4f}\n")
-
-    def on_reset_model_clicked(self):
-        # Preserve event log; only delete persisted model so we can start fresh while keeping history.
-        clear_model_and_log(delete_log=False)
-        self.logger.info("="*60)
-        self.logger.info("[Reset] Cleared persisted model ONLY (log preserved). Starting brand-new untrained learner with fresh scaler.")
-        self.logger.info("="*60)
-        # New empty learner (do NOT rebuild from log to keep it truly fresh)
-        self.learner = None
-        # Clear in-memory labels so UI badges reflect fresh state (log still holds history)
-        self.labels_map = {}
-        if hasattr(self, 'image_grid'):
-            self.image_grid.labels_map = self.labels_map
-            self.image_grid.populate_grid()
-        # Determine feature dimension from first image (if any)
-        if self.sorted_images:
-            first_path = os.path.join(self.directory, self.sorted_images[0])
-            fv_tuple = feature_vector(first_path)
-            if fv_tuple is not None:
-                fv0, _ = fv_tuple
-                self.learner = PersonalLearner(n_features=len(fv0))
-                if hasattr(self, 'image_grid'):
-                    self.image_grid.learner = self.learner
-        self.refresh_keep_prob()
-
-    def on_sort_by_group_toggled(self, checked):
-        self.sort_by_group = checked
-        if self.image_grid:
-            self.image_grid.populate_grid()
-
-    def closeEvent(self, event):
-        QApplication.quit()
-        super().closeEvent(event)
-
-    def on_select_image(self, idx):
-        if 0 <= idx < len(self.sorted_images):
-            self.current_img_idx = idx
+        self._in_sort = True
+        try:
+            if self.learner is None:
+                self._ensure_learner()
+            names = []
+            vectors = []
+            neutral = []
+            for img_name in self.sorted_images:
+                path = os.path.join(self.directory, img_name)
+                fv_tuple = self._get_feature_vector(path)
+                if fv_tuple is None:
+                    neutral.append(img_name)
+                    continue
+                fv, _ = fv_tuple
+                names.append(img_name)
+                vectors.append(fv)
+            prob_map = {}
+            if self.learner is not None and vectors:
+                try:
+                    probs = self.learner.predict_keep_prob(vectors)
+                    for n, p in zip(names, probs):
+                        prob_map[n] = float(p)
+                except Exception as e:
+                    self.logger.warning("[Sort] Probability prediction failed: %s", e)
+            for n in neutral:
+                prob_map.setdefault(n, 0.5)
+            for n in names:
+                prob_map.setdefault(n, 0.5)
+            self.logger.info("[Sort] prob_map=%s mode=%s", prob_map, 'desc' if desc else 'asc')
+            self.sorted_images.sort(key=lambda n: prob_map.get(n, 0.5), reverse=desc)
+            if self.image_grid:
+                self.image_grid.image_paths = self.sorted_images
+                self.image_grid.populate_grid()
+            self.logger.info("[Sort] Completed probability sort (%s)", 'desc' if desc else 'asc')
+        finally:
+            self._in_sort = False
 
     def open_fullscreen(self, idx, img_path):
+        # Suppress unintended opens during batch sort operations
+        if getattr(self, '_in_sort', False):
+            self.logger.warning("[FullscreenGuard] Suppressed fullscreen open during sorting: %s", img_path)
+            return
         self.on_select_image(idx)
         def keep_cb():
             self._label_current_image(1)
@@ -464,3 +410,64 @@ class LightroomMainWindow(QMainWindow):
             if self.sort_by_group:
                 self.sorted_images = self._compute_sorted_images()
             self.image_grid.populate_grid()
+
+    def on_select_image(self, idx):
+        if 0 <= idx < len(self.sorted_images):
+            self.current_img_idx = idx
+
+    def on_sort_by_group_toggled(self, checked):
+        self.sort_by_group = checked
+        if self.image_grid:
+            if self.sort_by_group:
+                self.sorted_images = self._compute_sorted_images()
+            self.image_grid.populate_grid()
+
+    def on_predict_sort_clicked(self):  # backward compat legacy action
+        self.on_predict_sort_desc()
+
+    def on_predict_sort_desc(self):
+        self._sort_by_probability(desc=True)
+
+    def on_predict_sort_asc(self):
+        self._sort_by_probability(desc=False)
+
+    def on_export_csv_clicked(self):
+        rows = []
+        latest = latest_labeled_events()
+        for img, ev in latest.items():
+            img_path = ev.get('path') or img
+            label = ev.get('label')
+            feats = ev.get('features')
+            prob = 0.5
+            if self.learner is not None and feats is not None:
+                try:
+                    prob = float(self.learner.predict_keep_prob([feats])[0])
+                except Exception:
+                    pass
+            rows.append({'path': img_path, 'label': label, 'keep_prob': prob})
+        try:
+            with open('labels.csv', 'w') as f:
+                f.write('path,label,keep_prob\n')
+                for r in rows:
+                    f.write(f"{r['path']},{r['label']},{r['keep_prob']:.4f}\n")
+            self.logger.info('[Export] Wrote labels.csv with %d rows', len(rows))
+        except Exception as e:
+            self.logger.warning('[Export] Failed writing labels.csv: %s', e)
+
+    def on_reset_model_clicked(self):
+        clear_model_and_log(delete_log=False)
+        self.logger.info('[Reset] Cleared persisted model; log preserved.')
+        self.learner = None
+        self.labels_map = {}
+        if self.image_grid:
+            self.image_grid.labels_map = self.labels_map
+            self.image_grid.populate_grid()
+        if self.sorted_images:
+            first_path = os.path.join(self.directory, self.sorted_images[0])
+            fv_tuple = feature_vector(first_path)
+            if fv_tuple is not None:
+                fv0, _ = fv_tuple
+                self.learner = PersonalLearner(n_features=len(fv0))
+                if self.image_grid:
+                    self.image_grid.learner = self.learner
+        self.refresh_keep_prob()
