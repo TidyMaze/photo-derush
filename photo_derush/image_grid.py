@@ -10,7 +10,7 @@ from ml.persistence import load_model, save_model
 import os
 
 class ImageGrid(QWidget):
-    def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, *args, **kwargs):
+    def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.image_paths = image_paths
         self.directory = directory
@@ -39,6 +39,8 @@ class ImageGrid(QWidget):
         self.populate_grid()
         self.learner = None
         self.feature_keys = None
+        self.on_open_fullscreen = on_open_fullscreen
+        self.on_select = on_select
         self._init_learner()
 
     def _init_learner(self):
@@ -144,8 +146,16 @@ class ImageGrid(QWidget):
                         if fv is not None:
                             keep_prob = float(self.learner.predict_keep_prob([fv])[0])
                     self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
+                    if self.on_select:
+                        self.on_select(idx)
+                return handler
+            def mouseDoubleClickEventFactory(idx=idx, img_path=img_path):
+                def handler(e):
+                    if self.on_open_fullscreen:
+                        self.on_open_fullscreen(idx, img_path)
                 return handler
             lbl.mousePressEvent = mousePressEventFactory(idx, lbl, img_name, img_path, hash_str, group_str)
+            lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory(idx, img_path)
             self.grid.addWidget(lbl, (idx//self.col_count)*4, idx%self.col_count, alignment=Qt.AlignmentFlag.AlignCenter)
             self.grid.addWidget(top_label, (idx//self.col_count)*4+1, idx%self.col_count)
             self.grid.addWidget(bottom_label, (idx//self.col_count)*4+2, idx%self.col_count)

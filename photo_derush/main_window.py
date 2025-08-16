@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QMainWindow, QStatusBar, QSplitter, QWidget, QAppl
 from .toolbar import SettingsToolbar
 from .info_panel import InfoPanel
 from .image_grid import ImageGrid
+from .viewer import open_full_image_qt
 import os
 import json
 from ml.features import feature_vector
@@ -33,16 +34,19 @@ class LightroomMainWindow(QMainWindow):
                     return (group if group is not None else 999999, img)
                 return sorted(image_paths, key=group_key)
             return image_paths
-        self.image_grid = ImageGrid(image_paths, directory, self.info_panel, self.status, get_sorted_images, image_info=image_info)
+        self.current_img_idx = 0
+        self.sorted_images = image_paths
+        self.learner = None
+        self._init_learner()
+        # Create image grid once with callbacks
+        self.image_grid = ImageGrid(image_paths, directory, self.info_panel, self.status, get_sorted_images,
+                                    image_info=image_info, on_open_fullscreen=self.open_fullscreen,
+                                    on_select=self.on_select_image)
         self.splitter.addWidget(self.image_grid)
         self.splitter.addWidget(self.info_panel)
         self.splitter.setSizes([1000, 400])
         self.toolbar.zoom_changed.connect(self.image_grid.set_cell_size)
         self.toolbar.sort_by_group_action.toggled.connect(self.on_sort_by_group_toggled)
-        self.current_img_idx = 0
-        self.sorted_images = image_paths
-        self.learner = None
-        self._init_learner()
         self.toolbar.keep_clicked.connect(self.on_keep_clicked)
         self.toolbar.trash_clicked.connect(self.on_trash_clicked)
         self.toolbar.unsure_clicked.connect(self.on_unsure_clicked)
@@ -131,3 +135,17 @@ class LightroomMainWindow(QMainWindow):
     def closeEvent(self, event):
         QApplication.quit()
         super().closeEvent(event)
+
+    def on_select_image(self, idx):
+        if 0 <= idx < len(self.sorted_images):
+            self.current_img_idx = idx
+
+    def open_fullscreen(self, idx, img_path):
+        self.on_select_image(idx)
+        def keep_cb():
+            self._label_current_image(1)
+        def trash_cb():
+            self._label_current_image(0)
+        def unsure_cb():
+            self._label_current_image(-1)
+        open_full_image_qt(img_path, on_keep=keep_cb, on_trash=trash_cb, on_unsure=unsure_cb)
