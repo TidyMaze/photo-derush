@@ -35,6 +35,7 @@ class LightroomMainWindow(QMainWindow):
         self.learner = None
         self.labels_map = self._build_labels_map_from_log()
         self.logger = logging.getLogger(__name__)
+        self._feature_cache = {}  # path -> (mtime, (fv, keys))
         # Cold-start training gate (require min samples per class before training)
         self._cold_start_completed = False
         # Do not init learner if no images yet
@@ -43,7 +44,7 @@ class LightroomMainWindow(QMainWindow):
         # create grid
         self.image_grid = ImageGrid(self.sorted_images, directory, self.info_panel, self.status, self._compute_sorted_images,
                                     image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
-                                    on_select=self.on_select_image, labels_map=self.labels_map)
+                                    on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector)
         # Share learner instance with grid (avoid separate untrained model)
         self.image_grid.learner = self.learner
         self.splitter.addWidget(self.image_grid)
@@ -60,7 +61,6 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.predict_sort_asc_clicked.connect(self.on_predict_sort_asc)
         # Backward compat original signal -> desc
         self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_desc)
-        self._feature_cache = {}  # path -> (mtime, (fv, keys))
 
     def _compute_sorted_images(self):
         if self.sort_by_group and self.image_info:
@@ -78,7 +78,7 @@ class LightroomMainWindow(QMainWindow):
         if self.image_grid is None:
             self.image_grid = ImageGrid(self.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
                                         image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
-                                        on_select=self.on_select_image, labels_map=self.labels_map)
+                                        on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector)
             # Share learner instance with grid (avoid separate untrained model)
             self.image_grid.learner = self.learner
             self.splitter.insertWidget(0, self.image_grid)
@@ -163,7 +163,7 @@ class LightroomMainWindow(QMainWindow):
         # Derive from first image if possible (untrained)
         if self.sorted_images:
             first_path = os.path.join(self.directory, self.sorted_images[0])
-            fv_tuple = feature_vector(first_path)
+            fv_tuple = self._get_feature_vector(first_path)
             if fv_tuple is not None:
                 fv0, _ = fv_tuple
                 self.logger.info("[Learner] Initializing size from first image only (%d dims, untrained; waiting for threshold)", len(fv0))
@@ -199,6 +199,8 @@ class LightroomMainWindow(QMainWindow):
 
     def _get_feature_vector(self, img_path):
         """Return (vector, keys) with simple mtime-based cache; None on failure."""
+        if not hasattr(self, '_feature_cache'):
+            self._feature_cache = {}
         try:
             mtime = os.path.getmtime(img_path)
         except OSError:
@@ -384,6 +386,8 @@ class LightroomMainWindow(QMainWindow):
             if self.image_grid:
                 self.image_grid.image_paths = self.sorted_images
                 self.image_grid.populate_grid()
+                # Re-apply probabilities so they remain visible after repopulation
+                self.image_grid.update_keep_probabilities(prob_map)
             self.logger.info("[Sort] Completed probability sort (%s)", 'desc' if desc else 'asc')
         finally:
             self._in_sort = False
@@ -464,7 +468,7 @@ class LightroomMainWindow(QMainWindow):
             self.image_grid.populate_grid()
         if self.sorted_images:
             first_path = os.path.join(self.directory, self.sorted_images[0])
-            fv_tuple = feature_vector(first_path)
+            fv_tuple = self._get_feature_vector(first_path)
             if fv_tuple is not None:
                 fv0, _ = fv_tuple
                 self.learner = PersonalLearner(n_features=len(fv0))

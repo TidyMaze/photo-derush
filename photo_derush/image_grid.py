@@ -7,13 +7,12 @@ from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
 from .image_manager import image_manager
 import sys
 sys.path.append('..')
-from ml.features import feature_vector
 from ml.personal_learner import PersonalLearner
 from ml.persistence import load_model, save_model
 import os
 
 class ImageGrid(QWidget):
-    def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, labels_map=None, *args, **kwargs):
+    def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, labels_map=None, get_feature_vector_fn=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.image_paths = image_paths
         self.directory = directory
@@ -46,6 +45,7 @@ class ImageGrid(QWidget):
         self.labels_map = labels_map or {}
         self.base_bottom_texts = {}
         self._logged_keep_prob_images: set[str] = set()  # track images already logged for keep probability
+        self._get_feature_vector_fn = get_feature_vector_fn
         # Do not populate yet; caller may stream images
         if image_paths:
             self.populate_grid()
@@ -58,7 +58,7 @@ class ImageGrid(QWidget):
             sample_img = os.path.join(self.directory, img)
             break
         if sample_img and os.path.exists(sample_img):
-            fv_tuple = feature_vector(sample_img)
+            fv_tuple = self._get_feature_vector_fn(sample_img) if self._get_feature_vector_fn else None
             if fv_tuple:
                 fv, keys = fv_tuple
                 self.feature_keys = keys
@@ -123,8 +123,9 @@ class ImageGrid(QWidget):
                 metrics = (blur_score, sharpness_metrics, aesthetic_score)
                 keep_prob = None
                 if self.learner is not None:
-                    fv, _ = feature_vector(img_path)
-                    if fv is not None:
+                    fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
+                    if fv_tuple is not None:
+                        fv, _ = fv_tuple
                         keep_prob = float(self.learner.predict_keep_prob([fv])[0])
                 self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
                 if self.on_select:
