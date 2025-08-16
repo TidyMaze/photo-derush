@@ -71,7 +71,9 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.predict_sort_desc_clicked.connect(self.on_predict_sort_desc)
         self.toolbar.predict_sort_asc_clicked.connect(self.on_predict_sort_asc)
         # Backward compat original signal -> desc
-        self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_desc)
+        # self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_desc)
+        # Legacy signal no longer auto-connected to avoid double invocation causing side-effects
+        self._last_sort_time = 0.0
 
         # After initialization, populate probabilities for all images (neutral if no learner)
         if self.sorted_images:
@@ -399,6 +401,8 @@ class LightroomMainWindow(QMainWindow):
         if not self.sorted_images:
             return
         self._in_sort = True
+        import time as _time
+        self._last_sort_time = _time.time()
         try:
             if self.learner is None:
                 self._ensure_learner()
@@ -440,8 +444,9 @@ class LightroomMainWindow(QMainWindow):
     def open_fullscreen(self, idx, img_path):
         # Suppress unintended opens during batch sort operations
         if getattr(self, '_in_sort', False):
-            self.logger.warning("[FullscreenGuard] Suppressed fullscreen open during sorting: %s", img_path)
+            self.logger.info("[FullscreenGuard] Suppressed fullscreen open (in_sort) %s", img_path)
             return
+        self.logger.info("[Fullscreen] Opening fullscreen for %s (idx=%s)", img_path, idx)
         self.on_select_image(idx)
         def keep_cb():
             self._label_current_image(1)
