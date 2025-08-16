@@ -45,6 +45,7 @@ class ImageGrid(QWidget):
         self.on_select = on_select
         self.labels_map = labels_map or {}
         self.base_bottom_texts = {}
+        self._logged_keep_prob_images: set[str] = set()  # track images already logged for keep probability
         # Do not populate yet; caller may stream images
         if image_paths:
             self.populate_grid()
@@ -214,13 +215,16 @@ class ImageGrid(QWidget):
         self.status_bar.showMessage(f"Loaded {len(self.image_labels)} images (streaming)")
 
     def update_keep_probabilities(self, prob_map: dict):
-        """Append or update keep probability line in bottom labels."""
+        """Append or update keep probability line in bottom labels.
+        Logs keep probability only once per image (first time it's set)."""
         for img_name, widgets in self.image_name_to_widgets.items():
             _, _, bottom_label, _ = widgets
             base = self.base_bottom_texts.get(img_name, bottom_label.text().split('\nProb:')[0])
             prob = prob_map.get(img_name)
             if prob is not None:
                 bottom_label.setText(f"{base}\nProb: {prob:.2f}")
+                if img_name not in self._logged_keep_prob_images:
+                    logging.info("[ImageGrid] Updated keep probability for %s: %.2f", img_name, prob)
+                    self._logged_keep_prob_images.add(img_name)
             else:
                 bottom_label.setText(base)
-            logging.info("[ImageGrid] Updated keep probability for %s: %.2f", img_name, prob if prob is not None else -1)
