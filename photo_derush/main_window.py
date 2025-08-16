@@ -33,6 +33,8 @@ class LightroomMainWindow(QMainWindow):
         self.learner = None
         self.labels_map = self._build_labels_map_from_log()
         self.logger = logging.getLogger(__name__)
+        # Cold-start training gate (require min samples per class before training)
+        self._cold_start_completed = False
         # Do not init learner if no images yet
         if self.sorted_images:
             self._init_learner()
@@ -89,18 +91,29 @@ class LightroomMainWindow(QMainWindow):
             self._init_learner()
         self.refresh_keep_prob()
 
+    def _definitive_label_counts(self):
+        counts = {0: 0, 1: 0}
+        for event in iter_events() or []:
+            lbl = event.get('label')
+            if lbl in (0, 1):
+                counts[lbl] += 1
+        return counts
+
     def _ensure_learner(self, fv=None):
         """Guarantee self.learner is initialized.
         Order of attempts:
           1. If already initialized -> return.
-          2. If saved model exists -> load it and return.
-          3. If provided fv (definitive label path) -> init with its length and rebuild from log.
-          4. Scan event log for a definitive labeled sample (0/1) -> infer n_features & rebuild.
+          2. If saved model exists -> load it (assume already trained) and mark cold start complete.
+          3. If provided fv (definitive label path) -> init with its length (UNTRAINED yet) and maybe rebuild if threshold met.
+          4. Scan event log for a definitive labeled sample (0/1) -> infer n_features & maybe rebuild if threshold met.
           5. Derive feature length from first available image (no training yet).
+        Training (rebuild from log) only occurs if both classes have >= MIN_CLASS_SAMPLES.
         """
         if self.learner is not None:
             return
-        # Try load persisted model first (fast path, preserves prior incremental state)
+        MIN_CLASS_SAMPLES = 10
+        counts = self._definitive_label_counts()
+        # Try load persisted model first
         try:
             persisted = load_model()
         except Exception as e:  # noqa: PERF203
@@ -108,35 +121,44 @@ class LightroomMainWindow(QMainWindow):
             self.logger.warning("[Learner] Failed to load persisted model: %s", e)
         if persisted is not None:
             self.learner = persisted
+            self._cold_start_completed = True
             if hasattr(self, 'image_grid'):
                 self.image_grid.learner = self.learner
-            self.logger.info("[Learner] Loaded persisted model")
+            self.logger.info("[Learner] Loaded persisted model (cold start satisfied)")
             return
-        # If we were given a fresh feature vector (definitive label path)
+        # Provided fresh fv
         if fv is not None:
-            self.logger.info("[Learner] Initializing from provided feature vector (%d dims)", len(fv))
+            self.logger.info("[Learner] Initializing (untrained) from provided feature vector (%d dims)", len(fv))
             self.learner = PersonalLearner(n_features=len(fv))
-            rebuild_model_from_log(self.learner)
+            if counts[0] >= MIN_CLASS_SAMPLES and counts[1] >= MIN_CLASS_SAMPLES:
+                self.logger.info("[Learner] Cold-start threshold met (%d/%d); rebuilding from log", counts[0], counts[1])
+                rebuild_model_from_log(self.learner)
+                self._cold_start_completed = True
+            else:
+                self.logger.info("[Learner] Cold-start threshold not yet met (class0=%d class1=%d need %d each) -> postponing training", counts[0], counts[1], MIN_CLASS_SAMPLES)
             if hasattr(self, 'image_grid'):
                 self.image_grid.learner = self.learner
             return
-        # Try rebuild from log (look for 0/1 labels)
-        for event in iter_events():
-            if event.get('label') in (0, 1) and 'features' in event:
-                feats = event['features']
-                self.logger.info("[Learner] Initializing from log replay (%d dims)", len(feats))
-                self.learner = PersonalLearner(n_features=len(feats))
-                rebuild_model_from_log(self.learner)
-                if hasattr(self, 'image_grid'):
-                    self.image_grid.learner = self.learner
-                return
-        # Derive from first image if possible
+        # Rebuild from log path (only if threshold satisfied)
+        if counts[0] >= MIN_CLASS_SAMPLES and counts[1] >= MIN_CLASS_SAMPLES:
+            # Need feature length guess from first qualifying event
+            for event in iter_events() or []:
+                if event.get('label') in (0,1) and 'features' in event:
+                    feats = event['features']
+                    self.logger.info("[Learner] Initializing from log replay (%d dims) after threshold met", len(feats))
+                    self.learner = PersonalLearner(n_features=len(feats))
+                    rebuild_model_from_log(self.learner)
+                    self._cold_start_completed = True
+                    if hasattr(self, 'image_grid'):
+                        self.image_grid.learner = self.learner
+                    return
+        # Derive from first image if possible (untrained)
         if self.sorted_images:
             first_path = os.path.join(self.directory, self.sorted_images[0])
             fv_tuple = feature_vector(first_path)
             if fv_tuple is not None:
                 fv0, _ = fv_tuple
-                self.logger.info("[Learner] Initializing size from first image only (%d dims, untrained)", len(fv0))
+                self.logger.info("[Learner] Initializing size from first image only (%d dims, untrained; waiting for threshold)", len(fv0))
                 self.learner = PersonalLearner(n_features=len(fv0))
                 if hasattr(self, 'image_grid'):
                     self.image_grid.learner = self.learner
@@ -187,15 +209,27 @@ class LightroomMainWindow(QMainWindow):
         if label in (0, 1):
             self._ensure_learner(fv)
             if self.learner is not None:
-                self.logger.info("[Training] Incremental update for image=%s label=%s", img_name, label)
-                self.learner.partial_fit([fv], [label])
-                save_model(self.learner)
-                self.logger.info("[Training] Model saved after update")
-                # Keep grid learner in sync (avoid stale or separate model instance)
-                if hasattr(self, 'image_grid') and getattr(self.image_grid, 'learner', None) is not self.learner:
-                    self.image_grid.learner = self.learner
-                # Evaluate immediately after training update
-                self._evaluate_model()
+                # Check cold start status
+                counts = self._definitive_label_counts()
+                MIN_CLASS_SAMPLES = 10
+                if not self._cold_start_completed:
+                    if counts[0] >= MIN_CLASS_SAMPLES and counts[1] >= MIN_CLASS_SAMPLES:
+                        # Perform initial training over all historical data
+                        self.logger.info("[Training] Cold-start threshold reached (class0=%d class1=%d). Performing initial full training.", counts[0], counts[1])
+                        rebuild_model_from_log(self.learner)
+                        self._cold_start_completed = True
+                        save_model(self.learner)
+                        self.logger.info("[Training] Initial full training complete and model saved")
+                    else:
+                        self.logger.info("[Training] Skipping update (cold-start threshold not met: class0=%d class1=%d need %d each)", counts[0], counts[1], MIN_CLASS_SAMPLES)
+                if self._cold_start_completed:
+                    # Incremental update with just the new sample
+                    self.logger.info("[Training] Incremental update for image=%s label=%s", img_name, label)
+                    self.learner.partial_fit([fv], [label])
+                    save_model(self.learner)
+                    self.logger.info("[Training] Model saved after incremental update")
+                    # Evaluate after update
+                    self._evaluate_model()
         # update UI badge
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
