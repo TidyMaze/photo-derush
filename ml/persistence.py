@@ -2,7 +2,7 @@ import os
 import json
 import joblib
 from threading import Lock
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict
 import logging
 
 MODEL_PATH = 'ml/personal_model.joblib'
@@ -27,52 +27,28 @@ def append_event(event):
             f.write(json.dumps(event) + '\n')
 
 def iter_events():
-    """Robust iterator over event log.
-    Reconstructs JSON objects that may span multiple lines (legacy/corrupted writes) by counting braces.
-    Skips malformed fragments and non-dict JSON values.
+    """Iterate over the event log treating each line as a standalone JSON object.
+    No attempt is made to repair or reconstruct multi-line / partial entries.
+    Invalid JSON lines or non-dict JSON values are skipped silently (with debug log).
     """
     if not os.path.exists(LOG_PATH):
         return
-    with open(LOG_PATH, 'r') as f:
-        buf_lines = []
-        brace_depth = 0
-        for raw in f:
-            line = raw.rstrip('\n')
-            stripped = line.strip()
-            if not buf_lines:
-                # Start of a potential JSON object
-                if stripped.startswith('{'):
-                    buf_lines.append(line)
-                    brace_depth = line.count('{') - line.count('}')
-                    if brace_depth == 0:  # single-line object
-                        text = ''.join(buf_lines)
-                        try:
-                            obj = json.loads(text)
-                            if isinstance(obj, dict):
-                                yield obj
-                        except Exception:
-                            logger.debug("[iter_events] Skipping malformed single-line JSON")
-                        buf_lines.clear()
-                        brace_depth = 0
-                else:
-                    # Ignore stray lines (e.g., orphaned numbers from interrupted writes)
+    try:
+        with open(LOG_PATH, 'r') as f:
+            for raw in f:
+                line = raw.strip()
+                if not line:
                     continue
-            else:
-                buf_lines.append(line)
-                brace_depth += line.count('{') - line.count('}')
-                if brace_depth <= 0:  # object closed
-                    text = '\n'.join(buf_lines)
-                    try:
-                        obj = json.loads(text)
-                        if isinstance(obj, dict):
-                            yield obj
-                        else:
-                            logger.debug("[iter_events] Non-dict JSON skipped")
-                    except Exception:
-                        logger.debug("[iter_events] Skipping malformed multi-line JSON block")
-                    buf_lines.clear()
-                    brace_depth = 0
-        # If file ends mid-object, drop buffer silently
+                try:
+                    obj = json.loads(line)
+                    if isinstance(obj, dict):
+                        yield obj
+                    else:
+                        logger.debug('[iter_events] Skipping non-dict JSON line')
+                except Exception:
+                    logger.debug('[iter_events] Skipping malformed JSON line')
+    except FileNotFoundError:
+        return
 
 def latest_labeled_events() -> Dict[str, dict]:
     """Return dict mapping image basename -> last event dict (latest label wins)."""
