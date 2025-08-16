@@ -257,7 +257,15 @@ class LightroomMainWindow(QMainWindow):
             return
         fv, _ = fv_tuple
         self.logger.info("[Label] User set label=%s for image=%s", label, img_name)
-        event = {'image': img_name, 'path': img_path, 'features': fv.tolist(), 'label': label}
+        if hasattr(fv, 'tolist'):
+            feats_list = fv.tolist()
+        else:
+            # Already a list/iterable; materialize as list for JSON safety
+            try:
+                feats_list = list(fv)
+            except Exception:
+                feats_list = []
+        event = {'image': img_name, 'path': img_path, 'features': feats_list, 'label': label}
         append_event(event)
         self.labels_map[img_name] = label
         # Ensure learner only for definitive labels
