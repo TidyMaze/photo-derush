@@ -18,6 +18,11 @@ class PersonalLearner:
         self._is_initialized = False
 
     def partial_fit(self, X, y):
+        # Backward compatibility: older persisted models may lack scaler
+        if not hasattr(self, 'scaler') or self.scaler is None:
+            from sklearn.preprocessing import StandardScaler as _SS
+            self.scaler = _SS(with_mean=True, with_std=True)
+            logger.info("[ModelUpgrade] Added missing scaler to legacy PersonalLearner instance")
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.int64)
         if X.ndim == 1:
@@ -51,6 +56,11 @@ class PersonalLearner:
         logger.info("[Learner] partial_fit complete (was_initialized=%s, now_initialized=%s)", init_before, self._is_initialized)
 
     def predict_proba(self, X):
+        # Backward compatibility: ensure scaler exists
+        if not hasattr(self, 'scaler') or self.scaler is None:
+            from sklearn.preprocessing import StandardScaler as _SS
+            self.scaler = _SS(with_mean=True, with_std=True)
+            logger.info("[ModelUpgrade] Added missing scaler to legacy PersonalLearner instance (predict path)")
         X = np.asarray(X, dtype=np.float64)
         if not self._is_initialized:
             logger.info("[Learner] predict_proba called before initialization (%d samples) -> uniform", len(X))
