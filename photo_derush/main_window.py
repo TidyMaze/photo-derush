@@ -63,13 +63,20 @@ class LightroomMainWindow(QMainWindow):
         self.logger.info("[AsyncLoad] Applying prepared images: %d", len(image_paths))
         self.image_info = image_info or {}
         self.sorted_images = image_paths
-        # re-create grid
         if self.image_grid is not None:
             self.splitter.widget(0).deleteLater()
         self.image_grid = ImageGrid(self.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
                                     image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
                                     on_select=self.on_select_image, labels_map=self.labels_map)
         self.splitter.insertWidget(0, self.image_grid)
+        self.splitter.setSizes([1000, 400])
+        # Log population stats
+        try:
+            count = len(getattr(self.image_grid, 'image_labels', []))
+            self.logger.info("[AsyncLoad] Grid populated with %d thumbnails", count)
+            self.status.showMessage(f"Loaded {count} images")
+        except Exception as e:
+            self.logger.warning("[AsyncLoad] Could not determine grid count: %s", e)
         if self.learner is None and self.sorted_images:
             self._init_learner()
         self.refresh_keep_prob()
@@ -197,3 +204,13 @@ class LightroomMainWindow(QMainWindow):
         def unsure_cb():
             self._label_current_image(-1)
         open_full_image_qt(img_path, on_keep=keep_cb, on_trash=trash_cb, on_unsure=unsure_cb)
+
+    def update_grouping(self, image_info):
+        self.logger.info("[AsyncLoad] Updating grouping metadata for %d images", len(image_info))
+        self.image_info = image_info or {}
+        if self.image_grid:
+            self.image_grid.image_info = self.image_info
+            # If user wants group sorting, resort; otherwise just recolor
+            if self.sort_by_group:
+                self.sorted_images = self._compute_sorted_images()
+            self.image_grid.populate_grid()
