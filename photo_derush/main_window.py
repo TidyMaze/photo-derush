@@ -322,10 +322,21 @@ class LightroomMainWindow(QMainWindow):
         cached = self._feature_cache.get(img_path)
         if cached and cached[0] == mtime:
             vec_cached, keys_cached = cached[1]
+            cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
+            new_len = len(_NEW_FEATURE_NAMES)
             if list(keys_cached) == list(_NEW_FEATURE_NAMES):
                 return cached[1]
-            # schema mismatch -> drop and recompute
-            self.logger.info('[FeatureCache] Purging stale cached vector (schema mismatch) path=%s', img_path)
+            # Decide purge conditions:
+            # Purge only if (a) lengths match new schema (names outdated) OR (b) we have a PersonalLearner expecting new_len.
+            purge = False
+            if cached_len == new_len:
+                purge = True  # outdated names but same dimensionality
+            elif isinstance(self.learner, PersonalLearner) and getattr(self.learner, 'n_features', new_len) == new_len:
+                # Learner expects new length, but cached shorter/longer vector incompatible
+                purge = True
+            if not purge:
+                return cached[1]
+            self.logger.info('[FeatureCache] Purging cached vector (incompatible schema) path=%s len=%s expected_len=%s', img_path, cached_len, new_len)
             self._feature_cache.pop(img_path, None)
         vec, keys = compute_feature_vector(img_path)
         self._feature_cache[img_path] = (mtime, (vec, keys))
@@ -343,9 +354,18 @@ class LightroomMainWindow(QMainWindow):
         cached = self._feature_cache.get(img_path)
         if cached and cached[0] == mtime:
             vec_cached, keys_cached = cached[1]
+            cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
+            new_len = len(_NEW_FEATURE_NAMES)
             if list(keys_cached) == list(_NEW_FEATURE_NAMES):
                 return cached[1]
-            self.logger.info('[FeatureCache] Purging stale cached vector (schema mismatch, async path) path=%s', img_path)
+            purge = False
+            if cached_len == new_len:
+                purge = True
+            elif isinstance(self.learner, PersonalLearner) and getattr(self.learner, 'n_features', new_len) == new_len:
+                purge = True
+            if not purge:
+                return cached[1]
+            self.logger.info('[FeatureCache] Purging cached vector (incompatible schema, async path) path=%s len=%s expected_len=%s', img_path, cached_len, new_len)
             self._feature_cache.pop(img_path, None)
         if require_sync:
             return self._get_feature_vector_sync(img_path)

@@ -23,6 +23,8 @@ class PersonalLearner:
         )
         self.scaler = StandardScaler(with_mean=True, with_std=True)
         self._is_initialized = False
+        # Will hold canonical feature names (e.g., FEATURE_NAMES) once inferred
+        self.feature_names = None
 
     def partial_fit(self, X, y):
         # Backward compatibility: older persisted models may lack scaler
@@ -34,10 +36,18 @@ class PersonalLearner:
         y = np.asarray(y, dtype=np.int64)
         if X.ndim == 1:
             X = X.reshape(1, -1)
+        # Attempt to capture canonical feature names (only if lengths match)
+        try:  # noqa: PERF203
+            from .features_cv import FEATURE_NAMES as _FN  # local import to avoid hard dependency if module path changes
+            if self.feature_names is None and X.shape[1] == len(_FN):
+                self.feature_names = list(_FN)
+        except Exception:  # noqa: PERF203
+            pass
         # Show feature batch as DataFrame before any scaling/training
-        try:
+        try:  # noqa: PERF203
             import pandas as _pd
-            cols = {f"f{i}": X[:, i] for i in range(X.shape[1])}
+            names = self.feature_names if (self.feature_names and len(self.feature_names) == X.shape[1]) else [f"f{i}" for i in range(X.shape[1])]
+            cols = {names[i]: X[:, i] for i in range(X.shape[1])}
             cols['label'] = y
             _df = _pd.DataFrame(cols)
             if len(_df) > 20:
