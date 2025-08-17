@@ -64,19 +64,25 @@ class EmbeddedImageViewer(QWidget):
         # Connections
         self.prev_btn.clicked.connect(lambda: self.navigate(-1))
         self.next_btn.clicked.connect(lambda: self.navigate(1))
-        self.keep_btn.clicked.connect(self._wrap(self.on_keep))
-        self.trash_btn.clicked.connect(self._wrap(self.on_trash))
-        self.unsure_btn.clicked.connect(self._wrap(self.on_unsure))
+        self.keep_btn.clicked.connect(self._wrap(self.on_keep, advance=True))
+        self.trash_btn.clicked.connect(self._wrap(self.on_trash, advance=True))
+        self.unsure_btn.clicked.connect(self._wrap(self.on_unsure, advance=True))
         self.exit_btn.clicked.connect(self._exit)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-    def _wrap(self, cb):
+    def _wrap(self, cb, advance=False):
         def inner():
+            progressed = False
             if cb:
                 try:
                     cb()
+                    progressed = True
                 except Exception as e:  # noqa: PERF203
                     logger.warning('[Viewer] action callback failed: %s', e)
+            if advance and progressed:
+                # Advance only if not at last image
+                if self.current_index < len(self.image_sequence) - 1:
+                    self.navigate(1)
         return inner
 
     def _exit(self):
@@ -93,11 +99,11 @@ class EmbeddedImageViewer(QWidget):
         elif key in (Qt.Key.Key_Right, Qt.Key.Key_D, Qt.Key.Key_L, Qt.Key.Key_Space):
             self.navigate(1)
         elif key in (Qt.Key.Key_K, Qt.Key.Key_1):
-            self._wrap(self.on_keep)()
+            self._wrap(self.on_keep, advance=True)()
         elif key in (Qt.Key.Key_T, Qt.Key.Key_0):
-            self._wrap(self.on_trash)()
+            self._wrap(self.on_trash, advance=True)()
         elif key in (Qt.Key.Key_U, Qt.Key.Key_2):
-            self._wrap(self.on_unsure)()
+            self._wrap(self.on_unsure, advance=True)()
         else:
             super().keyPressEvent(e)
 
@@ -266,18 +272,21 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
     def close_event():
         dlg.accept()
 
-    def wrap(cb):
-        if cb:
-            try:
-                cb()
-            except Exception as e:  # noqa: PERF203
-                logger.warning("[Viewer] action callback failed: %s", e)
+    def wrap(cb, advance=False):
+        if not cb:
+            return
+        try:
+            cb()
+            if advance and current_index < len(image_sequence)-1:
+                navigate(1)
+        except Exception as e:  # noqa: PERF203
+            logger.warning("[Viewer] action callback failed: %s", e)
 
     prev_btn.clicked.connect(lambda: navigate(-1))
     next_btn.clicked.connect(lambda: navigate(1))
-    keep_btn.clicked.connect(lambda: wrap(on_keep))
-    trash_btn.clicked.connect(lambda: wrap(on_trash))
-    unsure_btn.clicked.connect(lambda: wrap(on_unsure))
+    keep_btn.clicked.connect(lambda: wrap(on_keep, True))
+    trash_btn.clicked.connect(lambda: wrap(on_trash, True))
+    unsure_btn.clicked.connect(lambda: wrap(on_unsure, True))
 
     def key_handler(e):
         key = e.key()
@@ -288,11 +297,11 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
         elif key in (Qt.Key.Key_Right, Qt.Key.Key_D, Qt.Key.Key_L, Qt.Key.Key_Space):
             navigate(1)
         elif key in (Qt.Key.Key_K, Qt.Key.Key_1):
-            wrap(on_keep)
+            wrap(on_keep, True)
         elif key in (Qt.Key.Key_T, Qt.Key.Key_0):
-            wrap(on_trash)
+            wrap(on_trash, True)
         elif key in (Qt.Key.Key_U, Qt.Key.Key_2):
-            wrap(on_unsure)
+            wrap(on_unsure, True)
     dlg.keyPressEvent = key_handler
 
     def resize_event(ev):
