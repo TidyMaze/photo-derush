@@ -55,6 +55,19 @@ class PersonalLearner:
                 _display = _df
                 tail_note = ""
             logger.info("[Learner][Preview] Training batch (n=%d, n_features=%d):\n%s%s", len(_df), X.shape[1], _display.to_string(index=False), tail_note)
+            # Additional detailed per-sample vector logging (capped)
+            max_samples_log = min(5, X.shape[0])
+            for idx in range(max_samples_log):
+                row_vals = X[idx]
+                parts = []
+                for n, v in zip(names, row_vals):
+                    try:
+                        parts.append(f"{n}={float(v):.6g}")
+                    except Exception:
+                        parts.append(f"{n}=<err>")
+                logger.debug("[Learner][Vector] sample=%d %s", idx, ' '.join(parts))
+            if X.shape[0] > max_samples_log:
+                logger.debug("[Learner][Vector] (%d more samples omitted)", X.shape[0]-max_samples_log)
         except Exception as e:  # noqa: PERF203
             logger.info("[Learner][Preview] Skipped DataFrame preview: %s", e)
         # Update scaler incrementally before model update
