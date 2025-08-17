@@ -635,7 +635,22 @@ class LightroomMainWindow(QMainWindow):
             self._label_current_image(0)
         def unsure_cb():
             self._label_current_image(-1)
-        open_full_image_qt(img_path, on_keep=keep_cb, on_trash=trash_cb, on_unsure=unsure_cb)
+        # Build navigation sequence (absolute paths)
+        seq = [os.path.join(self.directory, n) for n in self.sorted_images]
+        start_index = idx if 0 <= idx < len(seq) else 0
+        def on_index_change(new_path, new_index):
+            # Update current index and refresh probability/info
+            if 0 <= new_index < len(self.sorted_images):
+                self.current_img_idx = new_index
+                # Update info panel with new probability (async features may still be computing)
+                self.refresh_keep_prob()
+        open_full_image_qt(img_path,
+                           on_keep=keep_cb,
+                           on_trash=trash_cb,
+                           on_unsure=unsure_cb,
+                           image_sequence=seq,
+                           start_index=start_index,
+                           on_index_change=on_index_change)
 
     def update_grouping(self, image_info):
         self.logger.info("[AsyncLoad] Updating grouping metadata for %d images", len(image_info))
