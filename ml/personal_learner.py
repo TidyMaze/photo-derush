@@ -18,11 +18,20 @@ class PersonalLearner:
             max_iter=1,
             warm_start=True,
             verbose=1,
+            alpha=0.01,              # stronger regularization to avoid weight blow-up
+            learning_rate='adaptive',
+            eta0=0.01,
+            power_t=0.5,
+            early_stopping=False,
         )
         self.scaler = StandardScaler(with_mean=True, with_std=True)
         self._is_initialized = False
         # Will hold canonical feature names (e.g., FEATURE_NAMES) once inferred
         self.feature_names = None
+        self._recent_X = []  # minibatch buffer
+        self._recent_y = []
+        self._buffer_max = 32
+        self.proba_clip = (0.01, 0.99)
 
     def partial_fit(self, X, y):
         # Backward compatibility: ensure new attributes exist on legacy loaded instances
@@ -57,47 +66,43 @@ class PersonalLearner:
                 self.feature_names = list(_FN)
         except Exception:  # noqa: PERF203
             pass
+        # Buffer update (store original post-padding X,y)
+        for row, lbl in zip(X, y):
+            if len(self._recent_X) >= self._buffer_max:
+                self._recent_X.pop(0); self._recent_y.pop(0)
+            self._recent_X.append(row.copy())
+            self._recent_y.append(int(lbl))
+        buf_X = np.asarray(self._recent_X, dtype=np.float64)
+        buf_y = np.asarray(self._recent_y, dtype=np.int64)
         # Show feature batch as DataFrame before any scaling/training
         try:  # noqa: PERF203
             import pandas as _pd
-            names = self.feature_names if (self.feature_names and len(self.feature_names) == X.shape[1]) else [f"f{i}" for i in range(X.shape[1])]
-            cols = {names[i]: X[:, i] for i in range(X.shape[1])}
-            cols['label'] = y
+            names = self.feature_names if (self.feature_names and len(self.feature_names) == buf_X.shape[1]) else [f"f{i}" for i in range(buf_X.shape[1])]
+            cols = {names[i]: buf_X[:, i] for i in range(buf_X.shape[1])}
+            cols['label'] = buf_y
             _df = _pd.DataFrame(cols)
             if len(_df) > 20:
-                _display = _df.head(20)
-                tail_note = f"\n[... truncated {len(_df)-20} more rows ...]"
+                _display = _df.tail(20)  # show most recent
+                tail_note = f"\n[... kept only last 20 of buffer size {len(_df)} ...]"
             else:
                 _display = _df
                 tail_note = ""
-            logger.info("[Learner][Preview] Training batch (n=%d, n_features=%d):\n%s%s", len(_df), X.shape[1], _display.to_string(index=False), tail_note)
-            # Additional detailed per-sample vector logging (capped)
-            max_samples_log = min(5, X.shape[0])
-            for idx in range(max_samples_log):
-                row_vals = X[idx]
-                parts = []
-                for n, v in zip(names, row_vals):
-                    try:
-                        parts.append(f"{n}={float(v):.6g}")
-                    except Exception:
-                        parts.append(f"{n}=<err>")
-                logger.info("[Learner][Vector] sample=%d %s", idx, ' '.join(parts))
-            if X.shape[0] > max_samples_log:
-                logger.info("[Learner][Vector] (%d more samples omitted)", X.shape[0]-max_samples_log)
+            logger.info("[Learner][Preview] Buffer batch (n=%d, n_features=%d):\n%s%s", len(_df), buf_X.shape[1], _display.to_string(index=False), tail_note)
         except Exception as e:  # noqa: PERF203
             logger.info("[Learner][Preview] Skipped DataFrame preview: %s", e)
-        # Update scaler incrementally before model update
-        self.scaler.partial_fit(X)
-        Xs = self.scaler.transform(X)
+        # Update scaler with buffer then fit model on buffer
+        self.scaler.partial_fit(buf_X)
+        Xs = self.scaler.transform(buf_X)
         init_before = self._is_initialized
         if not self._is_initialized:
-            logger.info("[Learner] Initial partial_fit: %d samples, classes=%s", len(Xs), np.unique(y))
-            self.model.partial_fit(Xs, y, classes=self.classes)
+            logger.info("[Learner] Initial partial_fit (buffer size %d) classes=%s", len(Xs), np.unique(buf_y))
+            self.model.partial_fit(Xs, buf_y, classes=self.classes)
             self._is_initialized = True
         else:
-            logger.info("[Learner] Incremental partial_fit: %d samples, classes=%s", len(Xs), np.unique(y))
-            self.model.partial_fit(Xs, y)
+            logger.info("[Learner] Incremental partial_fit (buffer size %d)", len(Xs))
+            self.model.partial_fit(Xs, buf_y)
         logger.info("[Learner] partial_fit complete (was_initialized=%s, now_initialized=%s)", init_before, self._is_initialized)
+        return
 
     def predict_proba(self, X):
         if not hasattr(self, 'feature_names'):
@@ -125,7 +130,11 @@ class PersonalLearner:
             logger.warning('[Learner] Scaling failed (%s); using raw features', e)
             Xs = X
         logger.info('[Learner] predict_proba on %d samples', len(Xs))
-        return self.model.predict_proba(Xs)
+        probs = self.model.predict_proba(Xs)
+        # clip probabilities to avoid extreme 0/1 saturation
+        low, high = self.proba_clip
+        probs = np.clip(probs, low, high)
+        return probs
 
     def predict_keep_prob(self, X):
         proba = self.predict_proba(X)
