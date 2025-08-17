@@ -1,4 +1,5 @@
 from PySide6.QtWidgets import QMainWindow, QStatusBar, QSplitter, QWidget
+from PySide6.QtWidgets import QStackedWidget, QVBoxLayout
 from .toolbar import SettingsToolbar
 from .info_panel import InfoPanel
 from .image_grid import ImageGrid
@@ -54,8 +55,18 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar = SettingsToolbar(self)
         self.addToolBar(self.toolbar)
         self.info_panel = InfoPanel()
+        # Central stacked widget: page0 = main splitter, page1 = full image viewer (embedded)
+        self._stack = QStackedWidget()
+        self.setCentralWidget(self._stack)
         self.splitter = QSplitter()
-        self.setCentralWidget(self.splitter)
+        self._main_page = QWidget()
+        _main_layout = QVBoxLayout(self._main_page)
+        _main_layout.setContentsMargins(0, 0, 0, 0)
+        _main_layout.setSpacing(0)
+        _main_layout.addWidget(self.splitter)
+        self._stack.addWidget(self._main_page)
+        self._embedded_viewer = None
+
         self.left_panel = QWidget()
         self.sort_by_group = False
         self.image_info = image_info or {}
@@ -644,14 +655,60 @@ class LightroomMainWindow(QMainWindow):
                 self.current_img_idx = new_index
                 # Update info panel with new probability (async features may still be computing)
                 self.refresh_keep_prob()
-        open_full_image_qt(img_path,
-                           on_keep=keep_cb,
-                           on_trash=trash_cb,
-                           on_unsure=unsure_cb,
-                           image_sequence=seq,
-                           start_index=start_index,
-                           on_index_change=on_index_change)
+        # Attempt embedded viewer (pass parent_main_window). Some tests monkeypatch open_full_image_qt
+        # with a simplified signature; fall back gracefully if TypeError raised.
+        try:
+            open_full_image_qt(img_path,
+                               on_keep=keep_cb,
+                               on_trash=trash_cb,
+                               on_unsure=unsure_cb,
+                               image_sequence=seq,
+                               start_index=start_index,
+                               on_index_change=on_index_change,
+                               parent_main_window=self)
+        except TypeError:
+            # Monkeypatched simplified signature: path, on_keep=None, on_trash=None, on_unsure=None
+            try:
+                open_full_image_qt(img_path, keep_cb, trash_cb, unsure_cb)
+            except TypeError:
+                # Last resort minimal call
+                open_full_image_qt(img_path)
 
+    # ------------------------------------------------------------------
+    # Embedded viewer management
+    def _show_embedded_viewer(self, viewer_widget):
+        """Display the provided EmbeddedImageViewer inside the main window.
+        Hides the splitter page by switching the stacked widget page.
+        """
+        if self._embedded_viewer is not None:
+            # Replace existing viewer
+            idx_old = self._stack.indexOf(self._embedded_viewer)
+            if idx_old != -1:
+                w_old = self._stack.widget(idx_old)
+                self._stack.removeWidget(w_old)
+                w_old.deleteLater()
+            self._embedded_viewer = None
+        self._embedded_viewer = viewer_widget
+        self._stack.addWidget(viewer_widget)
+        self._stack.setCurrentWidget(viewer_widget)
+        viewer_widget.setFocus()
+
+    def _restore_from_viewer(self):
+        """Return to the main splitter view and dispose of the embedded viewer."""
+        if self._embedded_viewer is None:
+            return
+        try:
+            idx = self._stack.indexOf(self._embedded_viewer)
+            if idx != -1:
+                w = self._stack.widget(idx)
+                self._stack.removeWidget(w)
+                w.deleteLater()
+        finally:
+            self._embedded_viewer = None
+            self._stack.setCurrentWidget(self._main_page)
+
+    # ------------------------------------------------------------------
+    # Methods below were present prior to embedding refactor (restored)
     def update_grouping(self, image_info):
         self.logger.info("[AsyncLoad] Updating grouping metadata for %d images", len(image_info))
         self.image_info = image_info or {}

@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QApplication, QPushButton, QHBoxLayout, QWidget, QSizePolicy
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from .utils import pil2pixmap
 from .image_manager import image_manager
 import logging
@@ -10,15 +10,155 @@ WINDOW_SCREEN_RATIO = 0.9  # window occupies 90% of available screen in each dim
 MIN_WINDOW_WIDTH = 800
 MIN_WINDOW_HEIGHT = 600
 
-def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, image_sequence=None, start_index=None, on_index_change=None):
-    """Fullscreen viewer with optional navigation.
-    Parameters:
-      img_path: initial image path (kept for backward compatibility)
-      image_sequence: optional list of image (absolute) paths for navigation
-      start_index: index in image_sequence corresponding to img_path
-      on_index_change(new_path, new_index): callback when navigation occurs
-    """
-    # Normalize sequence
+class EmbeddedImageViewer(QWidget):
+    """Image viewer panel embedded inside the main window (no separate dialog)."""
+    def __init__(self, parent_main_window, image_sequence, start_index, on_keep, on_trash, on_unsure, on_index_change):
+        super().__init__()
+        self.parent_main_window = parent_main_window
+        self.image_sequence = image_sequence
+        self.current_index = max(0, min(start_index, len(image_sequence)-1))
+        self.on_keep = on_keep
+        self.on_trash = on_trash
+        self.on_unsure = on_unsure
+        self.on_index_change = on_index_change
+        self.orig_pix = None
+        self._build_ui()
+        self.load_current()
+
+    def sizeHint(self):  # allow a reasonable size hint
+        return QSize(1200, 800)
+
+    def _build_ui(self):
+        self.lbl = QLabel()
+        self.lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Buttons
+        self.buttons_widget = QWidget()
+        btn_layout = QHBoxLayout(self.buttons_widget)
+        btn_layout.setContentsMargins(20, 10, 20, 10)
+        btn_layout.setSpacing(20)
+        style_btn = "QPushButton { padding:10px 18px; font-size:14px; background:#444; color:#eee; border-radius:5px;} QPushButton:hover { background:#666; }"
+        self.prev_btn = QPushButton("◀ Prev")
+        self.next_btn = QPushButton("Next ▶")
+        self.keep_btn = QPushButton("Keep (K/1)")
+        self.trash_btn = QPushButton("Trash (T/0)")
+        self.unsure_btn = QPushButton("Unsure (U/2)")
+        self.exit_btn = QPushButton("Back (Esc/Q)")
+        for b in (self.prev_btn, self.next_btn, self.keep_btn, self.trash_btn, self.unsure_btn, self.exit_btn):
+            b.setStyleSheet(style_btn)
+        btn_layout.addStretch(1)
+        btn_layout.addWidget(self.prev_btn)
+        btn_layout.addWidget(self.next_btn)
+        btn_layout.addSpacing(30)
+        btn_layout.addWidget(self.keep_btn)
+        btn_layout.addWidget(self.trash_btn)
+        btn_layout.addWidget(self.unsure_btn)
+        btn_layout.addSpacing(30)
+        btn_layout.addWidget(self.exit_btn)
+        btn_layout.addStretch(1)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.lbl, 1)
+        layout.addWidget(self.buttons_widget, 0)
+        # Connections
+        self.prev_btn.clicked.connect(lambda: self.navigate(-1))
+        self.next_btn.clicked.connect(lambda: self.navigate(1))
+        self.keep_btn.clicked.connect(self._wrap(self.on_keep))
+        self.trash_btn.clicked.connect(self._wrap(self.on_trash))
+        self.unsure_btn.clicked.connect(self._wrap(self.on_unsure))
+        self.exit_btn.clicked.connect(self._exit)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def _wrap(self, cb):
+        def inner():
+            if cb:
+                try:
+                    cb()
+                except Exception as e:  # noqa: PERF203
+                    logger.warning('[Viewer] action callback failed: %s', e)
+        return inner
+
+    def _exit(self):
+        # Restore main window splitter
+        if hasattr(self.parent_main_window, '_restore_from_viewer'):
+            self.parent_main_window._restore_from_viewer()
+
+    def keyPressEvent(self, e):  # noqa: N802
+        key = e.key()
+        if key in (Qt.Key.Key_Escape, Qt.Key.Key_Q):
+            self._exit()
+        elif key in (Qt.Key.Key_Left, Qt.Key.Key_A, Qt.Key.Key_H):
+            self.navigate(-1)
+        elif key in (Qt.Key.Key_Right, Qt.Key.Key_D, Qt.Key.Key_L, Qt.Key.Key_Space):
+            self.navigate(1)
+        elif key in (Qt.Key.Key_K, Qt.Key.Key_1):
+            self._wrap(self.on_keep)()
+        elif key in (Qt.Key.Key_T, Qt.Key.Key_0):
+            self._wrap(self.on_trash)()
+        elif key in (Qt.Key.Key_U, Qt.Key.Key_2):
+            self._wrap(self.on_unsure)()
+        else:
+            super().keyPressEvent(e)
+
+    def navigate(self, delta):
+        new_index = self.current_index + delta
+        if 0 <= new_index < len(self.image_sequence):
+            self.current_index = new_index
+            self.load_current()
+
+    def load_current(self):
+        path = self.image_sequence[self.current_index]
+        pil_img = image_manager.get_image(path)
+        if pil_img is None:
+            self.lbl.setText(f"Failed to load image:\n{path}")
+            return
+        pil_c = pil_img.copy()
+        # Pre-scale relative to current widget size
+        avail_w = max(100, self.width() or 1200)
+        btn_h = self.buttons_widget.sizeHint().height() or 80
+        avail_h = max(100, (self.height() or 800) - btn_h)
+        pil_c.thumbnail((avail_w, avail_h))
+        self.orig_pix = pil2pixmap(pil_c)
+        self._rescale()
+        # Nav buttons
+        self.prev_btn.setEnabled(self.current_index > 0)
+        self.next_btn.setEnabled(self.current_index < len(self.image_sequence)-1)
+        if self.on_index_change:
+            try:
+                self.on_index_change(path, self.current_index)
+            except Exception:
+                pass
+
+    def resizeEvent(self, ev):  # noqa: N802
+        self._rescale()
+        return super().resizeEvent(ev)
+
+    def _rescale(self):
+        if self.orig_pix is None:
+            return
+        btn_h = self.buttons_widget.height() or self.buttons_widget.sizeHint().height() or 0
+        avail_w = max(10, self.width())
+        avail_h = max(10, self.height() - btn_h)
+        scaled = self.orig_pix.scaled(avail_w, avail_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.lbl.setPixmap(scaled)
+
+# Legacy dialog approach retained for backward compatibility (tests may rely on function call)
+def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, image_sequence=None, start_index=None, on_index_change=None, parent_main_window=None):
+    # If parent_main_window provided -> embed instead of dialog
+    if parent_main_window is not None:
+        seq = image_sequence or [img_path]
+        if start_index is None:
+            try:
+                start_index = seq.index(img_path)
+            except ValueError:
+                start_index = 0
+        viewer = EmbeddedImageViewer(parent_main_window, seq, start_index, on_keep, on_trash, on_unsure, on_index_change)
+        # Ask main window to display
+        if hasattr(parent_main_window, '_show_embedded_viewer'):
+            parent_main_window._show_embedded_viewer(viewer)
+        return viewer
+    # Fallback dialog mode (legacy)
     if image_sequence is None:
         image_sequence = [img_path]
         start_index = 0
@@ -29,7 +169,6 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
             except ValueError:
                 start_index = 0
     current_index = max(0, min(start_index, len(image_sequence)-1))
-
     dlg = QDialog()
     dlg.setWindowTitle("Full Image Viewer")
     dlg.setWindowFlag(Qt.WindowType.Window)
