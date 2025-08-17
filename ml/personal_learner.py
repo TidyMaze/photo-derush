@@ -18,8 +18,6 @@ class PersonalLearner:
             max_iter=1,
             warm_start=True,
             verbose=1,
-            learning_rate='constant',
-            eta0=0.001
         )
         self.scaler = StandardScaler(with_mean=True, with_std=True)
         self._is_initialized = False
