@@ -24,7 +24,10 @@ class PersonalLearner:
             power_t=0.5,
             early_stopping=False,
         )
-        self.scaler = StandardScaler(with_mean=True, with_std=True)
+        self.scaler = StandardScaler(
+            with_mean=True,
+            with_std=True
+        )
         self._is_initialized = False
         # Will hold canonical feature names (e.g., FEATURE_NAMES) once inferred
         self.feature_names = None
@@ -37,6 +40,12 @@ class PersonalLearner:
         # Backward compatibility: ensure new attributes exist on legacy loaded instances
         if not hasattr(self, 'feature_names'):
             self.feature_names = None
+        if not hasattr(self, '_recent_X'):
+            self._recent_X = []
+            self._recent_y = []
+            self._buffer_max = 32
+        if not hasattr(self, 'proba_clip'):
+            self.proba_clip = (0.01, 0.99)
         # Backward compatibility: older persisted models may lack scaler
         if not hasattr(self, 'scaler') or self.scaler is None:
             from sklearn.preprocessing import StandardScaler as _SS
@@ -107,6 +116,13 @@ class PersonalLearner:
     def predict_proba(self, X):
         if not hasattr(self, 'feature_names'):
             self.feature_names = None
+        if not hasattr(self, '_recent_X'):
+            # Legacy instance before buffer introduction
+            self._recent_X = []
+            self._recent_y = []
+            self._buffer_max = 32
+        if not hasattr(self, 'proba_clip'):
+            self.proba_clip = (0.01, 0.99)
         # Backward compatibility: ensure scaler exists
         if not hasattr(self, 'scaler') or self.scaler is None:
             from sklearn.preprocessing import StandardScaler as _SS
