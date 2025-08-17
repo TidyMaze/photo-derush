@@ -384,7 +384,7 @@ class LightroomMainWindow(QMainWindow):
             return False
         self._pending_feature_tasks.add(img_path)
         task = _FeatureTask(img_path, mtime, self._feature_emitter)
-        self.logger.debug('[FeatureAsync] Scheduling extraction path=%s', img_path)
+        self.logger.info('[FeatureAsync] Scheduling extraction path=%s', img_path)
         self._thread_pool.start(task)
         return True
 

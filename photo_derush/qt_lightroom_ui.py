@@ -54,7 +54,7 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
                 mtype = msg.get('type')
                 if mtype == 'image':
                     img_name = msg['name']
-                    logging.debug("[AsyncLoad] (poll) Adding image %s", img_name)
+                    logging.info("[AsyncLoad] (poll) Adding image %s", img_name)
                     if win.image_grid:
                         win.image_grid.add_image(img_name)
                 elif mtype == 'grouping':

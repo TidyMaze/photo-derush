@@ -68,9 +68,9 @@ class PersonalLearner:
                         parts.append(f"{n}={float(v):.6g}")
                     except Exception:
                         parts.append(f"{n}=<err>")
-                logger.debug("[Learner][Vector] sample=%d %s", idx, ' '.join(parts))
+                logger.info("[Learner][Vector] sample=%d %s", idx, ' '.join(parts))
             if X.shape[0] > max_samples_log:
-                logger.debug("[Learner][Vector] (%d more samples omitted)", X.shape[0]-max_samples_log)
+                logger.info("[Learner][Vector] (%d more samples omitted)", X.shape[0]-max_samples_log)
         except Exception as e:  # noqa: PERF203
             logger.info("[Learner][Preview] Skipped DataFrame preview: %s", e)
         # Update scaler incrementally before model update
