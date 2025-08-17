@@ -25,6 +25,9 @@ class PersonalLearner:
         self.feature_names = None
 
     def partial_fit(self, X, y):
+        # Backward compatibility: ensure new attributes exist on legacy loaded instances
+        if not hasattr(self, 'feature_names'):
+            self.feature_names = None
         # Backward compatibility: older persisted models may lack scaler
         if not hasattr(self, 'scaler') or self.scaler is None:
             from sklearn.preprocessing import StandardScaler as _SS
@@ -84,6 +87,8 @@ class PersonalLearner:
         logger.info("[Learner] partial_fit complete (was_initialized=%s, now_initialized=%s)", init_before, self._is_initialized)
 
     def predict_proba(self, X):
+        if not hasattr(self, 'feature_names'):
+            self.feature_names = None
         # Backward compatibility: ensure scaler exists
         if not hasattr(self, 'scaler') or self.scaler is None:
             from sklearn.preprocessing import StandardScaler as _SS
