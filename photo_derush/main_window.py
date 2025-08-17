@@ -6,6 +6,7 @@ from .viewer import open_full_image_qt
 import os
 import json
 from ml.features_cv import compute_feature_vector
+from ml.features_cv import FEATURE_NAMES as _NEW_FEATURE_NAMES
 # Backward compatibility: expose feature_vector symbol (tests may monkeypatch it)
 def feature_vector(path):  # pragma: no cover - legacy shim
     return compute_feature_vector(path)
@@ -75,6 +76,18 @@ class LightroomMainWindow(QMainWindow):
             if persisted_cache:
                 self._feature_cache.update(persisted_cache)
                 self.logger.info('[FeatureCache] Loaded %d cached feature vectors', len(persisted_cache))
+                # Purge entries whose keys don't match current FEATURE_NAMES
+                invalid = []
+                for pth, (mt, tup) in list(self._feature_cache.items()):
+                    if not isinstance(tup, tuple) or len(tup) != 2:
+                        invalid.append(pth); continue
+                    vec, keys = tup
+                    if list(keys) != list(_NEW_FEATURE_NAMES):
+                        invalid.append(pth)
+                for pth in invalid:
+                    self._feature_cache.pop(pth, None)
+                if invalid:
+                    self.logger.info('[FeatureCache] Dropped %d stale entries (schema mismatch)', len(invalid))
             else:
                 self.logger.info('[FeatureCache] No persisted feature vectors loaded (empty or missing)')
         except Exception as e:
@@ -308,7 +321,12 @@ class LightroomMainWindow(QMainWindow):
             return None
         cached = self._feature_cache.get(img_path)
         if cached and cached[0] == mtime:
-            return cached[1]
+            vec_cached, keys_cached = cached[1]
+            if list(keys_cached) == list(_NEW_FEATURE_NAMES):
+                return cached[1]
+            # schema mismatch -> drop and recompute
+            self.logger.info('[FeatureCache] Purging stale cached vector (schema mismatch) path=%s', img_path)
+            self._feature_cache.pop(img_path, None)
         vec, keys = compute_feature_vector(img_path)
         self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
@@ -324,7 +342,11 @@ class LightroomMainWindow(QMainWindow):
             return None
         cached = self._feature_cache.get(img_path)
         if cached and cached[0] == mtime:
-            return cached[1]
+            vec_cached, keys_cached = cached[1]
+            if list(keys_cached) == list(_NEW_FEATURE_NAMES):
+                return cached[1]
+            self.logger.info('[FeatureCache] Purging stale cached vector (schema mismatch, async path) path=%s', img_path)
+            self._feature_cache.pop(img_path, None)
         if require_sync:
             return self._get_feature_vector_sync(img_path)
         self._schedule_feature_extraction(img_path)
@@ -365,6 +387,18 @@ class LightroomMainWindow(QMainWindow):
             return
         fv, _ = fv_tuple
         self.logger.info("[Label] User set label=%s for image=%s", label, img_name)
+        # On-the-fly migration: if existing learner has different n_features than new vector, migrate now
+        if self.learner is not None and len(fv) != getattr(self.learner, 'n_features', len(fv)):
+            old_n = getattr(self.learner, 'n_features', -1)
+            new_n = len(fv)
+            self.logger.info('[Learner][Migration-OnLabel] Detected feature length change %d -> %d; reinitializing model', old_n, new_n)
+            self.learner = PersonalLearner(n_features=new_n)
+            # Rebuild from log filtering by new length
+            rebuild_model_from_log(self.learner, expected_n_features=new_n)
+            if hasattr(self.image_grid, 'learner'):
+                self.image_grid.learner = self.learner
+            # After migration, cold start status depends on initialization state
+            self._cold_start_completed = self.learner._is_initialized
         if hasattr(fv, 'tolist'):
             feats_list = fv.tolist()
         else:
