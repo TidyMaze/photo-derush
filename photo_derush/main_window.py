@@ -452,6 +452,27 @@ class LightroomMainWindow(QMainWindow):
         X, y, _images = load_latest_labeled_samples()
         if not X:
             return
+        # Filter samples whose feature length mismatches current learner (migration safety)
+        expected = getattr(self.learner, 'n_features', None)
+        if expected is not None:
+            filtered_X = []
+            filtered_y = []
+            mismatched = 0
+            for x_i, y_i in zip(X, y):
+                try:
+                    if isinstance(x_i, (list, tuple)) and len(x_i) == expected:
+                        filtered_X.append(x_i)
+                        filtered_y.append(y_i)
+                    else:
+                        mismatched += 1
+                except Exception:
+                    mismatched += 1
+            if mismatched:
+                self.logger.info('[Eval] Skipped %d samples (feature length mismatch) expected=%s', mismatched, expected)
+            X, y = filtered_X, filtered_y
+        if not X:
+            self.logger.info('[Eval] No compatible samples after filtering; skipping evaluation')
+            return
         import numpy as _np
         from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, log_loss, brier_score_loss
         X_np = _np.asarray(X, dtype=_np.float64)
