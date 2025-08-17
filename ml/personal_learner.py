@@ -37,10 +37,23 @@ class PersonalLearner:
         y = np.asarray(y, dtype=np.int64)
         if X.ndim == 1:
             X = X.reshape(1, -1)
+        # Pad shorter vectors (legacy schema) instead of triggering constant reinitializations
+        if X.shape[1] < self.n_features:
+            pad_width = self.n_features - X.shape[1]
+            X = np.hstack([X, np.zeros((X.shape[0], pad_width), dtype=X.dtype)])
+        elif X.shape[1] > self.n_features:
+            # New larger vectors -> reinitialize model to new dimension once
+            logger.info('[Learner][Migration] Expanding feature space %d -> %d', self.n_features, X.shape[1])
+            self.n_features = X.shape[1]
+            from sklearn.linear_model import SGDClassifier as _SGD
+            from sklearn.preprocessing import StandardScaler as _SS
+            self.model = _SGD(loss="log_loss", max_iter=1, warm_start=True, verbose=1)
+            self.scaler = _SS(with_mean=True, with_std=True)
+            self._is_initialized = False
         # Attempt to capture canonical feature names (only if lengths match)
         try:  # noqa: PERF203
             from .features_cv import FEATURE_NAMES as _FN  # local import to avoid hard dependency if module path changes
-            if self.feature_names is None and X.shape[1] == len(_FN):
+            if self.feature_names is None and self.n_features == len(_FN):
                 self.feature_names = list(_FN)
         except Exception:  # noqa: PERF203
             pass
@@ -95,15 +108,23 @@ class PersonalLearner:
             self.scaler = _SS(with_mean=True, with_std=True)
             logger.info("[ModelUpgrade] Added missing scaler to legacy PersonalLearner instance (predict path)")
         X = np.asarray(X, dtype=np.float64)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        if X.shape[1] < self.n_features:
+            pad_width = self.n_features - X.shape[1]
+            X = np.hstack([X, np.zeros((X.shape[0], pad_width), dtype=X.dtype)])
+        elif X.shape[1] > self.n_features:
+            logger.warning('[Learner][Predict] Received higher-dim features (%d) than model (%d); truncating', X.shape[1], self.n_features)
+            X = X[:, :self.n_features]
         if not self._is_initialized:
-            logger.info("[Learner] predict_proba called before initialization (%d samples) -> uniform", len(X))
+            logger.info('[Learner] predict_proba called before initialization (%d samples) -> uniform', len(X))
             return np.full((len(X), 2), 0.5)
         try:
             Xs = self.scaler.transform(X)
         except Exception as e:  # noqa: PERF203
-            logger.warning("[Learner] Scaling failed (%s); using raw features", e)
+            logger.warning('[Learner] Scaling failed (%s); using raw features', e)
             Xs = X
-        logger.info("[Learner] predict_proba on %d samples", len(Xs))
+        logger.info('[Learner] predict_proba on %d samples', len(Xs))
         return self.model.predict_proba(Xs)
 
     def predict_keep_prob(self, X):
