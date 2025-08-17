@@ -2,6 +2,9 @@ from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QApplication, QPushB
 from PySide6.QtCore import Qt
 from .utils import pil2pixmap
 from .image_manager import image_manager
+import logging
+
+logger = logging.getLogger(__name__)
 
 def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None):
     dlg = QDialog()
@@ -21,13 +24,16 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None):
         return
     screen = QApplication.primaryScreen().geometry()
     img = img.copy()
+    # thumbnail keeps aspect ratio automatically
     img.thumbnail((screen.width(), screen.height()))
-    pix = pil2pixmap(img)
+    orig_pix = pil2pixmap(img)
     lbl = QLabel()
-    lbl.setPixmap(pix)
+    lbl.setPixmap(orig_pix)
     lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-    lbl.setScaledContents(True)
+    # lbl.setScaledContents(True)
+    # We'll manage scaling ourselves to preserve aspect ratio
+
     # Buttons row
     buttons_widget = QWidget()
     btn_layout = QHBoxLayout(buttons_widget)
@@ -71,5 +77,19 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None):
         elif key in (Qt.Key.Key_U, Qt.Key.Key_2):
             wrap(on_unsure)
     dlg.keyPressEvent = key_handler
+
+    # Custom resize to maintain aspect ratio
+    def resize_event(ev):
+        try:
+            avail_w = lbl.width()
+            avail_h = lbl.height()
+            if avail_w > 0 and avail_h > 0:
+                scaled = orig_pix.scaled(avail_w, avail_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                lbl.setPixmap(scaled)
+        except Exception as e:  # noqa: PERF203
+            logger.debug("[Viewer] Resize scaling failed: %s", e)
+        return QDialog.resizeEvent(dlg, ev)
+
+    dlg.resizeEvent = resize_event
     # Disable click-to-close on main image (could still close with ESC/Q)
     dlg.exec()
