@@ -6,6 +6,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+WINDOW_SCREEN_RATIO = 0.9  # window occupies 90% of available screen in each dimension
+MIN_WINDOW_WIDTH = 800
+MIN_WINDOW_HEIGHT = 600
+
 def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, image_sequence=None, start_index=None, on_index_change=None):
     """Fullscreen viewer with optional navigation.
     Parameters:
@@ -29,7 +33,15 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
     dlg = QDialog()
     dlg.setWindowTitle("Full Image Viewer")
     dlg.setWindowFlag(Qt.WindowType.Window)
-    dlg.setWindowState(Qt.WindowState.WindowFullScreen)
+    # Not using true full screen to avoid covering entire display / multi-monitor issues
+    screen_geo = QApplication.primaryScreen().availableGeometry()
+    target_w = max(MIN_WINDOW_WIDTH, int(screen_geo.width() * WINDOW_SCREEN_RATIO))
+    target_h = max(MIN_WINDOW_HEIGHT, int(screen_geo.height() * WINDOW_SCREEN_RATIO))
+    # Center the window
+    x = screen_geo.x() + (screen_geo.width() - target_w) // 2
+    y = screen_geo.y() + (screen_geo.height() - target_h) // 2
+    dlg.setGeometry(x, y, target_w, target_h)
+    dlg.setMinimumSize(int(MIN_WINDOW_WIDTH*0.8), int(MIN_WINDOW_HEIGHT*0.8))
 
     # Widgets
     lbl = QLabel()
@@ -68,6 +80,19 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
     # State
     orig_pix = None
 
+    def _scale_current_pixmap():
+        nonlocal orig_pix
+        if orig_pix is None:
+            return
+        btn_h = buttons_widget.height() or buttons_widget.sizeHint().height() or 0
+        avail_w = max(10, dlg.width())
+        avail_h = max(10, dlg.height() - btn_h)
+        try:
+            scaled = orig_pix.scaled(avail_w, avail_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            lbl.setPixmap(scaled)
+        except Exception as e:  # noqa: PERF203
+            logger.debug('[Viewer] Scaling failed: %s', e)
+
     def load_current():
         nonlocal orig_pix, current_index
         path = image_sequence[current_index]
@@ -75,13 +100,14 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
         if pil_img is None:
             lbl.setText(f"Failed to load image:\n{path}")
             return
-        screen = QApplication.primaryScreen().geometry()
         pil_c = pil_img.copy()
-        pil_c.thumbnail((screen.width(), screen.height()))
+        # Pre-shrink based on current dialog size (approx) to reduce memory / scaling artifacts
+        est_btn_h = buttons_widget.sizeHint().height() or 80
+        target_w = max(100, dlg.width())
+        target_h = max(100, dlg.height() - est_btn_h)
+        pil_c.thumbnail((target_w, target_h))
         orig_pix = pil2pixmap(pil_c)
-        # Scale to fit preserving ratio
-        scaled = orig_pix.scaled(lbl.width() or screen.width(), lbl.height() or screen.height(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        lbl.setPixmap(scaled)
+        _scale_current_pixmap()
         # Enable / disable nav buttons
         prev_btn.setEnabled(current_index > 0)
         next_btn.setEnabled(current_index < len(image_sequence)-1)
@@ -104,7 +130,6 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
     def wrap(cb):
         if cb:
             try:
-                # Provide current path for convenience if callback wants introspection
                 cb()
             except Exception as e:  # noqa: PERF203
                 logger.warning("[Viewer] action callback failed: %s", e)
@@ -132,12 +157,7 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
     dlg.keyPressEvent = key_handler
 
     def resize_event(ev):
-        try:
-            if orig_pix is not None:
-                scaled = orig_pix.scaled(lbl.width(), lbl.height(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                lbl.setPixmap(scaled)
-        except Exception as e:  # noqa: PERF203
-            logger.debug('[Viewer] Resize scaling failed: %s', e)
+        _scale_current_pixmap()
         return QDialog.resizeEvent(dlg, ev)
     dlg.resizeEvent = resize_event
 
