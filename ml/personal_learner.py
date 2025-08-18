@@ -95,7 +95,7 @@ class PersonalLearner:
             _df = _pd.DataFrame(X_arr, columns=cols)
             _df['label'] = y_arr
             # Limit very large outputs to avoid log spam
-            MAX_ROWS_LOG = 200
+            MAX_ROWS_LOG = 5
             shown_df = _df if len(_df) <= MAX_ROWS_LOG else _df.head(MAX_ROWS_LOG)
             logger.info('[Learner][Dataset][Preview] rows=%d cols=%d (showing %d)\n%s', len(_df), X_arr.shape[1], len(shown_df), shown_df.to_string(index=False))
             if len(_df) > MAX_ROWS_LOG:
