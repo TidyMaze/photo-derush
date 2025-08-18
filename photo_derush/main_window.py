@@ -520,7 +520,12 @@ class LightroomMainWindow(QMainWindow):
                         if Xf:
                             self.logger.info("[Training] Full retrain (samples=%d n_features=%d countsT=%d countsK=%d)", len(Xf), target_len, counts[0], counts[1])
                             importances = self.learner.train_and_explain(Xf, yf)
-                            self.logger.info("[Training] Feature importances: %s", importances)
+                            # Format feature importances for readability
+                            if importances:
+                                formatted = "\n".join(f"    {name}: {imp:.4f}" for name, imp in importances)
+                                self.logger.info("[Training] Feature importances (sorted):\n%s", formatted)
+                            else:
+                                self.logger.info("[Training] Feature importances: <none>")
                             self._debounced_save_model()
                             self.logger.info("[Training] Model saved after full retrain")
                             self._evaluate_model()
