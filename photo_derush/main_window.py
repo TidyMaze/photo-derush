@@ -400,20 +400,24 @@ class LightroomMainWindow(QMainWindow):
             vec_cached, keys_cached = cached[1]
             cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
             combined_len = len(self._combined_feature_names)
-            # If cached keys match either legacy or combined schema, keep
+            # Accept either legacy CV-only or combined schema
             if list(keys_cached) == list(_NEW_FEATURE_NAMES) or list(keys_cached) == list(self._combined_feature_names):
+                self.logger.debug('[FeatureCache] HIT sync path=%s len=%s', img_path, cached_len)
                 return cached[1]
             purge = False
-            if cached_len in (len(_NEW_FEATURE_NAMES), combined_len):
+            # Only purge if length is unrecognized OR learner expects different length
+            if cached_len not in (len(_NEW_FEATURE_NAMES), combined_len):
                 purge = True
-            elif isinstance(self.learner, PersonalLearner) and getattr(self.learner, 'n_features', combined_len) in (len(_NEW_FEATURE_NAMES), combined_len):
-                purge = True
+            elif isinstance(self.learner, PersonalLearner):
+                expected = getattr(self.learner, 'n_features', combined_len)
+                if cached_len != expected:
+                    purge = True
             if not purge:
+                self.logger.debug('[FeatureCache] Accepting cached vector despite key mismatch path=%s len=%s', img_path, cached_len)
                 return cached[1]
-            self.logger.info('[FeatureCache] Purging cached vector (incompatible schema) path=%s len=%s', img_path, cached_len)
+            self.logger.info('[FeatureCache] Purging cached vector (schema mismatch) path=%s len=%s', img_path, cached_len)
             self._feature_cache.pop(img_path, None)
         vec, keys = feature_vector(img_path)
-        # If we got combined length but our learner still expecting legacy len, adapt later via migration
         self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
             persist_feature_cache_entry(img_path, mtime, vec, keys)
@@ -432,15 +436,19 @@ class LightroomMainWindow(QMainWindow):
             cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
             combined_len = len(self._combined_feature_names)
             if list(keys_cached) == list(_NEW_FEATURE_NAMES) or list(keys_cached) == list(self._combined_feature_names):
+                self.logger.debug('[FeatureCache] HIT async path=%s len=%s', img_path, cached_len)
                 return cached[1]
             purge = False
-            if cached_len in (len(_NEW_FEATURE_NAMES), combined_len):
+            if cached_len not in (len(_NEW_FEATURE_NAMES), combined_len):
                 purge = True
-            elif isinstance(self.learner, PersonalLearner) and getattr(self.learner, 'n_features', combined_len) in (len(_NEW_FEATURE_NAMES), combined_len):
-                purge = True
+            elif isinstance(self.learner, PersonalLearner):
+                expected = getattr(self.learner, 'n_features', combined_len)
+                if cached_len != expected:
+                    purge = True
             if not purge:
+                self.logger.debug('[FeatureCache] Accepting cached vector despite key mismatch (async) path=%s len=%s', img_path, cached_len)
                 return cached[1]
-            self.logger.info('[FeatureCache] Purging cached vector (incompatible schema, async path) path=%s len=%s', img_path, cached_len)
+            self.logger.info('[FeatureCache] Purging cached vector (schema mismatch, async path) path=%s len=%s', img_path, cached_len)
             self._feature_cache.pop(img_path, None)
         if require_sync:
             return self._get_feature_vector_sync(img_path)
