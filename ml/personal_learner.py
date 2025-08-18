@@ -75,7 +75,7 @@ class PersonalLearner:
             shuffle=True,
             random_state=42,
         )
-        max_epochs = 80  # higher cap; early stopping will usually cut earlier
+        max_epochs = 1000  # higher cap; early stopping will usually cut earlier
         patience = 10
         min_delta = 1e-4
         self.last_retrain_loss_curve = []
