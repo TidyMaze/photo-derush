@@ -83,22 +83,12 @@ class PersonalLearner:
             self._recent_y.append(int(lbl))
         buf_X = np.asarray(self._recent_X, dtype=np.float64)
         buf_y = np.asarray(self._recent_y, dtype=np.int64)
-        # Show feature batch as DataFrame before any scaling/training
-        try:  # noqa: PERF203
-            import pandas as _pd
-            names = self.feature_names if (self.feature_names and len(self.feature_names) == buf_X.shape[1]) else [f"f{i}" for i in range(buf_X.shape[1])]
-            cols = {names[i]: buf_X[:, i] for i in range(buf_X.shape[1])}
-            cols['label'] = buf_y
-            _df = _pd.DataFrame(cols)
-            if len(_df) > 20:
-                _display = _df.tail(20)  # show most recent
-                tail_note = f"\n[... kept only last 20 of buffer size {len(_df)} ...]"
-            else:
-                _display = _df
-                tail_note = ""
-            logger.info("[Learner][Preview] Buffer batch (n=%d, n_features=%d):\n%s%s", len(_df), buf_X.shape[1], _display.to_string(index=False), tail_note)
-        except Exception as e:  # noqa: PERF203
-            logger.info("[Learner][Preview] Skipped DataFrame preview: %s", e)
+        # Lightweight preview (avoid heavy pandas import to prevent segfaults in constrained env)
+        try:
+            sample_preview = ' '.join(f"f{i}={buf_X[-1,i]:.4g}" for i in range(min(6, buf_X.shape[1]))) if buf_X.size else ''
+            logger.info("[Learner][PreviewLite] buffer_size=%d n_features=%d last_sample: %s label=%s", len(buf_X), buf_X.shape[1], sample_preview, buf_y[-1] if buf_y.size else 'NA')
+        except Exception:
+            pass
         # Update scaler with buffer then fit model on buffer
         self.scaler.partial_fit(buf_X)
         Xs = self.scaler.transform(buf_X)

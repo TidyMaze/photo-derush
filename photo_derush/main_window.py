@@ -477,12 +477,13 @@ class LightroomMainWindow(QMainWindow):
             logging.info("[Label] Updated keep probabilities for all images in grid after labeling %s", img_name)
 
     def _evaluate_model(self):
-        """Evaluate current learner on latest definitive labeled events (0/1) only."""
+        """Evaluate current learner on latest definitive labeled events (0/1) only.
+        Returns a dict of metrics or None."""
         if self.learner is None:
-            return
+            return None
         X, y, _images = load_latest_labeled_samples()
         if not X:
-            return
+            return None
         # Filter samples whose feature length mismatches current learner (migration safety)
         expected = getattr(self.learner, 'n_features', None)
         if expected is not None:
@@ -503,7 +504,7 @@ class LightroomMainWindow(QMainWindow):
             X, y = filtered_X, filtered_y
         if not X:
             self.logger.info('[Eval] No compatible samples after filtering; skipping evaluation')
-            return
+            return None
         import numpy as _np
         from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, log_loss, brier_score_loss
         X_np = _np.asarray(X, dtype=_np.float64)
@@ -527,12 +528,22 @@ class LightroomMainWindow(QMainWindow):
                 brier = float(brier_score_loss(y_np, probs))
             except Exception:
                 brier = float('nan')
-            self.logger.info("[Eval] samples=%d pos_rate=%.4f acc=%.4f prec=%.4f rec=%.4f f1=%.4f logloss=%s brier=%s (latest labels only)",
-                             len(y_np), pos_rate, acc, prec, rec, f1,
-                             f"{ll:.4f}" if _np.isfinite(ll) else "nan",
-                             f"{brier:.4f}" if _np.isfinite(brier) else "nan")
+            metrics = {
+                'samples': len(y_np),
+                'pos_rate': pos_rate,
+                'acc': acc,
+                'prec': prec,
+                'rec': rec,
+                'f1': f1,
+                'logloss': ll if _np.isfinite(ll) else float('nan'),
+                'brier': brier if _np.isfinite(brier) else float('nan')
+            }
+            self._last_metrics = metrics
+            self.logger.info("[Eval][Store] %s", metrics)
+            return metrics
         except Exception as e:
             self.logger.warning("[Eval] Failed evaluation: %s", e)
+            return None
 
     def _refresh_all_keep_probs(self):
         if not self.image_grid:
@@ -564,6 +575,15 @@ class LightroomMainWindow(QMainWindow):
             prob_map = {n: float(p) for n, p in zip(names, probs)}
             self.image_grid.update_keep_probabilities(prob_map)
             logging.info("Done updating proba in grid for %d images", len(prob_map))
+            # After updating probabilities, evaluate model and show metrics (if available)
+            metrics = self._evaluate_model()
+            if metrics and self.status:
+                msg = (f"Probas updated ({len(prob_map)} images) acc={metrics['acc']:.3f} "
+                       f"prec={metrics['prec']:.3f} rec={metrics['rec']:.3f} f1={metrics['f1']:.3f}")
+                try:
+                    self.status.showMessage(msg, 5000)
+                except Exception:
+                    pass
         except Exception as e:
             self.logger.warning("[Predict] Failed batch probability refresh: %s", e)
 
