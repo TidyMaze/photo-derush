@@ -36,6 +36,46 @@ class PersonalLearner:
         self._buffer_max = 32
         self.proba_clip = (0.01, 0.99)
 
+    def full_retrain(self, X, y):
+        """Full retrain (scaler + model) on entire dataset X,y.
+        Adjusts n_features if incoming feature length differs; replaces scaler/model.
+        Returns self."""
+        import numpy as _np
+        X_arr = _np.asarray(X, dtype=_np.float64)
+        y_arr = _np.asarray(y, dtype=_np.int64)
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(1, -1)
+        if X_arr.size == 0:
+            logger.info('[Learner][FullRetrain] Empty dataset -> skip')
+            return self
+        if X_arr.shape[1] != self.n_features:
+            logger.info('[Learner][FullRetrain] Feature dim change %d -> %d', self.n_features, X_arr.shape[1])
+            self.n_features = X_arr.shape[1]
+        # Fresh scaler & model
+        from sklearn.preprocessing import StandardScaler as _SS
+        from sklearn.linear_model import SGDClassifier as _SGD
+        self.scaler = _SS(with_mean=True, with_std=True)
+        self.model = _SGD(
+            loss='log_loss',
+            max_iter=20,
+            warm_start=False,
+            alpha=0.01,
+            learning_rate='adaptive',
+            eta0=0.01,
+            power_t=0.5,
+            early_stopping=False,
+            verbose=0,
+        )
+        self.scaler.fit(X_arr)
+        Xs = self.scaler.transform(X_arr)
+        self.model.fit(Xs, y_arr)
+        # Rebuild recent buffer tail
+        self._recent_X = [row.copy() for row in Xs[-self._buffer_max:]]
+        self._recent_y = [int(lbl) for lbl in y_arr[-self._buffer_max:]]
+        self._is_initialized = True
+        logger.info('[Learner][FullRetrain] Trained on %d samples (n_features=%d)', len(Xs), self.n_features)
+        return self
+
     def partial_fit(self, X, y):
         # Backward compatibility: ensure new attributes exist on legacy loaded instances
         if not hasattr(self, 'feature_names'):
