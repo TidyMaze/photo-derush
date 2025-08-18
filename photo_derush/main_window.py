@@ -137,6 +137,59 @@ class LightroomMainWindow(QMainWindow):
             first = self.get_current_image()
             if first:
                 self._schedule_feature_extraction(os.path.join(self.directory, first))
+        # Initial status
+        self._update_status_bar()
+
+    def _update_status_bar(self, action: str | None = None):
+        if not hasattr(self, 'status') or self.status is None:
+            return
+        total = len(self.sorted_images)
+        idx = self.current_img_idx + 1 if 0 <= self.current_img_idx < total else 0
+        keep = sum(1 for v in self.labels_map.values() if v == 1)
+        trash = sum(1 for v in self.labels_map.values() if v == 0)
+        unsure = sum(1 for v in self.labels_map.values() if v == -1)
+        labeled_def = keep + trash
+        balance_pct = (keep / labeled_def * 100.0) if labeled_def else 0.0
+        counts = self._definitive_label_counts()
+        MIN_CLASS = 10
+        if self.learner is None:
+            model_state = f"model:none needT={max(0,MIN_CLASS-counts[0])} needK={max(0,MIN_CLASS-counts[1])}"
+        elif not getattr(self, '_cold_start_completed', False):
+            need0 = max(0, MIN_CLASS - counts[0])
+            need1 = max(0, MIN_CLASS - counts[1])
+            model_state = f"model:warm needT={need0} needK={need1}"
+        else:
+            model_state = "model:ready"
+        if self.sort_by_group:
+            mode = 'mode:group'
+        else:
+            mode = f"mode:{getattr(self, '_last_sort_mode', 'init')}"
+        m = getattr(self, '_last_metrics', {}) or {}
+        metrics_part = ''
+        if m.get('samples'):
+            # Guard against missing keys or non-finite values
+            import math as _math
+            def _fmt(v):
+                try:
+                    return f"{v:.3f}" if v is not None and _math.isfinite(float(v)) else 'nan'
+                except Exception:
+                    return 'nan'
+            metrics_part = (f" n={m.get('samples')} acc={_fmt(m.get('acc'))} p={_fmt(m.get('prec'))} r={_fmt(m.get('rec'))} "
+                             f"f1={_fmt(m.get('f1'))} pos={_fmt(m.get('pos_rate'))} ll={_fmt(m.get('logloss'))} br={_fmt(m.get('brier'))}")
+        pending = len(getattr(self, '_pending_feature_tasks', []))
+        feat_part = f" fp={pending}" if pending else ''
+        cache_sz = len(getattr(self, '_feature_cache', {}) or {})
+        cache_part = f" fc={cache_sz}" if cache_sz else ''
+        # Progress detail toward cold start threshold (definitive label counts)
+        progress_part = f" prog={counts[0]}/{counts[1]}" if not getattr(self, '_cold_start_completed', False) else ''
+        core = (f"{idx}/{total} L={labeled_def}(K{keep}/T{trash}/U{unsure}) bal={balance_pct:.1f}% {mode} "
+                f"{model_state}{progress_part}{metrics_part}{feat_part}{cache_part}")
+        if action:
+            core += f" | {action}"
+        try:
+            self.status.showMessage(core)
+        except Exception:
+            pass
 
     def _compute_sorted_images(self):
         if self.sort_by_group and self.image_info:
@@ -174,6 +227,7 @@ class LightroomMainWindow(QMainWindow):
         self.refresh_keep_prob()
         # Also update probabilities for all thumbnails
         self._refresh_all_keep_probs()
+        self._update_status_bar(action='images loaded')
 
     def _definitive_label_counts(self):
         counts = {0: 0, 1: 0}
@@ -475,6 +529,7 @@ class LightroomMainWindow(QMainWindow):
             # Batch refresh all visible thumbs (always refresh after any label change)
             self._refresh_all_keep_probs()
             logging.info("[Label] Updated keep probabilities for all images in grid after labeling %s", img_name)
+        self._update_status_bar(action=f"labeled {img_name}={label}")
 
     def _evaluate_model(self):
         """Evaluate current learner on latest definitive labeled events (0/1) only.
@@ -575,17 +630,15 @@ class LightroomMainWindow(QMainWindow):
             prob_map = {n: float(p) for n, p in zip(names, probs)}
             self.image_grid.update_keep_probabilities(prob_map)
             logging.info("Done updating proba in grid for %d images", len(prob_map))
-            # After updating probabilities, evaluate model and show metrics (if available)
+            # After updating probabilities, evaluate model and store metrics; status updated centrally
             metrics = self._evaluate_model()
-            if metrics and self.status:
-                msg = (f"Probas updated ({len(prob_map)} images) acc={metrics['acc']:.3f} "
-                       f"prec={metrics['prec']:.3f} rec={metrics['rec']:.3f} f1={metrics['f1']:.3f}")
-                try:
-                    self.status.showMessage(msg, 5000)
-                except Exception:
-                    pass
+            if metrics:
+                self._update_status_bar(action="probas updated")
+            else:
+                self._update_status_bar(action="probas updated (no metrics)")
         except Exception as e:
             self.logger.warning("[Predict] Failed batch probability refresh: %s", e)
+            self._update_status_bar(action="proba refresh failed")
 
     def refresh_keep_prob(self):
         img_name = self.get_current_image()
@@ -748,15 +801,20 @@ class LightroomMainWindow(QMainWindow):
             if self.sort_by_group:
                 self.sorted_images = self._compute_sorted_images()
             self.image_grid.populate_grid()
+        self._update_status_bar(action='group on' if checked else 'group off')
 
     def on_predict_sort_clicked(self):  # backward compat legacy action
         self.on_predict_sort_desc()
 
     def on_predict_sort_desc(self):
         self._sort_by_probability(desc=True)
+        self._last_sort_mode = 'prob_desc'
+        self._update_status_bar(action='sorted desc')
 
     def on_predict_sort_asc(self):
         self._sort_by_probability(desc=False)
+        self._last_sort_mode = 'prob_asc'
+        self._update_status_bar(action='sorted asc')
 
     def on_export_csv_clicked(self):
         rows = []
