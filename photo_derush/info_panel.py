@@ -1,3 +1,5 @@
+import logging
+
 from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
 from .utils import extract_exif, format_gps_info
 
@@ -16,6 +18,9 @@ class InfoPanel(QWidget):
 
     def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None, keep_prob=None):
         exif = extract_exif(img_path)
+
+        logging.info(f"Exif of {img_name} ({img_path}): {exif}")
+
         # Define important EXIF fields in order, with emojis
         important_fields = [
             ("DateTimeOriginal", "📅"),
