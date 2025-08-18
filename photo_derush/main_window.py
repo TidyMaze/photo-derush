@@ -182,8 +182,14 @@ class LightroomMainWindow(QMainWindow):
         cache_part = f" fc={cache_sz}" if cache_sz else ''
         # Progress detail toward cold start threshold (definitive label counts)
         progress_part = f" prog={counts[0]}/{counts[1]}" if not getattr(self, '_cold_start_completed', False) else ''
+        rl_part = ''
+        if hasattr(self, '_last_retrain_final_loss') and self._last_retrain_final_loss is not None:
+            try:
+                rl_part = f" rl={self._last_retrain_final_loss:.4f}"
+            except Exception:
+                rl_part = ''
         core = (f"{idx}/{total} L={labeled_def}(K{keep}/T{trash}/U{unsure}) bal={balance_pct:.1f}% {mode} "
-                f"{model_state}{progress_part}{metrics_part}{feat_part}{cache_part}")
+                f"{model_state}{progress_part}{metrics_part}{feat_part}{cache_part}{rl_part}")
         if action:
             core += f" | {action}"
         try:
@@ -516,6 +522,8 @@ class LightroomMainWindow(QMainWindow):
                         if Xf:
                             self.logger.info("[Training] Full retrain (samples=%d n_features=%d countsT=%d countsK=%d)", len(Xf), target_len, counts[0], counts[1])
                             self.learner.full_retrain(Xf, yf)
+                            if getattr(self.learner, 'last_retrain_loss_curve', None):
+                                self._last_retrain_final_loss = self.learner.last_retrain_loss_curve[-1]
                             self._debounced_save_model()
                             self.logger.info("[Training] Model saved after full retrain")
                             self._evaluate_model()

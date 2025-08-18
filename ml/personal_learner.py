@@ -35,12 +35,16 @@ class PersonalLearner:
         self._recent_y = []
         self._buffer_max = 32
         self.proba_clip = (0.01, 0.99)
+        self.last_retrain_loss_curve = []  # list of per-epoch losses
 
     def full_retrain(self, X, y):
-        """Full retrain (scaler + model) on entire dataset X,y.
-        Adjusts n_features if incoming feature length differs; replaces scaler/model.
+        """Full retrain (scaler + model) on entire dataset X,y using iterative SGD epochs.
+        Logs per-epoch log loss and stores in last_retrain_loss_curve.
         Returns self."""
         import numpy as _np
+        from sklearn.preprocessing import StandardScaler as _SS
+        from sklearn.linear_model import SGDClassifier as _SGD
+        from sklearn.metrics import log_loss as _log_loss
         X_arr = _np.asarray(X, dtype=_np.float64)
         y_arr = _np.asarray(y, dtype=_np.int64)
         if X_arr.ndim == 1:
@@ -51,29 +55,47 @@ class PersonalLearner:
         if X_arr.shape[1] != self.n_features:
             logger.info('[Learner][FullRetrain] Feature dim change %d -> %d', self.n_features, X_arr.shape[1])
             self.n_features = X_arr.shape[1]
-        # Fresh scaler & model
-        from sklearn.preprocessing import StandardScaler as _SS
-        from sklearn.linear_model import SGDClassifier as _SGD
+        # Reset scaler & model
         self.scaler = _SS(with_mean=True, with_std=True)
+        self.scaler.fit(X_arr)
+        Xs = self.scaler.transform(X_arr)
+        # Fresh SGD with single-epoch step; we'll iterate manually
         self.model = _SGD(
             loss='log_loss',
-            max_iter=20,
-            warm_start=False,
+            max_iter=1,
+            warm_start=True,
             alpha=0.01,
             learning_rate='adaptive',
             eta0=0.01,
             power_t=0.5,
             early_stopping=False,
             verbose=0,
+            shuffle=True,
+            random_state=42,
         )
-        self.scaler.fit(X_arr)
-        Xs = self.scaler.transform(X_arr)
-        self.model.fit(Xs, y_arr)
-        # Rebuild recent buffer tail
+        epochs = 12  # modest number to balance speed & convergence
+        self.last_retrain_loss_curve = []
+        for epoch in range(epochs):
+            if epoch == 0:
+                self.model.partial_fit(Xs, y_arr, classes=self.classes)
+            else:
+                self.model.partial_fit(Xs, y_arr)
+            try:
+                probs = self.model.predict_proba(Xs)
+                # clip to avoid log(0)
+                eps = 1e-9
+                probs = _np.clip(probs, eps, 1 - eps)
+                loss = float(_log_loss(y_arr, probs, labels=[0,1]))
+            except Exception as e:  # noqa: PERF203
+                loss = float('nan')
+                logger.info('[Learner][FullRetrain] Loss computation failed epoch=%d: %s', epoch+1, e)
+            self.last_retrain_loss_curve.append(loss)
+            logger.info('[Learner][FullRetrain][Epoch %d/%d] logloss=%.4f', epoch+1, epochs, loss)
+        # Update recent buffer
         self._recent_X = [row.copy() for row in Xs[-self._buffer_max:]]
         self._recent_y = [int(lbl) for lbl in y_arr[-self._buffer_max:]]
         self._is_initialized = True
-        logger.info('[Learner][FullRetrain] Trained on %d samples (n_features=%d)', len(Xs), self.n_features)
+        logger.info('[Learner][FullRetrain] Completed %d epochs on %d samples (n_features=%d final_loss=%.4f)', epochs, len(Xs), self.n_features, self.last_retrain_loss_curve[-1] if self.last_retrain_loss_curve else float('nan'))
         return self
 
     def partial_fit(self, X, y):
