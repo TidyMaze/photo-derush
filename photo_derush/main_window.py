@@ -400,23 +400,22 @@ class LightroomMainWindow(QMainWindow):
             vec_cached, keys_cached = cached[1]
             cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
             combined_len = len(self._combined_feature_names)
-            # Accept either legacy CV-only or combined schema
-            if list(keys_cached) == list(_NEW_FEATURE_NAMES) or list(keys_cached) == list(self._combined_feature_names):
-                self.logger.debug('[FeatureCache] HIT sync path=%s len=%s', img_path, cached_len)
-                return cached[1]
-            purge = False
-            # Only purge if length is unrecognized OR learner expects different length
-            if cached_len not in (len(_NEW_FEATURE_NAMES), combined_len):
-                purge = True
-            elif isinstance(self.learner, PersonalLearner):
-                expected = getattr(self.learner, 'n_features', combined_len)
-                if cached_len != expected:
-                    purge = True
-            if not purge:
-                self.logger.debug('[FeatureCache] Accepting cached vector despite key mismatch path=%s len=%s', img_path, cached_len)
-                return cached[1]
-            self.logger.info('[FeatureCache] Purging cached vector (schema mismatch) path=%s len=%s', img_path, cached_len)
-            self._feature_cache.pop(img_path, None)
+            # If legacy smaller than combined schema, force upgrade (treat as miss)
+            if cached_len is not None and cached_len < combined_len:
+                self.logger.info('[FeatureCache] Upgrade miss (legacy len=%d < combined len=%d) path=%s', cached_len, combined_len, img_path)
+                self._feature_cache.pop(img_path, None)
+            else:
+                if cached_len == combined_len and list(keys_cached) == list(self._combined_feature_names):
+                    self.logger.debug('[FeatureCache] HIT sync path=%s len=%s', img_path, cached_len)
+                    return cached[1]
+                # Unrecognized length -> purge
+                if cached_len != combined_len:
+                    self.logger.info('[FeatureCache] Purging cached vector (schema mismatch) path=%s len=%s expected_len=%s', img_path, cached_len, combined_len)
+                    self._feature_cache.pop(img_path, None)
+                else:
+                    # Same length but keys mismatch – accept anyway
+                    self.logger.debug('[FeatureCache] Accepting cached vector despite key mismatch path=%s len=%s', img_path, cached_len)
+                    return cached[1]
         vec, keys = feature_vector(img_path)
         self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
@@ -435,21 +434,19 @@ class LightroomMainWindow(QMainWindow):
             vec_cached, keys_cached = cached[1]
             cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
             combined_len = len(self._combined_feature_names)
-            if list(keys_cached) == list(_NEW_FEATURE_NAMES) or list(keys_cached) == list(self._combined_feature_names):
-                self.logger.debug('[FeatureCache] HIT async path=%s len=%s', img_path, cached_len)
-                return cached[1]
-            purge = False
-            if cached_len not in (len(_NEW_FEATURE_NAMES), combined_len):
-                purge = True
-            elif isinstance(self.learner, PersonalLearner):
-                expected = getattr(self.learner, 'n_features', combined_len)
-                if cached_len != expected:
-                    purge = True
-            if not purge:
-                self.logger.debug('[FeatureCache] Accepting cached vector despite key mismatch (async) path=%s len=%s', img_path, cached_len)
-                return cached[1]
-            self.logger.info('[FeatureCache] Purging cached vector (schema mismatch, async path) path=%s len=%s', img_path, cached_len)
-            self._feature_cache.pop(img_path, None)
+            if cached_len is not None and cached_len < combined_len:
+                self.logger.info('[FeatureCache] Upgrade miss (legacy len=%d < combined len=%d) path=%s (async)', cached_len, combined_len, img_path)
+                self._feature_cache.pop(img_path, None)
+            else:
+                if cached_len == combined_len and list(keys_cached) == list(self._combined_feature_names):
+                    self.logger.debug('[FeatureCache] HIT async path=%s len=%s', img_path, cached_len)
+                    return cached[1]
+                if cached_len != combined_len:
+                    self.logger.info('[FeatureCache] Purging cached vector (schema mismatch, async) path=%s len=%s expected_len=%s', img_path, cached_len, combined_len)
+                    self._feature_cache.pop(img_path, None)
+                else:
+                    self.logger.debug('[FeatureCache] Accepting cached vector despite key mismatch (async) path=%s len=%s', img_path, cached_len)
+                    return cached[1]
         if require_sync:
             return self._get_feature_vector_sync(img_path)
         self._schedule_feature_extraction(img_path)
