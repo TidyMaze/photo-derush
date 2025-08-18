@@ -36,10 +36,12 @@ class PersonalLearner:
         self._buffer_max = 32
         self.proba_clip = (0.01, 0.99)
         self.last_retrain_loss_curve = []  # list of per-epoch losses
+        self.last_retrain_early_stopped = False
+        self.last_retrain_epochs_run = 0
 
     def full_retrain(self, X, y):
         """Full retrain (scaler + model) on entire dataset X,y using iterative SGD epochs.
-        Logs per-epoch log loss and stores in last_retrain_loss_curve.
+        Early stopping based on log-loss improvement. Stores per-epoch losses in last_retrain_loss_curve.
         Returns self."""
         import numpy as _np
         from sklearn.preprocessing import StandardScaler as _SS
@@ -73,16 +75,21 @@ class PersonalLearner:
             shuffle=True,
             random_state=42,
         )
-        epochs = 12  # modest number to balance speed & convergence
+        max_epochs = 80  # higher cap; early stopping will usually cut earlier
+        patience = 10
+        min_delta = 1e-4
         self.last_retrain_loss_curve = []
-        for epoch in range(epochs):
+        self.last_retrain_early_stopped = False
+        self.last_retrain_epochs_run = 0
+        best_loss = float('inf')
+        epochs_since_improve = 0
+        for epoch in range(max_epochs):
             if epoch == 0:
                 self.model.partial_fit(Xs, y_arr, classes=self.classes)
             else:
                 self.model.partial_fit(Xs, y_arr)
             try:
                 probs = self.model.predict_proba(Xs)
-                # clip to avoid log(0)
                 eps = 1e-9
                 probs = _np.clip(probs, eps, 1 - eps)
                 loss = float(_log_loss(y_arr, probs, labels=[0,1]))
@@ -90,12 +97,26 @@ class PersonalLearner:
                 loss = float('nan')
                 logger.info('[Learner][FullRetrain] Loss computation failed epoch=%d: %s', epoch+1, e)
             self.last_retrain_loss_curve.append(loss)
-            logger.info('[Learner][FullRetrain][Epoch %d/%d] logloss=%.4f', epoch+1, epochs, loss)
+            self.last_retrain_epochs_run = epoch + 1
+            logger.info('[Learner][FullRetrain][Epoch %d/%d] logloss=%.4f', epoch+1, max_epochs, loss)
+            # Early stopping logic (only if loss is finite)
+            if loss == loss:  # not NaN
+                if loss + min_delta < best_loss:
+                    best_loss = loss
+                    epochs_since_improve = 0
+                else:
+                    epochs_since_improve += 1
+                    if epochs_since_improve >= patience:
+                        self.last_retrain_early_stopped = True
+                        logger.info('[Learner][FullRetrain] Early stopping at epoch %d (best_loss=%.4f)', epoch+1, best_loss)
+                        break
         # Update recent buffer
         self._recent_X = [row.copy() for row in Xs[-self._buffer_max:]]
         self._recent_y = [int(lbl) for lbl in y_arr[-self._buffer_max:]]
         self._is_initialized = True
-        logger.info('[Learner][FullRetrain] Completed %d epochs on %d samples (n_features=%d final_loss=%.4f)', epochs, len(Xs), self.n_features, self.last_retrain_loss_curve[-1] if self.last_retrain_loss_curve else float('nan'))
+        final_loss = self.last_retrain_loss_curve[-1] if self.last_retrain_loss_curve else float('nan')
+        logger.info('[Learner][FullRetrain] Finished epochs=%d early_stopped=%s samples=%d n_features=%d final_loss=%.4f',
+                    self.last_retrain_epochs_run, self.last_retrain_early_stopped, len(Xs), self.n_features, final_loss)
         return self
 
     def partial_fit(self, X, y):
