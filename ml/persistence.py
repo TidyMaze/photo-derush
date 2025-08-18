@@ -12,6 +12,7 @@ FEATURE_CACHE_PATH = 'ml/feature_cache.json'
 logger = logging.getLogger(__name__)
 
 _save_lock = Lock()
+_feature_cache_lock = Lock()
 
 def save_model(model):
     with _save_lock:
@@ -162,30 +163,31 @@ def load_feature_cache():
     return cache
 
 def persist_feature_cache_entry(path: str, mtime: float, fv, keys):
-    """Persist/append a single feature cache entry (atomic replace)."""
+    """Persist/append a single feature cache entry (atomic replace). Thread-safe."""
     try:
-        existing = {}
-        if os.path.exists(FEATURE_CACHE_PATH):
+        with _feature_cache_lock:
+            existing = {}
+            if os.path.exists(FEATURE_CACHE_PATH):
+                try:
+                    with open(FEATURE_CACHE_PATH, 'r') as f:
+                        existing = json.load(f) or {}
+                except Exception:
+                    existing = {}
+            # Normalize vector to list
             try:
-                with open(FEATURE_CACHE_PATH, 'r') as f:
-                    existing = json.load(f) or {}
+                import numpy as _np
+                if hasattr(fv, 'tolist'):
+                    fv_ser = fv.tolist()
+                elif isinstance(fv, _np.ndarray):
+                    fv_ser = fv.astype(float).tolist()
+                else:
+                    fv_ser = list(fv)
             except Exception:
-                existing = {}
-        # Normalize vector to list
-        try:
-            import numpy as _np
-            if hasattr(fv, 'tolist'):
-                fv_ser = fv.tolist()
-            elif isinstance(fv, _np.ndarray):
-                fv_ser = fv.astype(float).tolist()
-            else:
-                fv_ser = list(fv)
-        except Exception:
-            fv_ser = fv if isinstance(fv, list) else []
-        existing[path] = {'mtime': mtime, 'fv': fv_ser, 'keys': keys}
-        tmp = FEATURE_CACHE_PATH + '.tmp'
-        with open(tmp, 'w') as f:
-            json.dump(existing, f)
-        os.replace(tmp, FEATURE_CACHE_PATH)
+                fv_ser = fv if isinstance(fv, list) else []
+            existing[path] = {'mtime': mtime, 'fv': fv_ser, 'keys': keys}
+            tmp = FEATURE_CACHE_PATH + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(existing, f)
+            os.replace(tmp, FEATURE_CACHE_PATH)
     except Exception:
         logger.info('[FeatureCache] Failed to persist entry for %s', path)

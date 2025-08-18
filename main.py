@@ -14,7 +14,7 @@ import time
 if not logging.getLogger().handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-MAX_IMAGES = 200
+MAX_IMAGES = 400
 
 # Added for tests expecting this helper
 _thumbnail_mem_cache = {}

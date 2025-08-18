@@ -92,7 +92,13 @@ class PersonalLearner:
                 probs = self.model.predict_proba(Xs)
                 eps = 1e-9
                 probs = _np.clip(probs, eps, 1 - eps)
-                loss = float(_log_loss(y_arr, probs, labels=[0,1]))
+                # Manual log loss (cross-entropy) to avoid potential segfaults in sklearn.log_loss on tiny datasets
+                # Equivalent to sklearn's log_loss for binary labels 0/1 with provided probs.
+                if len(y_arr) >= 1:
+                    chosen = probs[_np.arange(len(y_arr)), y_arr]
+                    loss = float(-_np.mean(_np.log(chosen)))
+                else:
+                    loss = float('nan')
             except Exception as e:  # noqa: PERF203
                 loss = float('nan')
                 logger.info('[Learner][FullRetrain] Loss computation failed epoch=%d: %s', epoch+1, e)
