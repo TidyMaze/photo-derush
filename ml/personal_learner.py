@@ -248,3 +248,28 @@ class PersonalLearner:
         import joblib
         logger.info("[Learner] Loading model from %s", path)
         return joblib.load(path)
+
+    def explain_feature_importance(self, top_n=None):
+        """Return a sorted list of (feature, importance) pairs after training."""
+        if not hasattr(self.model, 'coef_'):
+            logger.warning("[Learner][Explain] Model is not trained yet; no coefficients available.")
+            return []
+        importances = np.abs(self.model.coef_)
+        # For binary classification, coef_ shape is (1, n_features)
+        if importances.ndim == 2 and importances.shape[0] == 1:
+            importances = importances[0]
+        if self.feature_names is not None and len(self.feature_names) == len(importances):
+            features = self.feature_names
+        else:
+            features = [f"feature_{i}" for i in range(len(importances))]
+        importance_pairs = list(zip(features, importances))
+        importance_pairs.sort(key=lambda x: x[1], reverse=True)
+        if top_n is not None:
+            importance_pairs = importance_pairs[:top_n]
+        logger.info("[Learner][Explain] Feature importances: %s", importance_pairs)
+        return importance_pairs
+
+    def train_and_explain(self, X, y, top_n=None):
+        """Train the model and return sorted feature importances."""
+        self.full_retrain(X, y)
+        return self.explain_feature_importance(top_n=top_n)

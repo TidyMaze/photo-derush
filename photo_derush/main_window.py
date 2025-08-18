@@ -519,9 +519,8 @@ class LightroomMainWindow(QMainWindow):
                         yf = [yy for x, yy in zip(X_all, y_all) if isinstance(x, list) and len(x)==target_len]
                         if Xf:
                             self.logger.info("[Training] Full retrain (samples=%d n_features=%d countsT=%d countsK=%d)", len(Xf), target_len, counts[0], counts[1])
-                            self.learner.full_retrain(Xf, yf)
-                            if getattr(self.learner, 'last_retrain_loss_curve', None):
-                                self._last_retrain_final_loss = self.learner.last_retrain_loss_curve[-1]
+                            importances = self.learner.train_and_explain(Xf, yf)
+                            self.logger.info("[Training] Feature importances: %s", importances)
                             self._debounced_save_model()
                             self.logger.info("[Training] Model saved after full retrain")
                             self._evaluate_model()
