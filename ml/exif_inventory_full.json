@@ -1,0 +1,327 @@
+{
+  "total_paths": 514,
+  "missing_files": 58,
+  "images_with_exif": 399,
+  "unique_tag_ids": 58,
+  "unique_tag_names": 58,
+  "tag_frequency": [
+    [
+      "GPSInfo",
+      399
+    ],
+    [
+      "ExifOffset",
+      399
+    ],
+    [
+      "Make",
+      399
+    ],
+    [
+      "Model",
+      399
+    ],
+    [
+      "Orientation",
+      399
+    ],
+    [
+      "DateTime",
+      399
+    ],
+    [
+      "DateTimeOriginal",
+      399
+    ],
+    [
+      "DateTimeDigitized",
+      399
+    ],
+    [
+      "OffsetTime",
+      399
+    ],
+    [
+      "OffsetTimeOriginal",
+      399
+    ],
+    [
+      "OffsetTimeDigitized",
+      399
+    ],
+    [
+      "SubsecTime",
+      399
+    ],
+    [
+      "SubsecTimeOriginal",
+      399
+    ],
+    [
+      "SubsecTimeDigitized",
+      399
+    ],
+    [
+      "ResolutionUnit",
+      398
+    ],
+    [
+      "Software",
+      398
+    ],
+    [
+      "YCbCrPositioning",
+      398
+    ],
+    [
+      "XResolution",
+      398
+    ],
+    [
+      "YResolution",
+      398
+    ],
+    [
+      "ExifVersion",
+      398
+    ],
+    [
+      "ComponentsConfiguration",
+      398
+    ],
+    [
+      "ShutterSpeedValue",
+      398
+    ],
+    [
+      "ApertureValue",
+      398
+    ],
+    [
+      "BrightnessValue",
+      398
+    ],
+    [
+      "ExposureBiasValue",
+      398
+    ],
+    [
+      "MaxApertureValue",
+      398
+    ],
+    [
+      "SubjectDistance",
+      398
+    ],
+    [
+      "MeteringMode",
+      398
+    ],
+    [
+      "Flash",
+      398
+    ],
+    [
+      "FocalLength",
+      398
+    ],
+    [
+      "ColorSpace",
+      398
+    ],
+    [
+      "ExifImageWidth",
+      398
+    ],
+    [
+      "SceneCaptureType",
+      398
+    ],
+    [
+      "ExifImageHeight",
+      398
+    ],
+    [
+      "SensingMethod",
+      398
+    ],
+    [
+      "ExposureTime",
+      398
+    ],
+    [
+      "FNumber",
+      398
+    ],
+    [
+      "SceneType",
+      398
+    ],
+    [
+      "ExposureProgram",
+      398
+    ],
+    [
+      "CustomRendered",
+      398
+    ],
+    [
+      "ISOSpeedRatings",
+      398
+    ],
+    [
+      "ExposureMode",
+      398
+    ],
+    [
+      "FlashPixVersion",
+      398
+    ],
+    [
+      "WhiteBalance",
+      398
+    ],
+    [
+      "LensMake",
+      398
+    ],
+    [
+      "LensModel",
+      398
+    ],
+    [
+      "DigitalZoomRatio",
+      398
+    ],
+    [
+      "FocalLengthIn35mmFilm",
+      398
+    ],
+    [
+      "Contrast",
+      398
+    ],
+    [
+      "Saturation",
+      398
+    ],
+    [
+      "Sharpness",
+      398
+    ],
+    [
+      "SubjectDistanceRange",
+      398
+    ],
+    [
+      "CompositeImage",
+      398
+    ],
+    [
+      "ImageWidth",
+      8
+    ],
+    [
+      "ImageLength",
+      8
+    ],
+    [
+      "ExifInteroperabilityOffset",
+      1
+    ],
+    [
+      "ImageUniqueID",
+      1
+    ],
+    [
+      "LightSource",
+      1
+    ]
+  ],
+  "sample_values": {
+    "GPSInfo": {
+      "0": "b'\\x02\\x02\\x00\\x00'",
+      "1": "N",
+      "2": [
+        "47.0",
+        "13.0",
+        "37.22"
+      ],
+      "3": "W",
+      "4": [
+        "1.0",
+        "34.0",
+        "20.27"
+      ],
+      "5": "b'\\x00'",
+      "6": "87.5",
+      "7": [
+        "20.0",
+        "14.0",
+        "18.0"
+      ],
+      "16": "M",
+      "17": "97.0",
+      "29": "2025:06:29"
+    },
+    "ResolutionUnit": 2,
+    "ExifOffset": 218,
+    "Make": "Google",
+    "Model": "Pixel 7",
+    "Software": "HDR+ 1.0.773153310zd",
+    "Orientation": 1,
+    "DateTime": "2025:06:29 22:14:21",
+    "YCbCrPositioning": 1,
+    "XResolution": "72.0",
+    "YResolution": "72.0",
+    "ExifVersion": "b'0232'",
+    "ComponentsConfiguration": "b'\\x01\\x02\\x03\\x00'",
+    "ShutterSpeedValue": "5.21",
+    "DateTimeOriginal": "2025:06:29 22:14:21",
+    "DateTimeDigitized": "2025:06:29 22:14:21",
+    "ApertureValue": "1.78",
+    "BrightnessValue": "-2.49",
+    "ExposureBiasValue": "0.0",
+    "MaxApertureValue": "1.78",
+    "SubjectDistance": "4.399",
+    "MeteringMode": 2,
+    "Flash": 16,
+    "FocalLength": "6.81",
+    "ColorSpace": 65535,
+    "ExifImageWidth": 3072,
+    "SceneCaptureType": 0,
+    "OffsetTime": "+02:00",
+    "OffsetTimeOriginal": "+02:00",
+    "OffsetTimeDigitized": "+02:00",
+    "SubsecTime": "816",
+    "SubsecTimeOriginal": "816",
+    "SubsecTimeDigitized": "816",
+    "ExifImageHeight": 4080,
+    "SensingMethod": 2,
+    "ExposureTime": "0.026997",
+    "FNumber": "1.85",
+    "SceneType": "b'\\x01'",
+    "ExposureProgram": 2,
+    "CustomRendered": 1,
+    "ISOSpeedRatings": 2220,
+    "ExposureMode": 0,
+    "FlashPixVersion": "b'0100'",
+    "WhiteBalance": 0,
+    "LensMake": "Google",
+    "LensModel": "Pixel 7 back camera 6.81mm f/1.85",
+    "DigitalZoomRatio": "0.0",
+    "FocalLengthIn35mmFilm": 24,
+    "Contrast": 0,
+    "Saturation": 0,
+    "Sharpness": 0,
+    "SubjectDistanceRange": 3,
+    "CompositeImage": 3,
+    "ImageWidth": 4080,
+    "ImageLength": 3072,
+    "ExifInteroperabilityOffset": 1206,
+    "ImageUniqueID": "3a8a29f650605d910000000000000000",
+    "LightSource": 0
+  },
+  "per_image_tag_count_min": 17,
+  "per_image_tag_count_max": 55
+}
