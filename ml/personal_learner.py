@@ -68,7 +68,7 @@ class PersonalLearner:
             warm_start=True,
             alpha=0.01,
             learning_rate='adaptive',
-            eta0=0.01,
+            eta0=0.001,
             power_t=0.5,
             early_stopping=False,
             verbose=0,
