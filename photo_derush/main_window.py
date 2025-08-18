@@ -9,8 +9,6 @@ import json
 from ml.features_cv import compute_feature_vector
 from ml.features_cv import FEATURE_NAMES as _NEW_FEATURE_NAMES
 # Backward compatibility: expose feature_vector symbol (tests may monkeypatch it)
-def feature_vector(path):  # pragma: no cover - legacy shim
-    return compute_feature_vector(path)
 from ml.personal_learner import PersonalLearner
 from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log
 from ml.persistence import load_model
