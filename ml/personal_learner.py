@@ -85,6 +85,24 @@ class PersonalLearner:
                         self.feature_names = list(_CV_FN)
             except Exception:  # noqa: PERF203
                 pass
+        # --- New: log dataset snapshot as DataFrame prior to training ---
+        try:  # noqa: PERF203
+            import pandas as _pd
+            if self.feature_names is not None and len(self.feature_names) == X_arr.shape[1]:
+                cols = list(self.feature_names)
+            else:
+                cols = [f'f{i}' for i in range(X_arr.shape[1])]
+            _df = _pd.DataFrame(X_arr, columns=cols)
+            _df['label'] = y_arr
+            # Limit very large outputs to avoid log spam
+            MAX_ROWS_LOG = 200
+            shown_df = _df if len(_df) <= MAX_ROWS_LOG else _df.head(MAX_ROWS_LOG)
+            logger.info('[Learner][Dataset][Preview] rows=%d cols=%d (showing %d)\n%s', len(_df), X_arr.shape[1], len(shown_df), shown_df.to_string(index=False))
+            if len(_df) > MAX_ROWS_LOG:
+                logger.info('[Learner][Dataset][Preview] (truncated additional %d rows)', len(_df) - MAX_ROWS_LOG)
+        except Exception as e:  # noqa: PERF203
+            logger.info('[Learner][Dataset] Failed to build DataFrame preview: %s', e)
+        # ---------------------------------------------------------------
         # Reset scaler & model
         self.scaler = _SS(with_mean=True, with_std=True)
         self.scaler.fit(X_arr)
