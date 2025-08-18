@@ -142,6 +142,8 @@ class LightroomMainWindow(QMainWindow):
             first = self.get_current_image()
             if first:
                 self._schedule_feature_extraction(os.path.join(self.directory, first))
+                # Populate info panel (EXIF + placeholder prob) immediately
+                self.refresh_keep_prob()
         # Initial status
         self._update_status_bar()
 
@@ -683,20 +685,27 @@ class LightroomMainWindow(QMainWindow):
         if img_name is None:
             return
         self._ensure_learner()  # May initialize (untrained) or rebuild from log
-        if self.learner is None:
-            self.logger.info("[Predict] Skipping keep_prob refresh (no learner)")
-            return
         img_path = os.path.join(self.directory, img_name)
-        fv_tuple = self._get_feature_vector_sync(img_path)
-        if fv_tuple is None:
-            self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
-            return
-        fv, _ = fv_tuple
-        self.logger.info("[Predict] Computing keep probability for image=%s", img_name)
-        keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
-        self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
+        keep_prob = None
+        if self.learner is None:
+            self.logger.info("[Predict] Skipping keep_prob prediction (no learner)")
+        else:
+            fv_tuple = self._get_feature_vector_sync(img_path)
+            if fv_tuple is None:
+                self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
+            else:
+                fv, _ = fv_tuple
+                try:
+                    self.logger.info("[Predict] Computing keep probability for image=%s", img_name)
+                    keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
+                    if keep_prob is not None:
+                        self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
+                except Exception as e:  # noqa: PERF203
+                    self.logger.warning("[Predict] Prediction failed for %s: %s", img_name, e)
+        # Always update info panel (ensures EXIF is displayed even before model exists)
         self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob)
-        logging.info("[Predict] Updated keep_prob for image=%s: %.4f", img_name, keep_prob)
+        if keep_prob is not None:
+            logging.info("[Predict] Updated keep_prob for image=%s: %.4f", img_name, keep_prob)
 
     def _sort_by_probability(self, desc: bool = True):
         """Sort images by predicted keep probability (desc default). Neutral 0.5 for missing features/learner.

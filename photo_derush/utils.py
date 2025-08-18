@@ -43,20 +43,84 @@ def compute_perceptual_hash(img_path):
         return None
 
 def extract_exif(img_path):
+    """Extract EXIF metadata from an image.
+    Tries multiple Pillow APIs to maximize chance of retrieving tags.
+    Falls back gracefully to empty dict on failure.
+    """
     try:
+        # First attempt: open directly to preserve raw EXIF block
+        try:
+            with Image.open(img_path) as im:
+                # Prefer modern getexif() (returns Exif object) then legacy _getexif()
+                exif_block = None
+                try:
+                    exif_block = im.getexif()  # Pillow Exif object or empty
+                except Exception:  # noqa: PERF203
+                    exif_block = None
+                if exif_block and len(exif_block):  # Exif object behaves like dict
+                    exif = {}
+                    for tag_id, value in exif_block.items():
+                        tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                        # Attempt simple byte -> utf8 decode
+                        if isinstance(value, bytes):
+                            try:
+                                value = value.decode('utf-8', 'ignore')
+                            except Exception:  # noqa: PERF203
+                                pass
+                        exif[tag_name] = value
+                    return exif
+                # Legacy path
+                legacy = getattr(im, '_getexif', lambda: None)()
+                if legacy:
+                    exif = {}
+                    for tag, value in legacy.items():
+                        decoded = ExifTags.TAGS.get(tag, tag)
+                        if isinstance(value, bytes):
+                            try:
+                                value = value.decode('utf-8', 'ignore')
+                            except Exception:  # noqa: PERF203
+                                pass
+                        exif[decoded] = value
+                    return exif
+        except Exception:  # noqa: PERF203
+            pass
+        # Fallback: use ImageManager (may have stripped EXIF in some cases)
         img = image_manager.get_image(img_path)
         if img is None:
             logging.warning(f"Could not extract EXIF for {img_path}: image not loadable")
             return {}
-        exif_data = getattr(img, '_getexif', lambda: None)()
+        exif_data = None
+        # Try modern API
+        try:
+            exif_data = img.getexif()
+            if exif_data and len(exif_data):
+                exif = {}
+                for tag_id, value in exif_data.items():
+                    tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                    if isinstance(value, bytes):
+                        try:
+                            value = value.decode('utf-8', 'ignore')
+                        except Exception:  # noqa: PERF203
+                            pass
+                    exif[tag_name] = value
+                return exif
+        except Exception:  # noqa: PERF203
+            exif_data = None
+        if not exif_data:
+            exif_data = getattr(img, '_getexif', lambda: None)()
         if not exif_data:
             return {}
         exif = {}
         for tag, value in exif_data.items():
             decoded = ExifTags.TAGS.get(tag, tag)
+            if isinstance(value, bytes):
+                try:
+                    value = value.decode('utf-8', 'ignore')
+                except Exception:  # noqa: PERF203
+                    pass
             exif[decoded] = value
         return exif
-    except Exception as e:
+    except Exception as e:  # noqa: PERF203
         logging.warning(f"Could not extract EXIF for {img_path}: {e}")
         return {}
 
