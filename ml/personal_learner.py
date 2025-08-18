@@ -133,6 +133,7 @@ class PersonalLearner:
             X = X.reshape(1, -1)
         if X.shape[1] < self.n_features:
             pad_width = self.n_features - X.shape[1]
+            logger.warning('[Learner][Predict] Received lower-dim features (%d) than model (%d); padding with zeros', X.shape[1], self.n_features)
             X = np.hstack([X, np.zeros((X.shape[0], pad_width), dtype=X.dtype)])
         elif X.shape[1] > self.n_features:
             logger.warning('[Learner][Predict] Received higher-dim features (%d) than model (%d); truncating', X.shape[1], self.n_features)
