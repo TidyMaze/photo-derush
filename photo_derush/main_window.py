@@ -6,7 +6,7 @@ from .image_grid import ImageGrid
 from .viewer import open_full_image_qt
 import os
 import json
-from ml.features_cv import compute_feature_vector
+from ml.features import feature_vector
 from ml.features_cv import FEATURE_NAMES as _NEW_FEATURE_NAMES
 # Backward compatibility: expose feature_vector symbol (tests may monkeypatch it)
 from ml.personal_learner import PersonalLearner
@@ -34,7 +34,7 @@ class _FeatureTask(QRunnable):
 
     def run(self):  # Executes in worker thread
         try:
-            vec, keys = compute_feature_vector(self.path)
+            vec, keys = feature_vector(self.path)
             self.emitter.finished.emit(self.path, self.mtime, vec, keys)
         except Exception:
             import logging as _logging
@@ -407,7 +407,7 @@ class LightroomMainWindow(QMainWindow):
                 return cached[1]
             self.logger.info('[FeatureCache] Purging cached vector (incompatible schema) path=%s len=%s expected_len=%s', img_path, cached_len, new_len)
             self._feature_cache.pop(img_path, None)
-        vec, keys = compute_feature_vector(img_path)
+        vec, keys = feature_vector(img_path)
         self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
             persist_feature_cache_entry(img_path, mtime, vec, keys)
