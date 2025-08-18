@@ -9,6 +9,7 @@ from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt, open_full_image_q
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt_async
 from photo_derush.image_manager import image_manager
 import time
+from collections import OrderedDict
 
 # Configure logging if not already configured
 if not logging.getLogger().handlers:
@@ -17,7 +18,18 @@ if not logging.getLogger().handlers:
 MAX_IMAGES = 400
 
 # Added for tests expecting this helper
-_thumbnail_mem_cache = {}
+_MAX_THUMB_MEM = 500
+_thumbnail_mem_cache: "OrderedDict[tuple, Image.Image]" = OrderedDict()
+
+def _memoize_thumb(mem_key, img):
+    # Promote existing key
+    if mem_key in _thumbnail_mem_cache:
+        _thumbnail_mem_cache.move_to_end(mem_key)
+    else:
+        _thumbnail_mem_cache[mem_key] = img
+    # Evict oldest if over capacity
+    while len(_thumbnail_mem_cache) > _MAX_THUMB_MEM:
+        _thumbnail_mem_cache.popitem(last=False)
 
 def cache_thumbnail(src_path: str, thumb_path: str):
     """Return a PIL image object for thumbnail and whether it was loaded from cache.
@@ -32,8 +44,11 @@ def cache_thumbnail(src_path: str, thumb_path: str):
         return None, False
     mem_key = (src_path, mtime)
     if mem_key in _thumbnail_mem_cache:
+        # Promote to recent
+        img_mem = _thumbnail_mem_cache[mem_key]
+        _memoize_thumb(mem_key, img_mem)
         logger.info("Loaded cached thumbnail for %s", src_path)
-        return _thumbnail_mem_cache[mem_key], True
+        return img_mem, True
     # Ensure dir
     os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
     disk_ok = False
@@ -41,9 +56,10 @@ def cache_thumbnail(src_path: str, thumb_path: str):
         try:
             if os.path.getmtime(thumb_path) >= mtime:
                 from PIL import Image
-                img = Image.open(thumb_path)
-                img.load()
-                _thumbnail_mem_cache[mem_key] = img
+                with Image.open(thumb_path) as disk_img:
+                    disk_img.load()
+                    img = disk_img.copy()  # detach from file descriptor
+                _memoize_thumb(mem_key, img)
                 logger.info("Loaded cached thumbnail for %s", src_path)
                 return img, True
         except Exception as e:  # noqa: PERF203
@@ -55,7 +71,7 @@ def cache_thumbnail(src_path: str, thumb_path: str):
             thumb_img.save(thumb_path)
         except Exception as e:  # noqa: PERF203
             logger.info("[cache_thumbnail] Could not save thumbnail %s: %s", thumb_path, e)
-        _thumbnail_mem_cache[mem_key] = thumb_img
+        _memoize_thumb(mem_key, thumb_img)
         logger.info("Created and cached thumbnail for %s", src_path)
         return thumb_img, False
     logger.warning("[cache_thumbnail] Could not create thumbnail for %s", src_path)

@@ -115,17 +115,15 @@ class EmbeddedImageViewer(QWidget):
 
     def load_current(self):
         path = self.image_sequence[self.current_index]
-        pil_img = image_manager.get_image(path)
-        if pil_img is None:
-            self.lbl.setText(f"Failed to load image:\n{path}")
-            return
-        pil_c = pil_img.copy()
-        # Pre-scale relative to current widget size
+        # Determine target size for thumbnail (approx current widget)
         avail_w = max(100, self.width() or 1200)
         btn_h = self.buttons_widget.sizeHint().height() or 80
         avail_h = max(100, (self.height() or 800) - btn_h)
-        pil_c.thumbnail((avail_w, avail_h))
-        self.orig_pix = pil2pixmap(pil_c)
+        pil_img = image_manager.get_thumbnail(path, (avail_w, avail_h))
+        if pil_img is None:
+            self.lbl.setText(f"Failed to load image:\n{path}")
+            return
+        self.orig_pix = pil2pixmap(pil_img)
         self._rescale()
         # Nav buttons
         self.prev_btn.setEnabled(self.current_index > 0)
@@ -241,17 +239,15 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
     def load_current():
         nonlocal orig_pix, current_index
         path = image_sequence[current_index]
-        pil_img = image_manager.get_image(path)
-        if pil_img is None:
-            lbl.setText(f"Failed to load image:\n{path}")
-            return
-        pil_c = pil_img.copy()
-        # Pre-shrink based on current dialog size (approx) to reduce memory / scaling artifacts
+        # Determine target thumbnail size based on dialog dimensions
         est_btn_h = buttons_widget.sizeHint().height() or 80
         target_w = max(100, dlg.width())
         target_h = max(100, dlg.height() - est_btn_h)
-        pil_c.thumbnail((target_w, target_h))
-        orig_pix = pil2pixmap(pil_c)
+        pil_img = image_manager.get_thumbnail(path, (target_w, target_h))
+        if pil_img is None:
+            lbl.setText(f"Failed to load image:\n{path}")
+            return
+        orig_pix = pil2pixmap(pil_img)
         _scale_current_pixmap()
         # Enable / disable nav buttons
         prev_btn.setEnabled(current_index > 0)
