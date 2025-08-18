@@ -36,6 +36,49 @@ class PersonalLearner:
         self._buffer_max = 32
         self.proba_clip = (0.01, 0.99)
 
+    def full_retrain(self, X, y):
+        """Retrain scaler + model from scratch on full dataset X,y.
+        X: iterable of feature vectors (list/array); y: labels (0/1).
+        Resets internal scaler, model, buffer and sets _is_initialized True.
+        """
+        import numpy as _np
+        if not hasattr(self, 'proba_clip'):
+            self.proba_clip = (0.01, 0.99)
+        X_arr = _np.asarray(X, dtype=_np.float64)
+        y_arr = _np.asarray(y, dtype=_np.int64)
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(1, -1)
+        # Handle feature length changes (expand model capacity)
+        if X_arr.shape[1] != self.n_features:
+            logger.info('[Learner][FullRetrain] Adjusting feature dim %d -> %d', self.n_features, X_arr.shape[1])
+            self.n_features = X_arr.shape[1]
+        # Reset scaler & model
+        from sklearn.preprocessing import StandardScaler as _SS
+        from sklearn.linear_model import SGDClassifier as _SGD
+        self.scaler = _SS(with_mean=True, with_std=True)
+        # Use more iterations for a fuller fit, disable warm_start for clean training
+        self.model = _SGD(
+            loss='log_loss',
+            max_iter=20,
+            warm_start=False,
+            alpha=0.01,
+            learning_rate='adaptive',
+            eta0=0.01,
+            power_t=0.5,
+            early_stopping=False,
+            verbose=1,
+        )
+        # Fit scaler then model
+        self.scaler.fit(X_arr)
+        Xs = self.scaler.transform(X_arr)
+        self.model.fit(Xs, y_arr)
+        # Rebuild buffer with (optionally truncated) recent samples tail
+        self._recent_X = [row.copy() for row in Xs[-self._buffer_max:]]
+        self._recent_y = [int(lbl) for lbl in y_arr[-self._buffer_max:]]
+        self._is_initialized = True
+        logger.info('[Learner][FullRetrain] Completed full retrain on %d samples (n_features=%d)', len(Xs), self.n_features)
+        return self
+
     def partial_fit(self, X, y):
         # Backward compatibility: ensure new attributes exist on legacy loaded instances
         if not hasattr(self, 'feature_names'):

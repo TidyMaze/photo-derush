@@ -95,7 +95,11 @@ def rebuild_model_from_log(learner, expected_n_features: int | None = None):
         X, y = zip(*filtered)
         X, y = list(X), list(y)
     if X and y:
-        learner.partial_fit(X, y)
+        try:
+            learner.full_retrain(X, y)
+        except AttributeError:
+            # Fallback for legacy learner without full_retrain
+            learner.partial_fit(X, y)
         save_model(learner)
     return learner
 

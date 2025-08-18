@@ -499,27 +499,37 @@ class LightroomMainWindow(QMainWindow):
         if label in (0, 1):
             self._ensure_learner(fv)
             if self.learner is not None:
-                # Check cold start status
                 counts = self._definitive_label_counts()
                 MIN_CLASS_SAMPLES = 10
                 if not self._cold_start_completed:
                     if counts[0] >= MIN_CLASS_SAMPLES and counts[1] >= MIN_CLASS_SAMPLES:
-                        # Perform initial training over all historical data
                         self.logger.info("[Training] Cold-start threshold reached (class0=%d class1=%d). Performing initial full training.", counts[0], counts[1])
                         rebuild_model_from_log(self.learner, expected_n_features=self.learner.n_features)
                         self._cold_start_completed = True
                         self._debounced_save_model(force=True)
                         self.logger.info("[Training] Initial full training complete and model saved")
                     else:
-                        self.logger.info("[Training] Skipping update (cold-start threshold not met: class0=%d class1=%d need %d each)", counts[0], counts[1], MIN_CLASS_SAMPLES)
+                        self.logger.info("[Training] Skipping training (cold-start threshold not met: class0=%d class1=%d need %d each)", counts[0], counts[1], MIN_CLASS_SAMPLES)
                 if self._cold_start_completed:
-                    # Incremental update with just the new sample
-                    self.logger.info("[Training] Incremental update for image=%s label=%s", img_name, label)
-                    self.learner.partial_fit([fv], [label])
-                    self._debounced_save_model()
-                    self.logger.info("[Training] Model saved after incremental update")
-                    # Evaluate after update
-                    self._evaluate_model()
+                    # Full retrain on all definitive labeled samples (replace incremental partial_fit)
+                    from ml.persistence import load_latest_labeled_samples as _load_all
+                    X_all, y_all, _imgs = _load_all()
+                    # Filter for definitive labels already ensured; ensure feature sizing
+                    if X_all:
+                        # If feature lengths vary, keep only those matching current n_features; else adapt to first
+                        lengths = {len(x) for x in X_all if isinstance(x, list)}
+                        target_len = self.learner.n_features if self.learner.n_features in lengths else (list(lengths)[0] if lengths else self.learner.n_features)
+                        Xf = [x for x in X_all if isinstance(x, list) and len(x)==target_len]
+                        yf = [yy for x, yy in zip(X_all, y_all) if isinstance(x, list) and len(x)==target_len]
+                        if Xf:
+                            self.logger.info("[Training] Full retrain on %d samples (n_features=%d)", len(Xf), target_len)
+                            self.learner.full_retrain(Xf, yf)
+                            self._debounced_save_model()
+                            self.logger.info("[Training] Model saved after full retrain")
+                            self._evaluate_model()
+                        else:
+                            self.logger.info("[Training] No samples matched target feature length=%d; skipping retrain", target_len)
+
         # update UI badge
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
