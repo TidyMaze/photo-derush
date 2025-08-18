@@ -31,6 +31,21 @@ class PersonalLearner:
         self._is_initialized = False
         # Will hold canonical feature names (e.g., FEATURE_NAMES) once inferred
         self.feature_names = None
+        # Attempt to infer feature names immediately (covers full_retrain path which bypasses partial_fit)
+        try:  # noqa: PERF203
+            from ml.features_cv import FEATURE_NAMES as _CV_FN  # light import
+            if n_features == len(_CV_FN):
+                self.feature_names = list(_CV_FN)
+            else:
+                try:
+                    from ml.features import all_feature_names as _ALL_FN
+                    all_full = _ALL_FN(include_strings=False)
+                    if n_features == len(all_full):
+                        self.feature_names = list(all_full)
+                except Exception:  # noqa: PERF203
+                    pass
+        except Exception:  # noqa: PERF203
+            pass
         self._recent_X = []  # minibatch buffer
         self._recent_y = []
         self._buffer_max = 32
@@ -57,6 +72,19 @@ class PersonalLearner:
         if X_arr.shape[1] != self.n_features:
             logger.info('[Learner][FullRetrain] Feature dim change %d -> %d', self.n_features, X_arr.shape[1])
             self.n_features = X_arr.shape[1]
+        # If feature_names not yet assigned, attempt now (important for EXIF features visibility)
+        if self.feature_names is None:
+            try:  # noqa: PERF203
+                from ml.features import all_feature_names as _ALL_FN
+                all_full = _ALL_FN(include_strings=False)
+                if len(all_full) == self.n_features:
+                    self.feature_names = list(all_full)
+                else:
+                    from ml.features_cv import FEATURE_NAMES as _CV_FN
+                    if len(_CV_FN) == self.n_features:
+                        self.feature_names = list(_CV_FN)
+            except Exception:  # noqa: PERF203
+                pass
         # Reset scaler & model
         self.scaler = _SS(with_mean=True, with_std=True)
         self.scaler.fit(X_arr)
@@ -164,6 +192,14 @@ class PersonalLearner:
                 self.feature_names = list(_FN)
         except Exception:  # noqa: PERF203
             pass
+        # Try to set feature_names to the full list (including EXIF) if available
+        try:
+            from ml.features import all_feature_names as _ALL_FN
+            all_names = _ALL_FN(include_strings=False)
+            if self.feature_names is None and self.n_features == len(all_names):
+                self.feature_names = list(all_names)
+        except Exception:
+            pass
         # Buffer update (store original post-padding X,y)
         for row, lbl in zip(X, y):
             if len(self._recent_X) >= self._buffer_max:
@@ -254,6 +290,19 @@ class PersonalLearner:
         if not hasattr(self.model, 'coef_'):
             logger.warning("[Learner][Explain] Model is not trained yet; no coefficients available.")
             return []
+        # Late binding of feature names if still missing (covers legacy saved models)
+        if self.feature_names is None:
+            try:  # noqa: PERF203
+                from ml.features import all_feature_names as _ALL_FN
+                all_full = _ALL_FN(include_strings=False)
+                if len(all_full) == getattr(self.model.coef_, 'shape', [None, None])[1]:
+                    self.feature_names = list(all_full)
+                else:
+                    from ml.features_cv import FEATURE_NAMES as _CV_FN
+                    if len(_CV_FN) == getattr(self.model.coef_, 'shape', [None, None])[1]:
+                        self.feature_names = list(_CV_FN)
+            except Exception:  # noqa: PERF203
+                pass
         importances = np.abs(self.model.coef_)
         # For binary classification, coef_ shape is (1, n_features)
         if importances.ndim == 2 and importances.shape[0] == 1:
