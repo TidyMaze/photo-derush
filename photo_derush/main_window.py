@@ -6,7 +6,7 @@ from .image_grid import ImageGrid
 from .viewer import open_full_image_qt
 import os
 import json
-from ml.features import feature_vector
+from ml.features import feature_vector, all_feature_names  # added all_feature_names import
 from ml.features_cv import FEATURE_NAMES as _NEW_FEATURE_NAMES
 # Backward compatibility: expose feature_vector symbol (tests may monkeypatch it)
 from ml.personal_learner import PersonalLearner
@@ -79,20 +79,27 @@ class LightroomMainWindow(QMainWindow):
         self._thread_pool = QThreadPool.globalInstance()
         self._pending_feature_tasks = set()
         self._last_model_save_ts = 0.0
+        # Determine combined feature schema (numeric only) BEFORE using it
+        try:
+            self._combined_feature_names = all_feature_names(include_strings=False)
+        except Exception:
+            self._combined_feature_names = list(_NEW_FEATURE_NAMES)
         # Load persisted feature cache (best-effort)
         try:
             persisted_cache = load_feature_cache()
             if persisted_cache:
                 self._feature_cache.update(persisted_cache)
                 self.logger.info('[FeatureCache] Loaded %d cached feature vectors', len(persisted_cache))
-                # Purge entries whose keys don't match current FEATURE_NAMES
                 invalid = []
                 for pth, (mt, tup) in list(self._feature_cache.items()):
                     if not isinstance(tup, tuple) or len(tup) != 2:
                         invalid.append(pth); continue
                     vec, keys = tup
-                    if list(keys) != list(_NEW_FEATURE_NAMES):
-                        invalid.append(pth)
+                    if list(keys) == list(_NEW_FEATURE_NAMES):
+                        continue
+                    if list(keys) == list(self._combined_feature_names):
+                        continue
+                    invalid.append(pth)
                 for pth in invalid:
                     self._feature_cache.pop(pth, None)
                 if invalid:
@@ -392,22 +399,21 @@ class LightroomMainWindow(QMainWindow):
         if cached and cached[0] == mtime:
             vec_cached, keys_cached = cached[1]
             cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
-            new_len = len(_NEW_FEATURE_NAMES)
-            if list(keys_cached) == list(_NEW_FEATURE_NAMES):
+            combined_len = len(self._combined_feature_names)
+            # If cached keys match either legacy or combined schema, keep
+            if list(keys_cached) == list(_NEW_FEATURE_NAMES) or list(keys_cached) == list(self._combined_feature_names):
                 return cached[1]
-            # Decide purge conditions:
-            # Purge only if (a) lengths match new schema (names outdated) OR (b) we have a PersonalLearner expecting new_len.
             purge = False
-            if cached_len == new_len:
-                purge = True  # outdated names but same dimensionality
-            elif isinstance(self.learner, PersonalLearner) and getattr(self.learner, 'n_features', new_len) == new_len:
-                # Learner expects new length, but cached shorter/longer vector incompatible
+            if cached_len in (len(_NEW_FEATURE_NAMES), combined_len):
+                purge = True
+            elif isinstance(self.learner, PersonalLearner) and getattr(self.learner, 'n_features', combined_len) in (len(_NEW_FEATURE_NAMES), combined_len):
                 purge = True
             if not purge:
                 return cached[1]
-            self.logger.info('[FeatureCache] Purging cached vector (incompatible schema) path=%s len=%s expected_len=%s', img_path, cached_len, new_len)
+            self.logger.info('[FeatureCache] Purging cached vector (incompatible schema) path=%s len=%s', img_path, cached_len)
             self._feature_cache.pop(img_path, None)
         vec, keys = feature_vector(img_path)
+        # If we got combined length but our learner still expecting legacy len, adapt later via migration
         self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
             persist_feature_cache_entry(img_path, mtime, vec, keys)
@@ -424,17 +430,17 @@ class LightroomMainWindow(QMainWindow):
         if cached and cached[0] == mtime:
             vec_cached, keys_cached = cached[1]
             cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
-            new_len = len(_NEW_FEATURE_NAMES)
-            if list(keys_cached) == list(_NEW_FEATURE_NAMES):
+            combined_len = len(self._combined_feature_names)
+            if list(keys_cached) == list(_NEW_FEATURE_NAMES) or list(keys_cached) == list(self._combined_feature_names):
                 return cached[1]
             purge = False
-            if cached_len == new_len:
+            if cached_len in (len(_NEW_FEATURE_NAMES), combined_len):
                 purge = True
-            elif isinstance(self.learner, PersonalLearner) and getattr(self.learner, 'n_features', new_len) == new_len:
+            elif isinstance(self.learner, PersonalLearner) and getattr(self.learner, 'n_features', combined_len) in (len(_NEW_FEATURE_NAMES), combined_len):
                 purge = True
             if not purge:
                 return cached[1]
-            self.logger.info('[FeatureCache] Purging cached vector (incompatible schema, async path) path=%s len=%s expected_len=%s', img_path, cached_len, new_len)
+            self.logger.info('[FeatureCache] Purging cached vector (incompatible schema, async path) path=%s len=%s', img_path, cached_len)
             self._feature_cache.pop(img_path, None)
         if require_sync:
             return self._get_feature_vector_sync(img_path)
@@ -510,29 +516,42 @@ class LightroomMainWindow(QMainWindow):
                     self._cold_start_completed = True
                 # Always attempt full retrain once both classes have at least one sample
                 if counts[0] > 0 and counts[1] > 0:
-                    from ml.persistence import load_latest_labeled_samples as _load_all
+                    from ml.persistence import load_latest_labeled_samples as _load_all, upgrade_event_log_to_current_schema as _upgrade
+                    try:
+                        upgraded = _upgrade()
+                        if upgraded:
+                            self.logger.info('[Upgrade] Event log upgraded to combined feature schema (cv+exif)')
+                    except Exception as e:  # noqa: PERF203
+                        self.logger.info('[Upgrade] Schema upgrade skipped: %s', e)
                     X_all, y_all, _imgs = _load_all()
                     if X_all:
                         lengths = {len(x) for x in X_all if isinstance(x, list)}
-                        target_len = self.learner.n_features if self.learner.n_features in lengths else (list(lengths)[0] if lengths else self.learner.n_features)
+                        if lengths:
+                            target_len = max(lengths)  # prefer expanded schema
+                            if self.learner.n_features != target_len:
+                                self.logger.info('[Learner][Migration-Retrain] Reinitializing learner %d -> %d', self.learner.n_features, target_len)
+                                self.learner = PersonalLearner(n_features=target_len)
+                                if hasattr(self.image_grid, 'learner'):
+                                    self.image_grid.learner = self.learner
+                        else:
+                            target_len = self.learner.n_features
                         Xf = [x for x in X_all if isinstance(x, list) and len(x)==target_len]
                         yf = [yy for x, yy in zip(X_all, y_all) if isinstance(x, list) and len(x)==target_len]
                         if Xf:
-                            self.logger.info("[Training] Full retrain (samples=%d n_features=%d countsT=%d countsK=%d)", len(Xf), target_len, counts[0], counts[1])
+                            self.logger.info('[Training] Full retrain (samples=%d n_features=%d countsT=%d countsK=%d)', len(Xf), target_len, counts[0], counts[1])
                             importances = self.learner.train_and_explain(Xf, yf)
-                            # Format feature importances for readability
                             if importances:
                                 formatted = "\n".join(f"    {name}: {imp:.4f}" for name, imp in importances)
-                                self.logger.info("[Training] Feature importances (sorted):\n%s", formatted)
+                                self.logger.info('[Training] Feature importances (sorted):\n%s', formatted)
                             else:
-                                self.logger.info("[Training] Feature importances: <none>")
+                                self.logger.info('[Training] Feature importances: <none>')
                             self._debounced_save_model()
-                            self.logger.info("[Training] Model saved after full retrain")
+                            self.logger.info('[Training] Model saved after full retrain')
                             self._evaluate_model()
                         else:
-                            self.logger.info("[Training] No samples matched target feature length=%d; skipping retrain", target_len)
+                            self.logger.info('[Training] No samples matched target feature length=%d; skipping retrain', target_len)
                 else:
-                    self.logger.info("[Training] Waiting for both classes before retrain (T=%d K=%d)", counts[0], counts[1])
+                    self.logger.info('[Training] Waiting for both classes before retrain (T=%d K=%d)', counts[0], counts[1])
 
         # update UI badge
         if hasattr(self, 'image_grid'):

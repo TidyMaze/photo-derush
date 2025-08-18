@@ -57,6 +57,8 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
                     logging.info("[AsyncLoad] (poll) Adding image %s", img_name)
                     if win.image_grid:
                         win.image_grid.add_image(img_name)
+                    else:
+                        logging.warning("[AsyncLoad] (poll) Image grid not ready, skipping %s", img_name)
                 elif mtype == 'grouping':
                     logging.info("[AsyncLoad] (poll) Applying grouping metadata")
                     win.update_grouping(msg['image_info'])
