@@ -24,27 +24,34 @@ _logger = logging.getLogger(__name__)
 
 # Lazy holder for MediaPipe detector
 _FACE_DETECTOR = None
+_DETECTOR_CFG = {"model_selection": None, "min_conf": None}
 
 
-def _load_detector():
-    """Lazy-load MediaPipe face detector (may return None)."""
-    global _FACE_DETECTOR  # noqa: PLW0603
-    if _FACE_DETECTOR is not None:
+def _load_detector(min_conf: float, model_selection: int):
+    """Lazy-load MediaPipe face detector for given config (may return None)."""
+    global _FACE_DETECTOR, _DETECTOR_CFG  # noqa: PLW0603
+    if (
+        _FACE_DETECTOR is not None
+        and _DETECTOR_CFG["model_selection"] == model_selection
+        and _DETECTOR_CFG["min_conf"] == min_conf
+    ):
         return _FACE_DETECTOR
     try:  # Import mediapipe lazily so project doesn't hard-depend at import time
         import mediapipe as mp  # type: ignore
         _FACE_DETECTOR = mp.solutions.face_detection.FaceDetection(
-            model_selection=0,
-            min_detection_confidence=0.5,
+            model_selection=model_selection,
+            min_detection_confidence=min_conf,
         )
+        _DETECTOR_CFG = {"model_selection": model_selection, "min_conf": min_conf}
     except Exception as e:  # pragma: no cover - environment without mediapipe
         _logger.debug("[FaceDetect] Mediapipe unavailable: %s", e)
         _FACE_DETECTOR = None
+        _DETECTOR_CFG = {"model_selection": None, "min_conf": None}
     return _FACE_DETECTOR
 
 
-def _mediapipe_detect(image) -> List[Dict[str, float]]:
-    det = _load_detector()
+def _mediapipe_detect(image, min_conf: float, model_selection: int) -> List[Dict[str, float]]:
+    det = _load_detector(min_conf=min_conf, model_selection=model_selection)
     if det is None:
         return []
     try:
@@ -85,10 +92,14 @@ def _mediapipe_detect(image) -> List[Dict[str, float]]:
         return []
 
 
-def detect_faces(image) -> List[Dict[str, float]]:
+def detect_faces(image, min_conf: float = 0.5, model_selection: int = 0) -> List[Dict[str, float]]:
     """Detect faces in a BGR OpenCV image using MediaPipe only.
 
-    Returns an empty list on any error or if no faces are detected.
+    Parameters:
+      image: np.ndarray (BGR)
+      min_conf: minimum detection confidence (default 0.5)
+      model_selection: 0 = short-range, 1 = full-range (per mediapipe docs)
+    Returns list of face dicts or [] on error / none.
     """
     if cv2 is None or image is None:
         return []
@@ -97,4 +108,4 @@ def detect_faces(image) -> List[Dict[str, float]]:
             return []
     except Exception:
         return []
-    return _mediapipe_detect(image)
+    return _mediapipe_detect(image, min_conf=min_conf, model_selection=model_selection)
