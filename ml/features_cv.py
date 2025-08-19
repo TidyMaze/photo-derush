@@ -29,7 +29,10 @@ FEATURE_NAMES = [
     # --- Composition lite ---
     'energy_centroid_x', 'energy_centroid_y', 'thirds_alignment_score', 'edge_orientation_entropy',
     # --- Geometry / misc ---
-    'aspect_ratio', 'orientation_flag', 'phash'
+    'aspect_ratio', 'orientation_flag', 'phash',
+    # --- Face detection features ---
+    'face_count', 'face_max_score', 'face_mean_score', 'face_area_max', 'face_area_min', 'face_area_mean',
+    'face_coverage', 'face_aspect_ratio_mean', 'face_x_mean', 'face_y_mean',
 ]
 
 
@@ -193,6 +196,8 @@ def compute_quality_features_from_path(path: Path, resize_max: int = 1600):
     feats.update(local_ent)
     feats.update(compo)
     feats.update(geom)
+    # Add face features
+    feats.update(_face_features(img))
 
     # Normalize heavy-tailed metrics with log1p heuristic
     for k in list(feats.keys()):
@@ -487,6 +492,49 @@ def _compute_phash(gray: np.ndarray) -> float:
         return float(val_norm)
     except Exception:
         return 0.0
+
+
+# --- Face detection features ---
+def _face_features(img: np.ndarray) -> Dict[str, float]:
+    try:
+        from .face_detection import detect_faces
+    except ImportError:
+        return {k: 0.0 for k in [
+            'face_count', 'face_max_score', 'face_mean_score', 'face_area_max', 'face_area_min', 'face_area_mean',
+            'face_coverage', 'face_aspect_ratio_mean', 'face_x_mean', 'face_y_mean',
+        ]}
+    h, w = img.shape[:2]
+    faces = []
+    try:
+        faces = detect_faces(img)
+    except Exception:
+        return {k: 0.0 for k in [
+            'face_count', 'face_max_score', 'face_mean_score', 'face_area_max', 'face_area_min', 'face_area_mean',
+            'face_coverage', 'face_aspect_ratio_mean', 'face_x_mean', 'face_y_mean',
+        ]}
+    count = len(faces)
+    if not faces:
+        return {k: 0.0 for k in [
+            'face_count', 'face_max_score', 'face_mean_score', 'face_area_max', 'face_area_min', 'face_area_mean',
+            'face_coverage', 'face_aspect_ratio_mean', 'face_x_mean', 'face_y_mean',
+        ]}
+    scores = [f['score'] for f in faces]
+    areas = [f['w'] * f['h'] / (w * h) if w > 0 and h > 0 else 0.0 for f in faces]
+    aspect_ratios = [f['w'] / f['h'] if f['h'] > 0 else 0.0 for f in faces]
+    xs = [(f['x'] + f['w'] / 2) / w if w > 0 else 0.0 for f in faces]
+    ys = [(f['y'] + f['h'] / 2) / h if h > 0 else 0.0 for f in faces]
+    return {
+        'face_count': float(count),
+        'face_max_score': max(scores),
+        'face_mean_score': float(np.mean(scores)),
+        'face_area_max': max(areas),
+        'face_area_min': min(areas),
+        'face_area_mean': float(np.mean(areas)),
+        'face_coverage': float(np.sum(areas)),
+        'face_aspect_ratio_mean': float(np.mean(aspect_ratios)),
+        'face_x_mean': float(np.mean(xs)),
+        'face_y_mean': float(np.mean(ys)),
+    }
 
 
 def compute_feature_vector(path: str | Path):
