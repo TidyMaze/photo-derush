@@ -42,13 +42,30 @@ def iter_images(root: Path, recursive: bool):
 def read_exif_map(img_path: Path):
     try:
         with Image.open(img_path) as im:
-            exif = im._getexif() if hasattr(im, '_getexif') else None
-            if not exif:
+            if not hasattr(im, 'getexif'):
+                return {}
+            try:
+                exif_obj = im.getexif()
+            except Exception:  # noqa: PERF203
+                return {}
+            if not exif_obj or not len(exif_obj):
                 return {}
             tagmap = {}
-            for tag_id, value in exif.items():
+            for tag_id, value in exif_obj.items():
                 name = ExifTags.TAGS.get(tag_id, f'UNK_{tag_id}') if ExifTags else str(tag_id)
                 tagmap[name] = value
+            # Expand GPS sub-IFD (store as raw dict of tag names) for completeness
+            try:
+                if hasattr(exif_obj, 'get_ifd') and ExifTags and hasattr(ExifTags, 'IFD') and hasattr(ExifTags, 'GPSTAGS'):
+                    gps_ifd_id = getattr(ExifTags.IFD, 'GPSInfo', None)
+                    if gps_ifd_id is not None:
+                        sub = exif_obj.get_ifd(gps_ifd_id)
+                        if sub:
+                            gps_map = {ExifTags.GPSTAGS.get(k, k): v for k, v in sub.items()}
+                            if gps_map:
+                                tagmap['GPSInfo'] = gps_map
+            except Exception:  # noqa: PERF203
+                pass
             return tagmap
     except Exception:  # pragma: no cover
         return {}

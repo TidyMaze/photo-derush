@@ -43,19 +43,21 @@ def compute_perceptual_hash(img_path):
         return None
 
 def extract_exif(img_path):
-    """Extract EXIF metadata directly from the original image file.
-    Combines modern getexif() + legacy _getexif() and expands GPS / Exif sub-IFDs.
-    Returns mapping tag_name -> value with GPSInfo as nested dict when available.
+    """Extract EXIF metadata using Pillow's modern getexif() only.
+    Expands Exif / GPS / Interop sub-IFDs when available.
+    Returns mapping tag_name -> value; GPSInfo as nested dict if present.
+    Legacy _getexif() support removed per requirement.
     """
     try:
         with Image.open(img_path) as im:
             merged = {}
-            exif_obj = None
             try:
                 exif_obj = im.getexif()
             except Exception:  # noqa: PERF203
-                exif_obj = None
-            # Helper to record a tag
+                return {}
+            if not exif_obj or not len(exif_obj):
+                return {}
+            from PIL import ExifTags as _ET
             def _store(tag_id, value):
                 name = ExifTags.TAGS.get(tag_id, tag_id)
                 if isinstance(value, bytes):
@@ -64,74 +66,36 @@ def extract_exif(img_path):
                     except Exception:  # noqa: PERF203
                         pass
                 merged[name] = value
-            # Modern pass
-            if exif_obj and len(exif_obj):
-                for tid, val in exif_obj.items():
-                    _store(tid, val)
-                # Expand Exif and GPS sub-IFDs if accessible (Pillow exposes get_ifd)
-                try:
-                    from PIL import ExifTags as _ET
-                    # Exif SubIFD
-                    if hasattr(exif_obj, 'get_ifd') and hasattr(_ET, 'IFD'):
-                        for ifd_member in ('Exif', 'GPSInfo', 'Interop'):
-                            if hasattr(_ET.IFD, ifd_member):
-                                ifd_id = getattr(_ET.IFD, ifd_member)
-                                try:
-                                    sub = exif_obj.get_ifd(ifd_id)
-                                except Exception:  # noqa: PERF203
-                                    sub = None
-                                if sub:
-                                    if ifd_member == 'GPSInfo':
-                                        gps_map = {}
-                                        for stid, sval in sub.items():
-                                            gps_name = _ET.GPSTAGS.get(stid, stid)
-                                            if isinstance(sval, bytes):
-                                                try:
-                                                    sval = sval.decode('utf-8', 'ignore')
-                                                except Exception:  # noqa: PERF203
-                                                    pass
-                                            gps_map[gps_name] = sval
-                                        if gps_map:
-                                            merged['GPSInfo'] = gps_map
-                                    else:
-                                        for stid, sval in sub.items():
-                                            _store(stid, sval)
-                except Exception:  # noqa: PERF203
-                    pass
-            # Legacy flatten (may contain more entries) merge without overwriting existing unless new
-            legacy = getattr(im, '_getexif', lambda: None)()
-            if legacy:
-                for tid, val in legacy.items():
-                    name = ExifTags.TAGS.get(tid, tid)
-                    if name not in merged:
-                        if isinstance(val, bytes):
+            for tid, val in exif_obj.items():
+                _store(tid, val)
+            # Sub-IFDs
+            try:
+                if hasattr(exif_obj, 'get_ifd') and hasattr(_ET, 'IFD'):
+                    for ifd_member in ('Exif', 'GPSInfo', 'Interop'):
+                        if hasattr(_ET.IFD, ifd_member):
+                            ifd_id = getattr(_ET.IFD, ifd_member)
                             try:
-                                val = val.decode('utf-8', 'ignore')
+                                sub = exif_obj.get_ifd(ifd_id)
                             except Exception:  # noqa: PERF203
-                                pass
-                        merged[name] = val
-            # If GPSInfo still just an int offset, drop or leave? Replace int with empty dict for consistency
-            gps_val = merged.get('GPSInfo')
-            if isinstance(gps_val, int):
-                # Attempt second-chance expansion via exif_obj if possible
-                try:
-                    from PIL import ExifTags as _ET
-                    if exif_obj and hasattr(exif_obj, 'get_ifd') and hasattr(_ET, 'IFD') and hasattr(_ET, 'GPSTAGS'):
-                        sub = exif_obj.get_ifd(_ET.IFD.GPSInfo)
-                        if sub:
-                            gps_map = {}
-                            for stid, sval in sub.items():
-                                gps_name = _ET.GPSTAGS.get(stid, stid)
-                                if isinstance(sval, bytes):
-                                    try:
-                                        sval = sval.decode('utf-8', 'ignore')
-                                    except Exception:  # noqa: PERF203
-                                        pass
-                                gps_map[gps_name] = sval
-                            if gps_map:
-                                merged['GPSInfo'] = gps_map
-                except Exception:  # noqa: PERF203
-                    pass
+                                sub = None
+                            if sub:
+                                if ifd_member == 'GPSInfo':
+                                    gps_map = {}
+                                    for stid, sval in sub.items():
+                                        gps_name = _ET.GPSTAGS.get(stid, stid)
+                                        if isinstance(sval, bytes):
+                                            try:
+                                                sval = sval.decode('utf-8', 'ignore')
+                                            except Exception:  # noqa: PERF203
+                                                pass
+                                        gps_map[gps_name] = sval
+                                    if gps_map:
+                                        merged['GPSInfo'] = gps_map
+                                else:
+                                    for stid, sval in sub.items():
+                                        _store(stid, sval)
+            except Exception:  # noqa: PERF203
+                pass
             return merged
     except Exception as e:  # noqa: PERF203
         logging.warning(f"[EXIF] Failed reading EXIF from {img_path}: {e}")

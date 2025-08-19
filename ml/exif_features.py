@@ -102,17 +102,30 @@ def extract_exif_features(path: Path) -> Dict[str, Any]:
         return feats
     try:
         with Image.open(path) as img:
-            exif = img._getexif() if hasattr(img, '_getexif') else None
-            if not exif:
+            if not hasattr(img, 'getexif'):
                 return feats
-            # Reverse map tag id -> name
+            try:
+                exif_obj = img.getexif()
+            except Exception:  # noqa: PERF203
+                return feats
+            if not exif_obj or not len(exif_obj):
+                return feats
             tag_map = ExifTags.TAGS
-            # Simple lookups
-            rev = {tag_map.get(t, str(t)): v for t, v in exif.items()}
+            # Build reverse mapping name->value
+            rev = {tag_map.get(t, str(t)): v for t, v in exif_obj.items()}
+            # Expand GPS sub-IFD into rev['GPSInfo'] as dict of numeric tag ids if available
+            try:
+                if hasattr(exif_obj, 'get_ifd') and hasattr(ExifTags, 'IFD') and hasattr(ExifTags, 'GPSTAGS'):
+                    gps_ifd_id = getattr(ExifTags.IFD, 'GPSInfo', None)
+                    if gps_ifd_id is not None:
+                        sub = exif_obj.get_ifd(gps_ifd_id)
+                        if sub:
+                            rev['GPSInfo'] = sub  # keep numeric keys for existing logic
+            except Exception:  # noqa: PERF203
+                pass
             iso = _safe_int(rev.get('ISOSpeedRatings') or rev.get('PhotographicSensitivity'))
             feats['iso'] = iso
             feats['iso_log1p'] = log1p(iso) if iso > 0 else 0.0
-            # Exposure time / shutter speed
             exposure_time_s = _safe_float(rev.get('ExposureTime'))
             feats['exposure_time_s'] = exposure_time_s
             feats['exposure_time_log'] = log(exposure_time_s) if exposure_time_s > 0 else 0.0
@@ -132,7 +145,6 @@ def extract_exif_features(path: Path) -> Dict[str, Any]:
             feats['digital_zoom_ratio'] = _safe_float(rev.get('DigitalZoomRatio'), 1.0)
             feats['hand_shake_risk'] = exposure_time_s * (feats['focal_length_35mm'] or focal_len)
             feats['dof_proxy'] = (fnumber*fnumber / focal_len) if (fnumber>0 and focal_len>0) else 0.0
-            # Device strings
             feats['make'] = str(rev.get('Make', _STRING_DEFAULT)) or _STRING_DEFAULT
             feats['model'] = str(rev.get('Model', _STRING_DEFAULT)) or _STRING_DEFAULT
             feats['lens_make'] = str(rev.get('LensMake', _STRING_DEFAULT)) or _STRING_DEFAULT
@@ -150,18 +162,15 @@ def extract_exif_features(path: Path) -> Dict[str, Any]:
             feats['saturation'] = _safe_int(rev.get('Saturation'))
             feats['contrast'] = _safe_int(rev.get('Contrast'))
             feats['sharpness'] = _safe_int(rev.get('Sharpness'))
-            # Time
             dt_raw = rev.get('DateTimeOriginal') or rev.get('DateTime')
             if isinstance(dt_raw, bytes):
                 try: dt_raw = dt_raw.decode('utf-8', 'ignore')
                 except Exception: dt_raw = None
-            hour = 0
-            dow = 0
+            hour = 0; dow = 0
             if isinstance(dt_raw, str):
                 try:
                     dt = datetime.strptime(dt_raw, '%Y:%m:%d %H:%M:%S')
-                    hour = dt.hour
-                    dow = dt.weekday()
+                    hour = dt.hour; dow = dt.weekday()
                 except Exception:
                     pass
             feats['hour_of_day'] = hour
@@ -169,13 +178,11 @@ def extract_exif_features(path: Path) -> Dict[str, Any]:
             feats['hour_cos'] = cos(2*pi*hour/24.0)
             feats['day_of_week'] = dow
             feats['night_flag'] = 1 if (hour >= 20 or hour <= 6) else 0
-            # Geometry
             feats['exif_image_width'] = _safe_int(rev.get('ExifImageWidth'))
             feats['exif_image_height'] = _safe_int(rev.get('ExifImageHeight'))
             w = feats['exif_image_width']; h = feats['exif_image_height']
             feats['megapixels_exif'] = (w*h)/1e6 if (w>0 and h>0) else 0.0
             feats['orientation_exif'] = 1 if h> w else 0
-            # GPS
             gps = rev.get('GPSInfo')
             lat = lon = None
             if isinstance(gps, dict):
@@ -191,8 +198,7 @@ def extract_exif_features(path: Path) -> Dict[str, Any]:
                     lat = lon = None
             feats['latitude'] = _truncate(lat) if lat is not None else 0.0
             feats['longitude'] = _truncate(lon) if lon is not None else 0.0
-            feats['urban_flag'] = 0  # placeholder
+            feats['urban_flag'] = 0
     except Exception:  # pragma: no cover
         logger.info('[EXIF] Failed extraction for %s', path)
     return feats
-
