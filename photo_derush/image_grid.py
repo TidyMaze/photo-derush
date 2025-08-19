@@ -30,7 +30,7 @@ class ImageGrid(QWidget):
         self.metrics_cache = {}
         self.image_name_to_widgets = {}
         self.grid_container = QWidget()
-        self.grid_container.setStyleSheet("background-color: #222;")
+        self.grid_container.setStyleSheet("background-color: #23272e;")
         self.grid = QGridLayout(self.grid_container)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -52,6 +52,15 @@ class ImageGrid(QWidget):
         if image_paths:
             self.populate_grid()
         self._init_learner()
+
+        # Modern font and color palette for grid
+        self.setStyleSheet("""
+            QWidget {
+                font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;
+                font-size: 13px;
+                color: #f0f0f0;
+            }
+        """)
 
     def _init_learner(self):
         # Try to load model, else create new
@@ -154,6 +163,7 @@ class ImageGrid(QWidget):
 
     def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
+        from PySide6.QtWidgets import QGraphicsDropShadowEffect
         img_path = os.path.join(self.directory, img_name)
         if pil_thumb is None:
             pil_thumb = image_manager.get_thumbnail(img_path, (self.THUMB_SIZE, self.THUMB_SIZE))
@@ -162,11 +172,11 @@ class ImageGrid(QWidget):
         pix = pil2pixmap(pil_thumb)
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
         top_label = QLabel(str(group_badge))
-        top_label.setStyleSheet(f"background: {color}; color: #fff; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center;")
+        top_label.setStyleSheet(f"background: {color}; color: #fff; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
         date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
-        bottom_label.setStyleSheet("color: white; background: #222;")
+        bottom_label.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 11px;")
         blur_label = QLabel("")
         lbl_val = self.labels_map.get(img_name)
         if lbl_val == 1:
@@ -176,7 +186,7 @@ class ImageGrid(QWidget):
         elif lbl_val == -1:
             blur_label.setText("UNSURE"); blur_label.setStyleSheet("color: #000; background:#ffeb3b; font-weight:bold; padding:2px;")
         else:
-            blur_label.setStyleSheet("color: yellow; background: #222;")
+            blur_label.setStyleSheet("color: yellow; background: transparent; font-size: 12px;")
         lbl = HoverEffectLabel()
         lbl.setPixmap(pix)
         lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
@@ -214,8 +224,22 @@ class ImageGrid(QWidget):
         # Use globally imported QVBoxLayout, QWidget, QSizePolicy
         container = QWidget()
         vbox = QVBoxLayout(container)
-        vbox.setContentsMargins(2, 2, 2, 2)
-        vbox.setSpacing(4)
+        vbox.setContentsMargins(8, 8, 8, 8)  # More padding
+        vbox.setSpacing(6)
+        # Rounded corners and shadow for container
+        container.setStyleSheet("""
+            background: #282c34;
+            border-radius: 12px;
+            border: 1px solid #333;
+        """)
+        try:
+            shadow = QGraphicsDropShadowEffect()
+            shadow.setBlurRadius(12)
+            shadow.setOffset(0, 2)
+            shadow.setColor(Qt.gray)
+            container.setGraphicsEffect(shadow)
+        except Exception:
+            pass
         vbox.addWidget(top_label)
         lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
         lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -264,7 +288,7 @@ class ImageGrid(QWidget):
             blur_label.setStyleSheet("color: #000; background:#ffeb3b; font-weight:bold; padding:2px;")
         else:
             blur_label.setText("")
-            blur_label.setStyleSheet("color: yellow; background: #222;")
+            blur_label.setStyleSheet("color: yellow; background: transparent; font-size: 12px;")
 
     def add_image(self, img_name: str):
         logging.info("[ImageGrid] Adding image: %s", img_name)

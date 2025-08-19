@@ -1,18 +1,33 @@
 import logging
 
-from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget, QGraphicsDropShadowEffect
 from .utils import extract_exif, format_gps_info
 
 class InfoPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setStyleSheet("""
+            background: #23272e;
+            border-radius: 14px;
+            border: 1px solid #333;
+        """)
+        try:
+            shadow = QGraphicsDropShadowEffect()
+            shadow.setBlurRadius(16)
+            shadow.setOffset(0, 3)
+            shadow.setColor(Qt.gray)
+            self.setGraphicsEffect(shadow)
+        except Exception:
+            pass
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setStyleSheet("color: #aaa; background: #222; font-size: 13pt; border: none; padding: 8px;")
+        self.text_edit.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 14px; border: none; padding: 16px; font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;")
         self.text_edit.setTextInteractionFlags(
             self.text_edit.textInteractionFlags() | self.text_edit.textInteractionFlags().TextSelectableByMouse | self.text_edit.textInteractionFlags().TextSelectableByKeyboard
         )
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
         layout.addWidget(self.text_edit)
         self.setLayout(layout)
 
