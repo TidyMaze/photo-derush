@@ -220,12 +220,19 @@ class ImageGrid(QWidget):
         lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
         lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         vbox.addWidget(lbl)
+        # Ensure bottom_label does not expand the cell
+        bottom_label.setWordWrap(True)
         vbox.addWidget(bottom_label)
         vbox.addWidget(blur_label)
+        # Set fixed width for the container to enforce column width
+        cell_width = self.THUMB_SIZE + 20  # 20px for padding/labels
+        container.setFixedWidth(cell_width)
         container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         row = idx // self.col_count
         col = idx % self.col_count
         self.grid.addWidget(container, row, col)
+        # Enforce fixed column width in the grid
+        self.grid.setColumnMinimumWidth(col, cell_width)
         self.image_labels.append(lbl)
         self.top_labels.append(top_label)
         self.bottom_labels.append(bottom_label)
