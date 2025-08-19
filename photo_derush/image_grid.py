@@ -168,17 +168,29 @@ class ImageGrid(QWidget):
         for idx, g in enumerate(used_groups):
             group_to_color[g] = palette[idx % len(palette)]
         default_color = '#444444'
-        for idx, img_name in enumerate(sorted_images[:num_images]):
-            info = self.image_info.get(img_name, {})
-            group = info.get('group')
-            color = group_to_color.get(group, default_color)
-            hash_str = info.get('hash', '...')
-            group_str = group if group is not None else '...'
-            self._add_thumbnail_row(img_name, idx, color=color, hash_str=hash_str, group_str=group_str)
-        self.status_bar.showMessage(f"Loaded {num_images} images (thumbnails only, grouping pending)")
-        # Re-apply last known probabilities if available
-        if self._last_prob_map:
-            self.update_keep_probabilities(self._last_prob_map)
+        self._populate_grid_images = [
+            (idx, img_name, self.image_info.get(img_name, {}), group_to_color, default_color)
+            for idx, img_name in enumerate(sorted_images[:num_images])
+        ]
+        self._populate_grid_index = 0
+        self._populate_grid_next_image()
+
+    def _populate_grid_next_image(self):
+        if self._populate_grid_index >= len(self._populate_grid_images):
+            self.status_bar.showMessage(f"Loaded {len(self.image_labels)} images (thumbnails only, grouping pending)")
+            # Re-apply last known probabilities if available
+            if self._last_prob_map:
+                self.update_keep_probabilities(self._last_prob_map)
+            return
+        idx, img_name, info, group_to_color, default_color = self._populate_grid_images[self._populate_grid_index]
+        group = info.get('group')
+        color = group_to_color.get(group, default_color)
+        hash_str = info.get('hash', '...')
+        group_str = group if group is not None else '...'
+        self._add_thumbnail_row(img_name, idx, color=color, hash_str=hash_str, group_str=group_str)
+        self._populate_grid_index += 1
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self._populate_grid_next_image)
 
     def set_cell_size(self, size):
         self.THUMB_SIZE = size
