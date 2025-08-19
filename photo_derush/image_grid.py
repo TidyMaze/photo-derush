@@ -1,7 +1,7 @@
 import logging
 
 from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject, Signal, QRunnable, QThreadPool
 from .widgets import HoverEffectLabel
 from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
 from .image_manager import image_manager
@@ -81,12 +81,53 @@ class ImageGrid(QWidget):
             if widget:
                 widget.setParent(None)
 
-    def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...'):
-        """Create thumbnail UI row (image + 3 labels) for given image name."""
+    def populate_grid(self):
+        self.clear_grid()
+        self.image_labels.clear(); self.top_labels.clear(); self.bottom_labels.clear(); self.blur_labels.clear(); self.image_name_to_widgets.clear()
+        sorted_images = self.get_sorted_images()
+        num_images = min(self.MAX_IMAGES, len(sorted_images))
+        import colorsys
+        group_to_color = {}
+        used_groups = {self.image_info.get(img, {}).get('group') for img in sorted_images[:num_images]}
+        used_groups = sorted(g for g in used_groups if g is not None)
+        n = max(1, len(used_groups))
+        palette = []
+        for i in range(n):
+            hue = i / n; rgb = colorsys.hls_to_rgb(hue, 0.5, 0.7)
+            palette.append('#%02x%02x%02x' % tuple(int(255*x) for x in rgb))
+        for idx, g in enumerate(used_groups):
+            group_to_color[g] = palette[idx % len(palette)]
+        default_color = '#444444'
+        # Threaded loading
+        self._pending_thumbs = set()
+        self._thumb_emitter = ThumbnailResultEmitter()
+        self._thumb_emitter.finished.connect(self._on_thumb_ready)
+        self._thumb_threadpool = QThreadPool.globalInstance()
+        for idx, img_name in enumerate(sorted_images[:num_images]):
+            info = self.image_info.get(img_name, {})
+            loader = ThumbnailLoader(idx, img_name, info, group_to_color, default_color, self.directory, self.THUMB_SIZE, image_manager, self._thumb_emitter)
+            self._pending_thumbs.add(img_name)
+            self._thumb_threadpool.start(loader)
+
+    def _on_thumb_ready(self, idx, img_name, info, group_to_color, default_color, pil_thumb):
+        if pil_thumb is None:
+            return
+        # Only add if still pending (avoid race if grid was cleared)
+        if not hasattr(self, '_pending_thumbs') or img_name not in self._pending_thumbs:
+            return
+        self._pending_thumbs.remove(img_name)
+        group = info.get('group')
+        color = group_to_color.get(group, default_color)
+        hash_str = info.get('hash', '...')
+        group_str = group if group is not None else '...'
+        self._add_thumbnail_row(img_name, idx, color=color, hash_str=hash_str, group_str=group_str, pil_thumb=pil_thumb)
+        self.status_bar.showMessage(f"Loaded {len(self.image_labels)} images (thumbnails only, grouping pending)")
+
+    def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
         img_path = os.path.join(self.directory, img_name)
-        # Use ImageManager to get/create thumbnail (cached in-memory + persisted)
-        pil_thumb = image_manager.get_thumbnail(img_path, (self.THUMB_SIZE, self.THUMB_SIZE))
+        if pil_thumb is None:
+            pil_thumb = image_manager.get_thumbnail(img_path, (self.THUMB_SIZE, self.THUMB_SIZE))
         if pil_thumb is None:
             return  # skip if cannot load
         pix = pil2pixmap(pil_thumb)
@@ -150,47 +191,6 @@ class ImageGrid(QWidget):
         self.bottom_labels.append(bottom_label)
         self.blur_labels.append(blur_label)
         self.image_name_to_widgets[img_name] = (lbl, top_label, bottom_label, blur_label)
-
-    def populate_grid(self):
-        self.clear_grid()
-        self.image_labels.clear(); self.top_labels.clear(); self.bottom_labels.clear(); self.blur_labels.clear(); self.image_name_to_widgets.clear()
-        sorted_images = self.get_sorted_images()
-        num_images = min(self.MAX_IMAGES, len(sorted_images))
-        import random, colorsys
-        group_to_color = {}
-        used_groups = {self.image_info.get(img, {}).get('group') for img in sorted_images[:num_images]}
-        used_groups = sorted(g for g in used_groups if g is not None)
-        n = max(1, len(used_groups))
-        palette = []
-        for i in range(n):
-            hue = i / n; rgb = colorsys.hls_to_rgb(hue, 0.5, 0.7)
-            palette.append('#%02x%02x%02x' % tuple(int(255*x) for x in rgb))
-        for idx, g in enumerate(used_groups):
-            group_to_color[g] = palette[idx % len(palette)]
-        default_color = '#444444'
-        self._populate_grid_images = [
-            (idx, img_name, self.image_info.get(img_name, {}), group_to_color, default_color)
-            for idx, img_name in enumerate(sorted_images[:num_images])
-        ]
-        self._populate_grid_index = 0
-        self._populate_grid_next_image()
-
-    def _populate_grid_next_image(self):
-        if self._populate_grid_index >= len(self._populate_grid_images):
-            self.status_bar.showMessage(f"Loaded {len(self.image_labels)} images (thumbnails only, grouping pending)")
-            # Re-apply last known probabilities if available
-            if self._last_prob_map:
-                self.update_keep_probabilities(self._last_prob_map)
-            return
-        idx, img_name, info, group_to_color, default_color = self._populate_grid_images[self._populate_grid_index]
-        group = info.get('group')
-        color = group_to_color.get(group, default_color)
-        hash_str = info.get('hash', '...')
-        group_str = group if group is not None else '...'
-        self._add_thumbnail_row(img_name, idx, color=color, hash_str=hash_str, group_str=group_str)
-        self._populate_grid_index += 1
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, self._populate_grid_next_image)
 
     def set_cell_size(self, size):
         self.THUMB_SIZE = size
@@ -291,3 +291,24 @@ class ImageGrid(QWidget):
                     lbl.setStyleSheet("")
                 except Exception:
                     pass
+
+class ThumbnailResultEmitter(QObject):
+    finished = Signal(int, str, object, dict, str, object)  # idx, img_name, info, group_to_color, default_color, pil_thumb
+
+class ThumbnailLoader(QRunnable):
+    def __init__(self, idx, img_name, info, group_to_color, default_color, directory, thumb_size, image_manager, emitter):
+        super().__init__()
+        self.idx = idx
+        self.img_name = img_name
+        self.info = info
+        self.group_to_color = group_to_color
+        self.default_color = default_color
+        self.directory = directory
+        self.thumb_size = thumb_size
+        self.image_manager = image_manager
+        self.emitter = emitter
+    def run(self):
+        import os
+        img_path = os.path.join(self.directory, self.img_name)
+        pil_thumb = self.image_manager.get_thumbnail(img_path, (self.thumb_size, self.thumb_size))
+        self.emitter.finished.emit(self.idx, self.img_name, self.info, self.group_to_color, self.default_color, pil_thumb)
