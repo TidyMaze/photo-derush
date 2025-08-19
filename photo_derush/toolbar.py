@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QToolBar, QComboBox
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtCore import Signal
 
 class SettingsToolbar(QToolBar):
@@ -14,13 +14,17 @@ class SettingsToolbar(QToolBar):
     reset_model_clicked = Signal()
     def __init__(self, parent=None):
         super().__init__("Settings Toolbar", parent)
-        self.sort_by_group_action = QAction("Sort by group", self)
+        self.sort_by_group_action = QAction(QIcon.fromTheme("view-sort-ascending"), "Sort by group", self)
         self.sort_by_group_action.setCheckable(True)
+        self.sort_by_group_action.setToolTip("Sort images by group")
         self.addAction(self.sort_by_group_action)
-        # Keep/Trash/Unsure actions
-        self.keep_action = QAction("Keep", self)
-        self.trash_action = QAction("Trash", self)
-        self.unsure_action = QAction("Unsure", self)
+        # Keep/Trash/Unsure actions with icons and tooltips
+        self.keep_action = QAction(QIcon.fromTheme("emblem-favorite"), "Keep", self)
+        self.keep_action.setToolTip("Mark as Keep")
+        self.trash_action = QAction(QIcon.fromTheme("user-trash"), "Trash", self)
+        self.trash_action.setToolTip("Mark as Trash")
+        self.unsure_action = QAction(QIcon.fromTheme("dialog-question"), "Unsure", self)
+        self.unsure_action.setToolTip("Mark as Unsure")
         self.addAction(self.keep_action)
         self.addAction(self.trash_action)
         self.addAction(self.unsure_action)
@@ -28,15 +32,19 @@ class SettingsToolbar(QToolBar):
         self.trash_action.triggered.connect(self.trash_clicked.emit)
         self.unsure_action.triggered.connect(self.unsure_clicked.emit)
         # Predict & Sort actions
-        self.predict_sort_action = QAction("Predict & Sort (Desc)", self)
-        self.predict_sort_asc_action = QAction("Predict & Sort (Asc)", self)
+        self.predict_sort_action = QAction(QIcon.fromTheme("view-sort-descending"), "Predict & Sort (Desc)", self)
+        self.predict_sort_action.setToolTip("Sort by predicted keep probability (descending)")
+        self.predict_sort_asc_action = QAction(QIcon.fromTheme("view-sort-ascending"), "Predict & Sort (Asc)", self)
+        self.predict_sort_asc_action.setToolTip("Sort by predicted keep probability (ascending)")
         self.addAction(self.predict_sort_action)
         self.addAction(self.predict_sort_asc_action)
         self.predict_sort_action.triggered.connect(self._emit_desc)
         self.predict_sort_asc_action.triggered.connect(self._emit_asc)
         # Export CSV, Reset Model
-        self.export_csv_action = QAction("Export CSV", self)
-        self.reset_model_action = QAction("Reset Personal Model", self)
+        self.export_csv_action = QAction(QIcon.fromTheme("document-save"), "Export CSV", self)
+        self.export_csv_action.setToolTip("Export labels and features to CSV")
+        self.reset_model_action = QAction(QIcon.fromTheme("edit-clear"), "Reset Personal Model", self)
+        self.reset_model_action.setToolTip("Reset the personal model and event log")
         self.addAction(self.export_csv_action)
         self.addAction(self.reset_model_action)
         self.export_csv_action.triggered.connect(self.export_csv_clicked.emit)

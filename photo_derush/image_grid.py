@@ -11,6 +11,8 @@ sys.path.append('..')
 from ml.personal_learner import PersonalLearner
 from ml.persistence import load_model, save_model
 import os
+from PySide6.QtGui import QIcon, QMovie
+from PySide6.QtCore import QPropertyAnimation
 
 class ImageGrid(QWidget):
     def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, labels_map=None, get_feature_vector_fn=None, *args, **kwargs):
@@ -166,10 +168,50 @@ class ImageGrid(QWidget):
         import os
         from PySide6.QtWidgets import QGraphicsDropShadowEffect
         img_path = os.path.join(self.directory, img_name)
+        # Loading spinner placeholder
+        spinner = QLabel()
+        spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        spinner.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
+        spinner.setStyleSheet("background: #23272e; border-radius: 8px;")
+        spinner_movie = QMovie(":/qt-project.org/styles/commonstyle/images/working-32.gif")
+        spinner.setMovie(spinner_movie)
+        spinner_movie.start()
+        # Add spinner to grid while loading
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(8, 8, 8, 8)
+        vbox.setSpacing(6)
+        container.setStyleSheet("""
+            background: #282c34;
+            border-radius: 12px;
+            border: 1px solid #333;
+            transition: box-shadow 0.2s;
+        """)
+        try:
+            shadow = QGraphicsDropShadowEffect()
+            shadow.setBlurRadius(12)
+            shadow.setOffset(0, 2)
+            shadow.setColor(Qt.gray)
+            container.setGraphicsEffect(shadow)
+        except Exception:
+            pass
+        vbox.addWidget(spinner)
+        row = idx // self.col_count
+        col = idx % self.col_count
+        self.grid.addWidget(container, row, col)
+        self.grid.setColumnMinimumWidth(col, self.THUMB_SIZE + 20)
+        # After thumbnail is ready, replace spinner with actual content
         if pil_thumb is None:
             pil_thumb = image_manager.get_thumbnail(img_path, (self.THUMB_SIZE, self.THUMB_SIZE))
         if pil_thumb is None:
-            return  # skip if cannot load
+            # Show error icon if image fails to load
+            error_label = QLabel()
+            error_label.setPixmap(QIcon.fromTheme("dialog-error").pixmap(self.THUMB_SIZE, self.THUMB_SIZE))
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            vbox.addWidget(error_label)
+            return
+        # Remove spinner
+        spinner.hide()
         pix = pil2pixmap(pil_thumb)
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
         top_label = QLabel(str(group_badge))
@@ -184,21 +226,42 @@ class ImageGrid(QWidget):
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 11px;")
-        blur_label = QLabel("")
+        # Use icons for label
+        blur_label = QLabel()
         lbl_val = self.labels_map.get(img_name)
         if lbl_val == 1:
-            blur_label.setText("KEEP"); blur_label.setStyleSheet("color: #fff; background:#2e7d32; font-weight:bold; padding:2px;")
+            blur_label.setPixmap(QIcon.fromTheme("emblem-favorite").pixmap(20, 20))
+            blur_label.setToolTip("Keep")
         elif lbl_val == 0:
-            blur_label.setText("TRASH"); blur_label.setStyleSheet("color: #fff; background:#b71c1c; font-weight:bold; padding:2px;")
+            blur_label.setPixmap(QIcon.fromTheme("user-trash").pixmap(20, 20))
+            blur_label.setToolTip("Trash")
         elif lbl_val == -1:
-            blur_label.setText("UNSURE"); blur_label.setStyleSheet("color: #000; background:#ffeb3b; font-weight:bold; padding:2px;")
+            blur_label.setPixmap(QIcon.fromTheme("dialog-question").pixmap(20, 20))
+            blur_label.setToolTip("Unsure")
         else:
-            blur_label.setStyleSheet("color: yellow; background: transparent; font-size: 12px;")
+            blur_label.setPixmap(QIcon().pixmap(20, 20))
         lbl = HoverEffectLabel()
         lbl.setPixmap(pix)
         lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
         lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Fade-in animation for thumbnail
+        lbl.setWindowOpacity(0.0)
+        anim = QPropertyAnimation(lbl, b"windowOpacity")
+        anim.setDuration(400)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
+        # Hover/focus effect
+        lbl.setStyleSheet("""
+            QLabel:hover {
+                border: 2px solid #4fc3f7;
+                box-shadow: 0 0 8px #4fc3f7;
+            }
+            QLabel:focus {
+                border: 2px solid #81c784;
+            }
+        """)
         def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path, hash_str=hash_str, group_str=group_str):
             def handler(e):
                 for l in self.image_labels:
@@ -227,43 +290,14 @@ class ImageGrid(QWidget):
             return handler
         lbl.mousePressEvent = mousePressEventFactory()
         lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory()
-        # --- NEW GRID LAYOUT ---
-        # Use globally imported QVBoxLayout, QWidget, QSizePolicy
-        container = QWidget()
-        vbox = QVBoxLayout(container)
-        vbox.setContentsMargins(8, 8, 8, 8)  # More padding
-        vbox.setSpacing(6)
-        # Rounded corners and shadow for container
-        container.setStyleSheet("""
-            background: #282c34;
-            border-radius: 12px;
-            border: 1px solid #333;
-        """)
-        try:
-            shadow = QGraphicsDropShadowEffect()
-            shadow.setBlurRadius(12)
-            shadow.setOffset(0, 2)
-            shadow.setColor(Qt.gray)
-            container.setGraphicsEffect(shadow)
-        except Exception:
-            pass
         vbox.addWidget(top_label)
-        lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
-        lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         vbox.addWidget(lbl)
-        # Ensure bottom_label does not expand the cell
         bottom_label.setWordWrap(True)
         vbox.addWidget(bottom_label)
         vbox.addWidget(blur_label)
-        # Set fixed width for the container to enforce column width
-        cell_width = self.THUMB_SIZE + 20  # 20px for padding/labels
+        cell_width = self.THUMB_SIZE + 20
         container.setFixedWidth(cell_width)
         container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        row = idx // self.col_count
-        col = idx % self.col_count
-        self.grid.addWidget(container, row, col)
-        # Enforce fixed column width in the grid
-        self.grid.setColumnMinimumWidth(col, cell_width)
         self.image_labels.append(lbl)
         self.top_labels.append(top_label)
         self.bottom_labels.append(bottom_label)

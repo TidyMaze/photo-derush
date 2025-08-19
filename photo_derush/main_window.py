@@ -27,6 +27,9 @@ import logging
 import numpy as np
 from PySide6.QtCore import QRunnable, QObject, Signal, QThreadPool
 import time
+from PySide6.QtGui import QFont, QAction, QIcon
+from PySide6.QtWidgets import QMessageBox, QStyle, QApplication, QLabel, QHBoxLayout, QFrame
+from PySide6.QtCore import QTimer, Qt
 
 
 class _FeatureResultEmitter(QObject):
@@ -59,10 +62,55 @@ class LightroomMainWindow(QMainWindow):
         self.directory = directory
         self.setWindowTitle("Photo Derush (Qt)")
         self.resize(1400, 800)
+        # Set global font and stylesheet
+        font = QFont("Segoe UI", 11)
+        QApplication.instance().setFont(font)
+        QApplication.instance().setStyleSheet('''
+            QWidget {
+                font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;
+                font-size: 13px;
+                color: #f0f0f0;
+            }
+            QMainWindow {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #23272e, stop:1 #181a20);
+            }
+            QScrollBar:vertical, QScrollBar:horizontal {
+                background: #23272e;
+                border: none;
+                width: 10px;
+                margin: 0px;
+            }
+            QScrollBar::handle {
+                background: #444;
+                border-radius: 5px;
+            }
+            QScrollBar::add-line, QScrollBar::sub-line {
+                background: none;
+            }
+            QStatusBar {
+                background: #23272e;
+                color: #f0f0f0;
+                border-top: 1px solid #333;
+            }
+        ''')
+        # Dark/Light mode toggle
+        self.is_dark_mode = True
+        self.dark_mode_action = QAction(QIcon.fromTheme("weather-clear-night"), "Toggle Dark/Light Mode", self)
+        self.dark_mode_action.setCheckable(True)
+        self.dark_mode_action.setChecked(True)
+        self.dark_mode_action.setToolTip("Toggle between dark and light mode")
+        self.dark_mode_action.triggered.connect(self.toggle_dark_mode)
+        self.toolbar = SettingsToolbar(self)
+        self.toolbar.addAction(self.dark_mode_action)
+        self.addToolBar(self.toolbar)
+        # Toast notification system
+        self.toast = QLabel("")
+        self.toast.setStyleSheet("background: #444; color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 14px; z-index: 1000;")
+        self.toast.setWindowFlags(self.toast.windowFlags() | Qt.WindowType.ToolTip)
+        self.toast.hide()
+        # Status bar
         self.status = QStatusBar()
         self.setStatusBar(self.status)
-        self.toolbar = SettingsToolbar(self)
-        self.addToolBar(self.toolbar)
         self.info_panel = InfoPanel()
         # Central stacked widget: page0 = main splitter, page1 = full image viewer (embedded)
         self._stack = QStackedWidget()
@@ -861,6 +909,13 @@ class LightroomMainWindow(QMainWindow):
         """
         self.status_message_signal.emit(message)
 
+    def show_toast(self, message, duration=2000):
+        self.toast.setText(message)
+        self.toast.adjustSize()
+        self.toast.move(self.geometry().center() - self.toast.rect().center())
+        self.toast.show()
+        QTimer.singleShot(duration, self.toast.hide)
+
     # --- Keyboard shortcuts in grid / main window mode ---
     def keyPressEvent(self, e):  # noqa: N802
         from PySide6.QtCore import Qt
@@ -1095,3 +1150,65 @@ class LightroomMainWindow(QMainWindow):
             self.image_grid.update_keep_probabilities(neutral)
         self._cold_start_completed = False
         self._update_status_bar(action='model reset')
+
+    def toggle_dark_mode(self):
+        if self.is_dark_mode:
+            QApplication.instance().setStyleSheet('''
+                QWidget {
+                    font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;
+                    font-size: 13px;
+                    color: #23272e;
+                }
+                QMainWindow {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0f0f0, stop:1 #e0e0e0);
+                }
+                QScrollBar:vertical, QScrollBar:horizontal {
+                    background: #e0e0e0;
+                    border: none;
+                    width: 10px;
+                    margin: 0px;
+                }
+                QScrollBar::handle {
+                    background: #bbb;
+                    border-radius: 5px;
+                }
+                QScrollBar::add-line, QScrollBar::sub-line {
+                    background: none;
+                }
+                QStatusBar {
+                    background: #e0e0e0;
+                    color: #23272e;
+                    border-top: 1px solid #bbb;
+                }
+            ''')
+            self.is_dark_mode = False
+        else:
+            QApplication.instance().setStyleSheet('''
+                QWidget {
+                    font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;
+                    font-size: 13px;
+                    color: #f0f0f0;
+                }
+                QMainWindow {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #23272e, stop:1 #181a20);
+                }
+                QScrollBar:vertical, QScrollBar:horizontal {
+                    background: #23272e;
+                    border: none;
+                    width: 10px;
+                    margin: 0px;
+                }
+                QScrollBar::handle {
+                    background: #444;
+                    border-radius: 5px;
+                }
+                QScrollBar::add-line, QScrollBar::sub-line {
+                    background: none;
+                }
+                QStatusBar {
+                    background: #23272e;
+                    color: #f0f0f0;
+                    border-top: 1px solid #333;
+                }
+            ''')
+            self.is_dark_mode = True
