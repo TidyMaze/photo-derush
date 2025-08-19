@@ -51,6 +51,9 @@ class _FeatureTask(QRunnable):
 
 
 class LightroomMainWindow(QMainWindow):
+    # Signal for thread-safe status bar updates
+    status_message_signal = Signal(str)
+
     def __init__(self, image_paths, directory, get_sorted_images, image_info=None):
         super().__init__()
         self.directory = directory
@@ -849,6 +852,14 @@ class LightroomMainWindow(QMainWindow):
             self.logger.info('[Export] Wrote labels.csv with %d rows (enhanced)', len(rows))
         except Exception as e:
             self.logger.warning('[Export] Failed writing labels.csv: %s', e)
+
+    def set_status_message(self, message: str):
+        """
+        Public method to update the status bar with a custom message.
+        Can be called from any thread (uses Qt signal for thread safety).
+        Intended for async progress reporting (e.g., hashing, loading, etc).
+        """
+        self.status_message_signal.emit(message)
 
     # --- Keyboard shortcuts in grid / main window mode ---
     def keyPressEvent(self, e):  # noqa: N802

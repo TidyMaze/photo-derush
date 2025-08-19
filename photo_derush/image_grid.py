@@ -238,6 +238,10 @@ class ImageGrid(QWidget):
         self.bottom_labels.append(bottom_label)
         self.blur_labels.append(blur_label)
         self.image_name_to_widgets[img_name] = (lbl, top_label, bottom_label, blur_label)
+        # Update status bar with progress
+        total_images = min(self.MAX_IMAGES, len(self.get_sorted_images()))
+        loaded_images = len(self.image_labels)
+        self.status_bar.showMessage(f"Loaded {loaded_images}/{total_images} images (thumbnails only, grouping pending)")
 
     def set_cell_size(self, size):
         self.THUMB_SIZE = size
