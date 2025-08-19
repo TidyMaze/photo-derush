@@ -16,7 +16,11 @@ class InfoPanel(QWidget):
         layout.addWidget(self.text_edit)
         self.setLayout(layout)
 
-    def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None, keep_prob=None):
+    def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None, keep_prob=None, explanations=None, **kwargs):
+        """Update info panel with EXIF + metrics + probability.
+        Added optional 'explanations' list for model rationale without breaking existing callers.
+        Extra **kwargs ignored for forward compatibility.
+        """
         exif = extract_exif(img_path)
         logging.info(f"[InfoPanel] EXIF {img_name}: {list(exif.keys())}")
         # Ordered list of preferred primary fields (emojis optional)
@@ -130,6 +134,14 @@ class InfoPanel(QWidget):
         else:
             metrics_html += 'No metrics available.'
         metrics_html += '</div>'
+        # Explanations (model rationale quick view)
+        expl_html = ''
+        if explanations:
+            chips = []
+            for txt, good in explanations:
+                color = '#2e7d32' if good else '#b71c1c'
+                chips.append(f"<span style='background:{color}; color:#fff; padding:2px 6px; border-radius:4px; margin:2px; font-size:11pt;'>{txt}</span>")
+            expl_html = "<div style='margin:6px 0 12px 0;'><b>Explain:</b><br>" + ' '.join(chips) + '</div>'
         # File info & probability
         file_info = (f"<div style='margin-bottom:10px;'><b>File:</b> {img_name}<br>"
                      f"<b>Path:</b> {img_path}<br>"
@@ -139,5 +151,5 @@ class InfoPanel(QWidget):
         prob_html = (f"<div style='margin-bottom:10px; font-size:16pt; color:#4caf50;'><b>Keep Probability:</b> {keep_prob:.2%}</div>" if keep_prob is not None else '')
         exif_section = ("<div style='margin-top:10px;'><b>EXIF (Primary)</b><br>" + primary_html +
                         "<div style='margin-top:12px;'><b>All Other EXIF</b><br>" + other_html + '</div></div>')
-        html = prob_html + file_info + metrics_html + exif_section
+        html = prob_html + file_info + expl_html + metrics_html + exif_section
         self.text_edit.setHtml(html)

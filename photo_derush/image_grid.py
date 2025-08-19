@@ -222,21 +222,36 @@ class ImageGrid(QWidget):
     def update_keep_probabilities(self, prob_map: dict):
         """Append or update keep probability line in bottom labels.
         Logs keep probability only once per image (first time it's set).
-        Now displays probability as a percentage with colored background (green >=50%, red otherwise)."""
+        Now displays probability with gradient color (red->yellow->green) and colored border.
+        """
         self._last_prob_map = prob_map or {}
+        def _interp_color(p: float):
+            # clamp
+            p = max(0.0, min(1.0, p))
+            # 0 -> red (#b71c1c), 0.5 -> amber (#ffa000), 1 -> green (#2e7d32)
+            import math
+            if p < 0.5:
+                # red to amber
+                t = p / 0.5
+                c0 = (0xb7,0x1c,0x1c)
+                c1 = (0xff,0xa0,0x00)
+            else:
+                t = (p - 0.5) / 0.5
+                c0 = (0xff,0xa0,0x00)
+                c1 = (0x2e,0x7d,0x32)
+            r = int(c0[0] + (c1[0]-c0[0])*t)
+            g = int(c0[1] + (c1[1]-c0[1])*t)
+            b = int(c0[2] + (c1[2]-c0[2])*t)
+            return f"#{r:02x}{g:02x}{b:02x}"
         for img_name, widgets in self.image_name_to_widgets.items():
-            _, _, bottom_label, _ = widgets
+            lbl, _, bottom_label, _ = widgets
             # Retrieve original base text (stored when row created)
             raw_text = bottom_label.text()
-            # Prefer stored base; else attempt to remove any trailing probability line (plain or HTML)
             if img_name in self.base_bottom_texts:
                 base = self.base_bottom_texts[img_name]
             else:
-                # Remove HTML probability span if present
                 if '<span' in raw_text and 'Prob:' in raw_text:
-                    # Split on <br> before Prob:
                     parts = raw_text.split('<br>')
-                    # drop last part if contains Prob:
                     if parts and 'Prob:' in parts[-1]:
                         base = '\n'.join(p for p in parts[:-1])
                     else:
@@ -246,12 +261,21 @@ class ImageGrid(QWidget):
             prob = prob_map.get(img_name)
             if prob is not None:
                 pct = prob * 100.0
-                bg = '#2e7d32' if prob >= 0.5 else '#b71c1c'
+                col = _interp_color(prob)
                 base_html = base.replace('\n', '<br>')
-                prob_html = f"<span style=\"background-color:{bg}; color:#fff; font-weight:bold; padding:1px 4px; border-radius:3px;\">Prob: {pct:.0f}%</span>"
+                prob_html = f"<span style=\"background-color:{col}; color:#fff; font-weight:bold; padding:1px 4px; border-radius:3px;\">Prob: {pct:.0f}%</span>"
                 bottom_label.setText(f"{base_html}<br>{prob_html}")
+                # Border color to reinforce probability
+                try:
+                    lbl.setStyleSheet(f"border: 3px solid {col};")
+                except Exception:
+                    pass
                 if img_name not in self._logged_keep_prob_images:
                     logging.info("[ImageGrid] Updated keep probability for %s: %.2f (%.0f%%)", img_name, prob, pct)
                     self._logged_keep_prob_images.add(img_name)
             else:
                 bottom_label.setText(base)
+                try:
+                    lbl.setStyleSheet("")
+                except Exception:
+                    pass

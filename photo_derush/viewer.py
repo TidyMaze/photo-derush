@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QApplication, QPushButton, QHBoxLayout, QWidget, QSizePolicy
+from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QApplication, QPushButton, QHBoxLayout, QWidget, QSizePolicy, QScrollArea
 from PySide6.QtCore import Qt, QSize
 from .utils import pil2pixmap
 from .image_manager import image_manager
@@ -6,9 +6,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-WINDOW_SCREEN_RATIO = 0.9  # window occupies 90% of available screen in each dimension
+WINDOW_SCREEN_RATIO = 0.6  # window occupies 60% of available screen in each dimension
 MIN_WINDOW_WIDTH = 800
 MIN_WINDOW_HEIGHT = 600
+# Add absolute maximum dimensions to prevent oversized windows
+MAX_WINDOW_WIDTH = 1600
+MAX_WINDOW_HEIGHT = 1200
 
 class EmbeddedImageViewer(QWidget):
     """Image viewer panel embedded inside the main window (no separate dialog)."""
@@ -22,6 +25,8 @@ class EmbeddedImageViewer(QWidget):
         self.on_unsure = on_unsure
         self.on_index_change = on_index_change
         self.orig_pix = None
+        self._filmstrip_count = 9  # odd number, center current
+        self._filmstrip_labels = []
         self._build_ui()
         self.load_current()
 
@@ -56,11 +61,35 @@ class EmbeddedImageViewer(QWidget):
         btn_layout.addSpacing(30)
         btn_layout.addWidget(self.exit_btn)
         btn_layout.addStretch(1)
+        # Filmstrip (scrollable row of thumbnails)
+        self.filmstrip_container = QWidget()
+        fs_layout = QHBoxLayout(self.filmstrip_container)
+        fs_layout.setContentsMargins(8,4,8,4)
+        fs_layout.setSpacing(6)
+        for _ in range(self._filmstrip_count):
+            thumb = QLabel()
+            thumb.setFixedSize(96, 72)
+            thumb.setStyleSheet("background:#111; border:2px solid #333;")
+            thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._filmstrip_labels.append(thumb)
+            fs_layout.addWidget(thumb)
+        self.filmstrip_scroll = QScrollArea()
+        self.filmstrip_scroll.setWidgetResizable(True)
+        self.filmstrip_scroll.setFixedHeight(90)
+        inner = QWidget()
+        inner_layout = QHBoxLayout(inner)
+        inner_layout.setContentsMargins(0,0,0,0)
+        inner_layout.addWidget(self.filmstrip_container)
+        self.filmstrip_scroll.setWidget(inner)
+
+        # Insert filmstrip between image and buttons
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.lbl, 1)
+        layout.addWidget(self.filmstrip_scroll, 0)
         layout.addWidget(self.buttons_widget, 0)
+
         # Connections
         self.prev_btn.clicked.connect(lambda: self.navigate(-1))
         self.next_btn.clicked.connect(lambda: self.navigate(1))
@@ -113,6 +142,36 @@ class EmbeddedImageViewer(QWidget):
             self.current_index = new_index
             self.load_current()
 
+    def _update_filmstrip(self):
+        if not self.image_sequence:
+            return
+        half = self._filmstrip_count // 2
+        start = max(0, self.current_index - half)
+        end = min(len(self.image_sequence), start + self._filmstrip_count)
+        # Adjust start if near end
+        if end - start < self._filmstrip_count:
+            start = max(0, end - self._filmstrip_count)
+        seq_slice = list(range(start, end))
+        for lbl, idx in zip(self._filmstrip_labels, seq_slice):
+            path = self.image_sequence[idx]
+            pil_img = image_manager.get_thumbnail(path, (160, 120))
+            if pil_img is None:
+                lbl.setText('X')
+                continue
+            pm = pil2pixmap(pil_img).scaled(lbl.width(), lbl.height(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            lbl.setPixmap(pm)
+            border = '#4caf50' if idx == self.current_index else '#333'
+            lbl.setStyleSheet(f"background:#111; border:3px solid {border};")
+            def _make_handler(target=idx):
+                def _h(_e):
+                    self.current_index = target
+                    self.load_current()
+                return _h
+            lbl.mousePressEvent = _make_handler()
+        # Clear remaining labels if any
+        for lbl in self._filmstrip_labels[len(seq_slice):]:
+            lbl.clear(); lbl.setStyleSheet("background:#111; border:2px solid #222;")
+
     def load_current(self):
         path = self.image_sequence[self.current_index]
         # Determine target size for thumbnail (approx current widget)
@@ -133,6 +192,7 @@ class EmbeddedImageViewer(QWidget):
                 self.on_index_change(path, self.current_index)
             except Exception:
                 pass
+        self._update_filmstrip()
 
     def resizeEvent(self, ev):  # noqa: N802
         self._rescale()
@@ -142,8 +202,9 @@ class EmbeddedImageViewer(QWidget):
         if self.orig_pix is None:
             return
         btn_h = self.buttons_widget.height() or self.buttons_widget.sizeHint().height() or 0
+        filmstrip_h = self.filmstrip_scroll.height() or self.filmstrip_scroll.sizeHint().height() or 0
         avail_w = max(10, self.width())
-        avail_h = max(10, self.height() - btn_h)
+        avail_h = max(10, self.height() - btn_h - filmstrip_h)
         scaled = self.orig_pix.scaled(avail_w, avail_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         self.lbl.setPixmap(scaled)
 
@@ -180,6 +241,9 @@ def open_full_image_qt(img_path, on_keep=None, on_trash=None, on_unsure=None, im
     screen_geo = QApplication.primaryScreen().availableGeometry()
     target_w = max(MIN_WINDOW_WIDTH, int(screen_geo.width() * WINDOW_SCREEN_RATIO))
     target_h = max(MIN_WINDOW_HEIGHT, int(screen_geo.height() * WINDOW_SCREEN_RATIO))
+    # Clamp to maximum dimensions
+    target_w = min(target_w, MAX_WINDOW_WIDTH)
+    target_h = min(target_h, MAX_WINDOW_HEIGHT)
     # Center the window
     x = screen_geo.x() + (screen_geo.width() - target_w) // 2
     y = screen_geo.y() + (screen_geo.height() - target_h) // 2

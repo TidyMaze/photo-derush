@@ -157,6 +157,10 @@ class LightroomMainWindow(QMainWindow):
         self._init_status_widgets()
         self._update_status_bar()
 
+        # --- Auto Unsure labeling ---
+        self._auto_unsure_threshold = (0.4, 0.7)
+        self._auto_unsure_assigned = set()
+
     def _init_status_widgets(self):
         if getattr(self, '_status_widgets_initialized', False):
             return
@@ -538,7 +542,8 @@ class LightroomMainWindow(QMainWindow):
 
     def _schedule_feature_extraction(self, img_path):
         # Disable async extraction during pytest to reduce flakiness / segfault risk
-        if os.environ.get('PYTEST_CURRENT_TEST'):
+        import sys as _sys
+        if os.environ.get('PYTEST_CURRENT_TEST') or 'pytest' in _sys.modules:
             return False
         try:
             mtime = os.path.getmtime(img_path)
@@ -751,6 +756,8 @@ class LightroomMainWindow(QMainWindow):
         try:
             logging.info("[Predict] Predicting keep probabilities for %d images", len(vectors))
             probs = self.learner.predict_keep_prob(vectors)
+            # Auto mark unsure mid-confidence
+            self._auto_mark_unsure_if_needed(names, probs)
             logging.info("[Predict] Computed keep probabilities for %d images", len(probs))
             prob_map = {n: float(p) for n, p in zip(names, probs)}
             self.image_grid.update_keep_probabilities(prob_map)
@@ -772,6 +779,7 @@ class LightroomMainWindow(QMainWindow):
         self._ensure_learner()  # May initialize (untrained) or rebuild from log
         img_path = os.path.join(self.directory, img_name)
         keep_prob = None
+        explanations = []
         if self.learner is None:
             self.logger.info("[Predict] Skipping keep_prob prediction (no learner)")
         else:
@@ -779,214 +787,291 @@ class LightroomMainWindow(QMainWindow):
             if fv_tuple is None:
                 self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
             else:
-                fv, _ = fv_tuple
+                fv, keys = fv_tuple
                 try:
                     self.logger.info("[Predict] Computing keep probability for image=%s", img_name)
                     keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
                     if keep_prob is not None:
                         self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
+                        # Auto mark unsure for single image path
+                        self._auto_mark_unsure_if_needed([img_name], [keep_prob])
+                        explanations = self._explain_vector(fv, keys)
                 except Exception as e:  # noqa: PERF203
-                    self.logger.warning("[Predict] Prediction failed for %s: %s", img_name, e)
+                    self.logger.warning("[Predict] Prediction failed for %s: %s", img_path, e)
         # Always update info panel (ensures EXIF is displayed even before model exists)
-        self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob)
+        self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob, explanations=explanations)
         if keep_prob is not None:
             logging.info("[Predict] Updated keep_prob for image=%s: %.4f", img_name, keep_prob)
 
-    def _sort_by_probability(self, desc: bool = True):
-        """Sort images by predicted keep probability (desc default). Neutral 0.5 for missing features/learner.
-        Sets a transient _in_sort flag to allow guards (e.g., suppress accidental fullscreen opens)."""
-        if not self.sorted_images:
-            return
-        self._in_sort = True
-        import time as _time
-        self._last_sort_time = _time.time()
-        try:
-            if self.learner is None:
-                self._ensure_learner()
-            names = []
-            vectors = []
-            neutral = []
-            for img_name in self.sorted_images:
-                path = os.path.join(self.directory, img_name)
-                fv_tuple = self._get_feature_vector(path)
-                if fv_tuple is None:
-                    neutral.append(img_name)
-                    continue
-                fv, _ = fv_tuple
-                names.append(img_name)
-                vectors.append(fv)
-            prob_map = {}
-            if self.learner is not None and vectors:
-                try:
-                    probs = self.learner.predict_keep_prob(vectors)
-                    for n, p in zip(names, probs):
-                        prob_map[n] = float(p)
-                except Exception as e:
-                    self.logger.warning("[Sort] Probability prediction failed: %s", e)
-            for n in neutral:
-                prob_map.setdefault(n, 0.5)
-            for n in names:
-                prob_map.setdefault(n, 0.5)
-            self.logger.info("[Sort] prob_map=%s mode=%s", prob_map, 'desc' if desc else 'asc')
-            self.sorted_images.sort(key=lambda n: prob_map.get(n, 0.5), reverse=desc)
-            if self.image_grid:
-                self.image_grid.image_paths = self.sorted_images
-                self.image_grid.populate_grid()
-                # Re-apply probabilities so they remain visible after repopulation
-                self.image_grid.update_keep_probabilities(prob_map)
-            self.logger.info("[Sort] Completed probability sort (%s)", 'desc' if desc else 'asc')
-        finally:
-            self._in_sort = False
-
-    def open_fullscreen(self, idx, img_path):
-        # Suppress unintended opens during batch sort operations
-        if getattr(self, '_in_sort', False):
-            self.logger.info("[FullscreenGuard] Suppressed fullscreen open (in_sort) %s", img_path)
-            return
-        self.logger.info("[Fullscreen] Opening fullscreen for %s (idx=%s)", img_path, idx)
-        self.on_select_image(idx)
-        def keep_cb():
-            self._label_current_image(1)
-        def trash_cb():
-            self._label_current_image(0)
-        def unsure_cb():
-            self._label_current_image(-1)
-        # Build navigation sequence (absolute paths)
-        seq = [os.path.join(self.directory, n) for n in self.sorted_images]
-        start_index = idx if 0 <= idx < len(seq) else 0
-        def on_index_change(new_path, new_index):
-            # Update current index and refresh probability/info
-            if 0 <= new_index < len(self.sorted_images):
-                self.current_img_idx = new_index
-                # Update info panel with new probability (async features may still be computing)
-                self.refresh_keep_prob()
-        # Attempt embedded viewer (pass parent_main_window). Some tests monkeypatch open_full_image_qt
-        # with a simplified signature; fall back gracefully if TypeError raised.
-        try:
-            open_full_image_qt(img_path,
-                               on_keep=keep_cb,
-                               on_trash=trash_cb,
-                               on_unsure=unsure_cb,
-                               image_sequence=seq,
-                               start_index=start_index,
-                               on_index_change=on_index_change,
-                               parent_main_window=self)
-        except TypeError:
-            # Monkeypatched simplified signature: path, on_keep=None, on_trash=None, on_unsure=None
-            try:
-                open_full_image_qt(img_path, keep_cb, trash_cb, unsure_cb)
-            except TypeError:
-                # Last resort minimal call
-                open_full_image_qt(img_path)
-
-    # ------------------------------------------------------------------
-    # Embedded viewer management
-    def _show_embedded_viewer(self, viewer_widget):
-        """Display the provided EmbeddedImageViewer inside the main window.
-        Hides the splitter page by switching the stacked widget page.
-        """
-        if self._embedded_viewer is not None:
-            # Replace existing viewer
-            idx_old = self._stack.indexOf(self._embedded_viewer)
-            if idx_old != -1:
-                w_old = self._stack.widget(idx_old)
-                self._stack.removeWidget(w_old)
-                w_old.deleteLater()
-            self._embedded_viewer = None
-        self._embedded_viewer = viewer_widget
-        self._stack.addWidget(viewer_widget)
-        self._stack.setCurrentWidget(viewer_widget)
-        viewer_widget.setFocus()
-
-    def _restore_from_viewer(self):
-        """Return to the main splitter view and dispose of the embedded viewer."""
-        if self._embedded_viewer is None:
-            return
-        try:
-            idx = self._stack.indexOf(self._embedded_viewer)
-            if idx != -1:
-                w = self._stack.widget(idx)
-                self._stack.removeWidget(w)
-                w.deleteLater()
-        finally:
-            self._embedded_viewer = None
-            self._stack.setCurrentWidget(self._main_page)
-
-    # ------------------------------------------------------------------
-    # Methods below were present prior to embedding refactor (restored)
-    def update_grouping(self, image_info):
-        self.logger.info("[AsyncLoad] Updating grouping metadata for %d images", len(image_info))
-        self.image_info = image_info or {}
-        if self.image_grid:
-            self.image_grid.image_info = self.image_info
-            if self.sort_by_group:
-                self.sorted_images = self._compute_sorted_images()
-            self.image_grid.populate_grid()
-
-    def on_select_image(self, idx):
-        if 0 <= idx < len(self.sorted_images):
-            self.current_img_idx = idx
-
-    def on_sort_by_group_toggled(self, checked):
-        self.sort_by_group = checked
-        if self.image_grid:
-            if self.sort_by_group:
-                self.sorted_images = self._compute_sorted_images()
-            self.image_grid.populate_grid()
-        self._update_status_bar(action='group on' if checked else 'group off')
-
-    def on_predict_sort_clicked(self):  # backward compat legacy action
-        self.on_predict_sort_desc()
-
-    def on_predict_sort_desc(self):
-        self._sort_by_probability(desc=True)
-        self._last_sort_mode = 'prob_desc'
-        self._update_status_bar(action='sorted desc')
-
-    def on_predict_sort_asc(self):
-        self._sort_by_probability(desc=False)
-        self._last_sort_mode = 'prob_asc'
-        self._update_status_bar(action='sorted asc')
-
     def on_export_csv_clicked(self):
+        # Enhanced export with EXIF subset + explanation tokens
+        subset_exif_keys = ["DateTimeOriginal", "ExposureTime", "FNumber", "ISOSpeedRatings", "FocalLength"]
         rows = []
+        from .utils import extract_exif
         for img_name in self.sorted_images:
             path = os.path.join(self.directory, img_name)
             label = self.labels_map.get(img_name, '')
-            prob_str = ''
+            prob = ''
+            explanations = ''
             if self.learner is not None:
                 fv_tuple = self._get_feature_vector_sync(path)
                 if fv_tuple is not None:
-                    fv, _ = fv_tuple
+                    fv, keys = fv_tuple
                     try:
-                        prob = float(self.learner.predict_keep_prob([fv])[0])
-                        prob_str = f"{prob:.4f}"
-                    except Exception:  # noqa: PERF203
-                        prob_str = ''
-            rows.append((path, label, prob_str))
+                        p = float(self.learner.predict_keep_prob([fv])[0])
+                        prob = f"{p:.4f}"
+                        expl_list = self._explain_vector(fv, keys)
+                        explanations = ';'.join(f"{name}:{'+' if good else '-'}" for name, good in expl_list)
+                    except Exception:
+                        pass
+            exif = {}
+            try:
+                exif = extract_exif(path) or {}
+            except Exception:
+                pass
+            exif_vals = [str(exif.get(k, '')) for k in subset_exif_keys]
+            rows.append([path, label, prob, explanations] + exif_vals)
+        header = ['path', 'label', 'keep_prob', 'explanations'] + subset_exif_keys
         try:
             with open('labels.csv', 'w') as f:
-                f.write('path,label,keep_prob\n')
-                for p, l, pr in rows:
-                    f.write(f"{p},{l},{pr}\n")
-            self.logger.info('[Export] Wrote labels.csv with %d rows', len(rows))
+                f.write(','.join(header) + '\n')
+                for row in rows:
+                    f.write(','.join(str(x) for x in row) + '\n')
+            self.logger.info('[Export] Wrote labels.csv with %d rows (enhanced)', len(rows))
         except Exception as e:
             self.logger.warning('[Export] Failed writing labels.csv: %s', e)
 
-    def on_reset_model_clicked(self):
-        clear_model_and_log(delete_log=False)
-        self.logger.info('[Reset] Cleared persisted model; log preserved.')
-        self.learner = None
-        self.labels_map = {}
-        if self.image_grid:
-            self.image_grid.labels_map = self.labels_map
-            self.image_grid.populate_grid()
-        if self.sorted_images:
-            first_path = os.path.join(self.directory, self.sorted_images[0])
-            fv_tuple = self._get_feature_vector_sync(first_path)
-            if fv_tuple is not None:
-                fv0, _ = fv_tuple
-                self.learner = PersonalLearner(n_features=len(fv0))
+    # --- Keyboard shortcuts in grid / main window mode ---
+    def keyPressEvent(self, e):  # noqa: N802
+        from PySide6.QtCore import Qt
+        key = e.key()
+        if key in (Qt.Key.Key_Left, Qt.Key.Key_A, Qt.Key.Key_H):
+            # Prev image
+            if self.current_img_idx > 0:
+                self.current_img_idx -= 1
+                self.refresh_keep_prob()
+        elif key in (Qt.Key.Key_Right, Qt.Key.Key_D, Qt.Key.Key_L):
+            if self.current_img_idx < len(self.sorted_images) - 1:
+                self.current_img_idx += 1
+                self.refresh_keep_prob()
+        elif key in (Qt.Key.Key_Space,):
+            # toggle keep / trash
+            img = self.get_current_image()
+            cur = self.labels_map.get(img)
+            if cur == 1:
+                self._label_current_image(0)
+            else:
+                self._label_current_image(1)
+        else:
+            return super().keyPressEvent(e)
+
+    # --- Explanation helpers ---
+    def _explain_vector(self, fv, keys=None, top_n=5):
+        """Return list of (token, good_bool) for the given feature vector using linear model contributions.
+        Falls back to empty list if model or coefficients unavailable."""
+        if self.learner is None:
+            return []
+        model = getattr(self.learner, 'model', None)
+        coef = getattr(model, 'coef_', None)
+        if coef is None:
+            return []
+        try:
+            import numpy as _np
+            w = coef[0] if hasattr(coef, '__len__') and len(coef.shape) == 2 else coef
+            fv_arr = _np.asarray(fv, dtype=float)
+            if fv_arr.shape[0] != w.shape[-1]:
+                return []
+            contrib = w * fv_arr
+            # choose feature names order
+            names = None
+            if keys and len(keys) == len(contrib):
+                names = list(keys)
+            elif getattr(self.learner, 'feature_names', None) and len(self.learner.feature_names) == len(contrib):
+                names = list(self.learner.feature_names)
+            else:
+                names = [f'f{i}' for i in range(len(contrib))]
+            idxs = list(range(len(contrib)))
+            idxs.sort(key=lambda i: abs(contrib[i]), reverse=True)
+            out = []
+            for i in idxs[:top_n]:
+                val = contrib[i]
+                label = names[i]
+                good = val >= 0
+                # simple prettify / collapse overly long names
+                if len(label) > 22:
+                    label = label[:20] + '…'
+                out.append((label, good))
+            return out
+        except Exception:
+            return []
+
+    def _auto_mark_unsure_if_needed(self, names, probs):
+        """Auto-mark unlabeled mid-confidence images as Unsure (-1).
+        Avoid duplicate event log entries using _auto_unsure_assigned set."""
+        low, high = self._auto_unsure_threshold
+        for n, p in zip(names, probs):
+            if n in self.labels_map:  # already user labeled or previously auto-labeled
+                continue
+            if n in self._auto_unsure_assigned:
+                continue
+            if low <= p <= high:
+                # attempt feature vector for log; skip persistence on failure
+                path = os.path.join(self.directory, n)
+                fv_tuple = self._get_feature_vector_sync(path)
+                feats_list = []
+                if fv_tuple:
+                    fv, _k = fv_tuple
+                    try:
+                        feats_list = fv.tolist() if hasattr(fv, 'tolist') else list(fv)
+                    except Exception:
+                        feats_list = []
+                event = {'image': n, 'path': path, 'features': feats_list, 'label': -1, 'auto':'unsure'}
+                try:
+                    append_event(event)
+                except Exception:
+                    pass
+                self.labels_map[n] = -1
+                self._auto_unsure_assigned.add(n)
                 if self.image_grid:
-                    self.image_grid.learner = self.learner
-        self.refresh_keep_prob()
+                    self.image_grid.update_label(n, -1)
+                self.logger.info('[AutoUnsure] Marked %s prob=%.3f', n, p)
+
+    def on_sort_by_group_toggled(self, checked: bool):
+        self.sort_by_group = bool(checked)
+        if self.image_grid:
+            self.image_grid.populate_grid()
+        self._update_status_bar(action='group sort on' if checked else 'group sort off')
+
+    def on_select_image(self, idx: int):
+        if 0 <= idx < len(self.sorted_images):
+            self.current_img_idx = idx
+            self.refresh_keep_prob()
+            self._update_status_bar(action=f'select {idx+1}')
+
+    def open_fullscreen(self, start_index: int, path: str):
+        # Defensive bounds
+        if not self.sorted_images:
+            return
+        if not (0 <= start_index < len(self.sorted_images)):
+            start_index = 0
+        self.current_img_idx = start_index
+        seq_paths = [os.path.join(self.directory, n) for n in self.sorted_images]
+        from .viewer import open_full_image_qt
+        open_full_image_qt(path, on_keep=self.on_keep_clicked, on_trash=self.on_trash_clicked,
+                           on_unsure=self.on_unsure_clicked, image_sequence=seq_paths,
+                           start_index=start_index, on_index_change=self._on_viewer_index_change,
+                           parent_main_window=self)
+
+    def _on_viewer_index_change(self, path: str, idx: int):
+        # Sync main window index when embedded viewer navigates
+        if 0 <= idx < len(self.sorted_images):
+            self.current_img_idx = idx
+            self.refresh_keep_prob()
+            self._update_status_bar(action=f'viewer {idx+1}')
+
+    def _show_embedded_viewer(self, viewer_widget: QWidget):
+        # Add viewer as second page in stack if not already
+        if viewer_widget is None:
+            return
+        # Remove previous viewer page if exists
+        if getattr(self, '_embedded_viewer', None) is not None:
+            try:
+                old = self._embedded_viewer
+                self._stack.removeWidget(old)
+                old.setParent(None)
+            except Exception:
+                pass
+        self._embedded_viewer = viewer_widget
+        self._stack.addWidget(viewer_widget)
+        self._stack.setCurrentWidget(viewer_widget)
+        self._update_status_bar(action='viewer open')
+
+    def _restore_from_viewer(self):
+        # Return to main splitter page
+        self._stack.setCurrentWidget(self._main_page)
+        if getattr(self, '_embedded_viewer', None) is not None:
+            try:
+                vw = self._embedded_viewer
+                self._stack.removeWidget(vw)
+                vw.setParent(None)
+            except Exception:
+                pass
+            self._embedded_viewer = None
+        self._update_status_bar(action='viewer closed')
+
+    def _collect_probabilities_for_sort(self):
+        names = list(self.sorted_images)
+        if not names:
+            return {}
+        if self.learner is None:
+            return {n: 0.5 for n in names}
+        vecs = []
+        valid_names = []
+        for n in names:
+            path = os.path.join(self.directory, n)
+            cached = self._feature_cache.get(path)
+            if cached:
+                vecs.append(cached[1][0])
+                valid_names.append(n)
+        if not vecs:
+            return {n:0.5 for n in names}
+        try:
+            probs = self.learner.predict_keep_prob(vecs)
+        except Exception:
+            # Fallback: if learner returns binary probs shape (N,2)
+            try:
+                import numpy as _np
+                probs = _np.asarray(probs)
+                if probs.ndim == 2 and probs.shape[1] == 2:
+                    probs = probs[:,1]
+            except Exception:
+                return {n:0.5 for n in names}
+        # If predict_keep_prob returns 1D array -> fine
+        import numpy as _np
+        probs_arr = _np.asarray(probs)
+        if probs_arr.ndim == 2 and probs_arr.shape[1] == 2:
+            probs_arr = probs_arr[:,1]
+        prob_map = {n: float(p) for n,p in zip(valid_names, probs_arr)}
+        # Assign neutral to missing
+        for n in names:
+            if n not in prob_map:
+                prob_map[n] = 0.5
+        return prob_map
+
+    def on_predict_sort_desc(self):
+        prob_map = self._collect_probabilities_for_sort()
+        self.sorted_images = sorted(self.sorted_images, key=lambda n: prob_map.get(n,0.5), reverse=True)
+        if self.image_grid:
+            self.image_grid.image_paths = self.sorted_images
+            self.image_grid.populate_grid()
+        self._last_sort_mode = 'desc'
+        self.current_img_idx = 0 if self.sorted_images else -1
+        self._update_status_bar(action='sort desc')
+
+    def on_predict_sort_asc(self):
+        prob_map = self._collect_probabilities_for_sort()
+        self.sorted_images = sorted(self.sorted_images, key=lambda n: prob_map.get(n,0.5))
+        if self.image_grid:
+            self.image_grid.image_paths = self.sorted_images
+            self.image_grid.populate_grid()
+        self._last_sort_mode = 'asc'
+        self.current_img_idx = 0 if self.sorted_images else -1
+        self._update_status_bar(action='sort asc')
+
+    def on_reset_model_clicked(self):
+        try:
+            clear_model_and_log()
+            self.logger.info('[Model] Cleared personal model + event log')
+        except Exception as e:  # noqa: PERF203
+            self.logger.warning('[Model] Failed clearing model/log: %s', e)
+        self.learner = None
+        if hasattr(self.image_grid, 'learner'):
+            self.image_grid.learner = None
+        # Rebuild labels map (will be empty except maybe unsure / previous entries ignored)
+        self.labels_map = self._build_labels_map_from_log()
+        # Reset probabilities to neutral
+        if self.image_grid:
+            neutral = {n: 0.5 for n in self.image_grid.image_paths[:self.image_grid.MAX_IMAGES]}
+            self.image_grid.update_keep_probabilities(neutral)
+        self._cold_start_completed = False
+        self._update_status_bar(action='model reset')
