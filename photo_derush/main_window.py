@@ -211,6 +211,8 @@ class LightroomMainWindow(QMainWindow):
         # --- Auto Unsure labeling ---
         self._auto_unsure_threshold = (0.4, 0.7)
         self._auto_unsure_assigned = set()
+        self._in_sort = False
+        self.sorted_images = image_paths
 
     def _init_status_widgets(self):
         if getattr(self, '_status_widgets_initialized', False):
@@ -1024,6 +1026,8 @@ class LightroomMainWindow(QMainWindow):
             self._update_status_bar(action=f'select {idx+1}')
 
     def open_fullscreen(self, start_index: int, path: str):
+        if getattr(self, '_in_sort', False):
+            return
         # Defensive bounds
         if not self.sorted_images:
             return
@@ -1114,6 +1118,7 @@ class LightroomMainWindow(QMainWindow):
         return prob_map
 
     def on_predict_sort_desc(self):
+        self._in_sort = True
         prob_map = self._collect_probabilities_for_sort()
         self.sorted_images = sorted(self.sorted_images, key=lambda n: prob_map.get(n,0.5), reverse=True)
         if self.image_grid:
@@ -1122,8 +1127,10 @@ class LightroomMainWindow(QMainWindow):
         self._last_sort_mode = 'desc'
         self.current_img_idx = 0 if self.sorted_images else -1
         self._update_status_bar(action='sort desc')
+        self._in_sort = False
 
     def on_predict_sort_asc(self):
+        self._in_sort = True
         prob_map = self._collect_probabilities_for_sort()
         self.sorted_images = sorted(self.sorted_images, key=lambda n: prob_map.get(n,0.5))
         if self.image_grid:
@@ -1132,6 +1139,7 @@ class LightroomMainWindow(QMainWindow):
         self._last_sort_mode = 'asc'
         self.current_img_idx = 0 if self.sorted_images else -1
         self._update_status_bar(action='sort asc')
+        self._in_sort = False
 
     def on_reset_model_clicked(self):
         try:

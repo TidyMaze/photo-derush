@@ -9,7 +9,7 @@ from .image_manager import image_manager
 import sys
 sys.path.append('..')
 from ml.personal_learner import PersonalLearner
-from ml.persistence import load_model, save_model
+from ml.persistence import load_model
 import os
 from PySide6.QtGui import QIcon, QMovie
 from PySide6.QtCore import QPropertyAnimation
@@ -167,6 +167,7 @@ class ImageGrid(QWidget):
     def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
         from PySide6.QtWidgets import QGraphicsDropShadowEffect
+        from PySide6.QtGui import QColor
         img_path = os.path.join(self.directory, img_name)
         # Loading spinner placeholder
         spinner = QLabel()
@@ -185,13 +186,13 @@ class ImageGrid(QWidget):
             background: #282c34;
             border-radius: 12px;
             border: 1px solid #333;
-            transition: box-shadow 0.2s;
+            /* transition: box-shadow 0.2s; Removed unsupported property */
         """)
         try:
             shadow = QGraphicsDropShadowEffect()
             shadow.setBlurRadius(12)
             shadow.setOffset(0, 2)
-            shadow.setColor(Qt.gray)
+            shadow.setColor(QColor("gray"))
             container.setGraphicsEffect(shadow)
         except Exception:
             pass
@@ -256,7 +257,7 @@ class ImageGrid(QWidget):
         lbl.setStyleSheet("""
             QLabel:hover {
                 border: 2px solid #4fc3f7;
-                box-shadow: 0 0 8px #4fc3f7;
+                /* box-shadow: 0 0 8px #4fc3f7; Removed unsupported property */
             }
             QLabel:focus {
                 border: 2px solid #81c784;
@@ -368,7 +369,6 @@ class ImageGrid(QWidget):
             # clamp
             p = max(0.0, min(1.0, p))
             # 0 -> red (#b71c1c), 0.5 -> amber (#ffa000), 1 -> green (#2e7d32)
-            import math
             if p < 0.5:
                 # red to amber
                 t = p / 0.5
