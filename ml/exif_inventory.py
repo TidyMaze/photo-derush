@@ -6,10 +6,11 @@ import argparse
 import logging
 
 try:
-    from PIL import Image, ExifTags
+    from PIL import Image  # noqa: F401  (kept to fail early if PIL missing)
 except Exception:  # pragma: no cover
     Image = None
-    ExifTags = None
+
+from photo_derush.utils import extract_exif  # centralized EXIF loader
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -39,38 +40,6 @@ def iter_images(root: Path, recursive: bool):
                 yield p
 
 
-def read_exif_map(img_path: Path):
-    try:
-        with Image.open(img_path) as im:
-            if not hasattr(im, 'getexif'):
-                return {}
-            try:
-                exif_obj = im.getexif()
-            except Exception:  # noqa: PERF203
-                return {}
-            if not exif_obj or not len(exif_obj):
-                return {}
-            tagmap = {}
-            for tag_id, value in exif_obj.items():
-                name = ExifTags.TAGS.get(tag_id, f'UNK_{tag_id}') if ExifTags else str(tag_id)
-                tagmap[name] = value
-            # Expand GPS sub-IFD (store as raw dict of tag names) for completeness
-            try:
-                if hasattr(exif_obj, 'get_ifd') and ExifTags and hasattr(ExifTags, 'IFD') and hasattr(ExifTags, 'GPSTAGS'):
-                    gps_ifd_id = getattr(ExifTags.IFD, 'GPSInfo', None)
-                    if gps_ifd_id is not None:
-                        sub = exif_obj.get_ifd(gps_ifd_id)
-                        if sub:
-                            gps_map = {ExifTags.GPSTAGS.get(k, k): v for k, v in sub.items()}
-                            if gps_map:
-                                tagmap['GPSInfo'] = gps_map
-            except Exception:  # noqa: PERF203
-                pass
-            return tagmap
-    except Exception:  # pragma: no cover
-        return {}
-
-
 def inventory(dir_path: Path, recursive: bool, limit: int | None = None):
     name_counter = Counter()
     sample_values = {}
@@ -83,7 +52,7 @@ def inventory(dir_path: Path, recursive: bool, limit: int | None = None):
         total_images += 1
         if limit and total_images > limit:
             break
-        tagmap = read_exif_map(img_path)
+        tagmap = extract_exif(str(img_path))  # central call
         if tagmap:
             images_with_exif += 1
             per_image_tag_counts.append(len(tagmap))
@@ -132,7 +101,7 @@ def format_human(inv: dict, top: int):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='EXIF inventory (no cache).')
+    parser = argparse.ArgumentParser(description='EXIF inventory (centralized extract_exif).')
     parser.add_argument('--dir', type=Path, required=False, default=Path('/Users/yannrolland/Pictures/photo-dataset'), help='Directory of images')
     parser.add_argument('-r','--recursive', action='store_true', help='Recurse into subdirectories')
     parser.add_argument('--limit', type=int, help='Max images to scan')
