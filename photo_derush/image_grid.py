@@ -1,4 +1,5 @@
 import logging
+import datetime
 
 from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy
 from PySide6.QtCore import Qt, QObject, Signal, QRunnable, QThreadPool
@@ -173,7 +174,13 @@ class ImageGrid(QWidget):
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
         top_label = QLabel(str(group_badge))
         top_label.setStyleSheet(f"background: {color}; color: #fff; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
-        date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
+        date_str = "N/A"
+        if os.path.exists(img_path):
+            try:
+                ts = os.path.getmtime(img_path)
+                date_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            except Exception as e:
+                logging.warning(f"Could not format date for {img_path}: {e}")
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 11px;")
