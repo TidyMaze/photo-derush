@@ -344,6 +344,15 @@ class LightroomMainWindow(QMainWindow):
         self._refresh_all_keep_probs()
         self._update_status_bar(action='images loaded')
 
+    def update_grouping(self, image_info):
+        """Update grouping metadata and refresh the grid."""
+        self.logger.info("[AsyncLoad] Updating grouping metadata (%d images)", len(image_info) if image_info else 0)
+        self.image_info = image_info or {}
+        if self.image_grid:
+            self.image_grid.image_info = self.image_info
+            self.image_grid.populate_grid()
+        self._update_status_bar(action='grouping updated')
+
     def _definitive_label_counts(self):
         counts = {0: 0, 1: 0}
         latest = latest_labeled_events()
