@@ -133,7 +133,7 @@ class ImageGrid(QWidget):
         pix = pil2pixmap(pil_thumb)
         # Show group as badge in top label
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
-        top_label = QLabel(group_badge)
+        top_label = QLabel(str(group_badge))
         top_label.setStyleSheet(f"background: {color}; color: #fff; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center;")
         date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}")
@@ -219,7 +219,7 @@ class ImageGrid(QWidget):
 
     def add_image(self, img_name: str):
         logging.info("[ImageGrid] Adding image: %s", img_name)
-        if img_name in self.image_name_to_widgets:
+        if img_name in self.image_name_to_widgets or hasattr(self, '_pending_thumbs') and img_name in self._pending_thumbs:
             return
         if len(self.image_labels) >= self.MAX_IMAGES:
             return
@@ -227,11 +227,22 @@ class ImageGrid(QWidget):
         # Append for consistency in get_sorted_images
         if img_name not in self.image_paths:
             self.image_paths.append(img_name)
-        # Use existing metadata if present else defaults
         info = self.image_info.get(img_name, {})
         color = '#444444'
-        self._add_thumbnail_row(img_name, idx, color=color, hash_str=info.get('hash', '...'), group_str=str(info.get('group', '...')))
-        self.status_bar.showMessage(f"Loaded {len(self.image_labels)} images (streaming)")
+        # Ensure emitter and threadpool are initialized
+        if not hasattr(self, '_thumb_emitter'):
+            self._thumb_emitter = ThumbnailResultEmitter()
+            self._thumb_emitter.finished.connect(self._on_thumb_ready)
+        if not hasattr(self, '_thumb_threadpool'):
+            self._thumb_threadpool = QThreadPool.globalInstance()
+        if not hasattr(self, '_pending_thumbs'):
+            self._pending_thumbs = set()
+        group_to_color = {info.get('group'): color} if info.get('group') is not None else {}
+        default_color = color
+        loader = ThumbnailLoader(idx, img_name, info, group_to_color, default_color, self.directory, self.THUMB_SIZE, image_manager, self._thumb_emitter)
+        self._pending_thumbs.add(img_name)
+        self._thumb_threadpool.start(loader)
+        self.status_bar.showMessage(f"Loading image: {img_name} (streaming)")
 
     def update_keep_probabilities(self, prob_map: dict):
         """Append or update keep probability line in bottom labels.
