@@ -18,11 +18,9 @@ class InfoPanel(QWidget):
 
     def update_info(self, img_name, img_path, group_idx, group_hash, image_hash, metrics=None, keep_prob=None):
         exif = extract_exif(img_path)
-
-        logging.info(f"Exif of {img_name} ({img_path}): {exif}")
-
-        # Define important EXIF fields in order, with emojis
-        important_fields = [
+        logging.info(f"[InfoPanel] EXIF {img_name}: {list(exif.keys())}")
+        # Ordered list of preferred primary fields (emojis optional)
+        primary_fields = [
             ("DateTimeOriginal", "📅"),
             ("DateTime", "🕒"),
             ("Make", "🏭"),
@@ -31,63 +29,93 @@ class InfoPanel(QWidget):
             ("LensModel", "🔭"),
             ("Software", "💾"),
             ("ExposureTime", "⏱️"),
+            ("ShutterSpeedValue", "⚙️"),
             ("FNumber", "🔆"),
+            ("ApertureValue", "🔆"),
             ("ISOSpeedRatings", "🌡️"),
-            ("FocalLength", "🔎"),
-            ("FocalLengthIn35mmFilm", "📏"),
             ("ExposureBiasValue", "➕➖"),
+            ("BrightnessValue", "💡"),
             ("MeteringMode", "📐"),
             ("WhiteBalance", "⚪"),
             ("Flash", "⚡"),
+            ("FocalLength", "🔎"),
+            ("FocalLengthIn35mmFilm", "📏"),
+            ("SubjectDistance", "📏"),
+            ("DigitalZoomRatio", "🔍"),
+            ("SceneCaptureType", "🎞️"),
+            ("Contrast", "🌓"),
+            ("Saturation", "🌈"),
+            ("Sharpness", "🔪"),
+            ("CompositeImage", "🧩"),
             ("GPSInfo", "📍"),
             ("ExifImageWidth", "↔️"),
-            ("ExifImageHeight", "↕️")
+            ("ExifImageHeight", "↕️"),
         ]
-        # Prepare important and other EXIF fields
-        exif_display = []
-        other_exif = []
-        exif_keys = set(exif.keys())
-        # GPSInfo first if present
-        if "GPSInfo" in exif and isinstance(exif["GPSInfo"], dict):
+        # Decode GPS first (if dict)
+        rows_primary = []
+        shown = set()
+        if 'GPSInfo' in exif and isinstance(exif['GPSInfo'], dict):
             try:
-                gps_str = format_gps_info(exif["GPSInfo"])
-            except Exception as e:
-                gps_str = f"[Invalid GPSInfo: {e}]"
-            exif_display.append(("📍 GPSInfo", gps_str))
-        # Add other important fields in order
-        for key, emoji in important_fields:
-            if key == "GPSInfo":
-                continue  # already handled
-            if key in exif:
-                exif_display.append((f"{emoji} {key}", exif[key]))
-        # Add image size as WxH if both present
-        width = exif.get("ExifImageWidth")
-        height = exif.get("ExifImageHeight")
-        if width and height:
-            exif_display.append(("🖼️ Image Size", f"{width} x {height}"))
-        # Collect other EXIF fields
-        shown_keys = {k.split(' ', 1)[-1] for k, _ in exif_display}
-        for k in sorted(exif_keys - shown_keys):
-            v = exif[k]
-            if k == "GPSInfo" and isinstance(v, dict):
-                continue  # already shown
-            other_exif.append((k, v))
-        # Render important EXIF fields as a table
-        exif_table = "<table style='font-size:11pt; color:#bbb; background:#232629;'>"
-        for k, v in exif_display:
-            exif_table += f"<tr><td style='font-weight:bold; padding-right:10px;'>{k}</td><td>{v}</td></tr>"
-        exif_table += "</table>"
-        # Render other EXIF fields in a <details> block
-        if other_exif:
-            more_table = "<table style='font-size:10pt; color:#aaa; background:#232629;'>"
-            for k, v in other_exif:
-                more_table += f"<tr><td style='font-weight:bold; padding-right:10px;'>{k}</td><td>{v}</td></tr>"
-            more_table += "</table>"
-            exif_more = f"<details style='margin-top:8px;'><summary style='cursor:pointer; color:#88f;'>See more</summary>{more_table}</details>"
-        else:
-            exif_more = ""
-        # Metrics section
-        metrics_str = "<div style='margin-bottom:10px;'><b>Metrics</b><br>"
+                gps_val = format_gps_info(exif['GPSInfo'])
+            except Exception as e:  # noqa: PERF203
+                gps_val = f"[Invalid GPSInfo: {e}]"
+            rows_primary.append(("📍 GPSInfo", gps_val))
+            shown.add('GPSInfo')
+        def _fmt(v):
+            try:
+                from fractions import Fraction
+                if isinstance(v, bytes):
+                    try: return v.decode('utf-8','ignore')
+                    except Exception: return repr(v[:16])
+                if isinstance(v, Fraction):
+                    return f"{float(v):.4g}"
+                if isinstance(v, (list, tuple)):
+                    if len(v) <= 6:
+                        return '[' + ', '.join(_fmt(x) for x in v) + ']'
+                    return '[' + ', '.join(_fmt(x) for x in v[:6]) + ', …]'
+                if isinstance(v, dict):
+                    # Compact dict preview
+                    items = []
+                    for k2, v2 in list(v.items())[:8]:
+                        items.append(f"{k2}:{_fmt(v2)}")
+                    more = ' …' if len(v) > 8 else ''
+                    return '{' + ', '.join(items) + more + '}'
+                return v
+            except Exception:
+                return v
+        for key, emoji in primary_fields:
+            if key == 'GPSInfo':
+                continue
+            if key in exif and key not in shown:
+                rows_primary.append((f"{emoji} {key}", _fmt(exif[key])))
+                shown.add(key)
+        # Derived image size
+        if 'ExifImageWidth' in exif and 'ExifImageHeight' in exif:
+            rows_primary.append(("🖼️ Image Size", f"{exif['ExifImageWidth']} x {exif['ExifImageHeight']}"))
+        # Remaining EXIF
+        other_rows = []
+        for k in sorted(exif.keys()):
+            if k in shown:
+                continue
+            val = exif[k]
+            if k == 'GPSInfo' and isinstance(val, dict):
+                continue
+            other_rows.append((k, _fmt(val)))
+        def _table(rows, small=False):
+            if not rows:
+                return "<i style='color:#666;'>None</i>"
+            fs = '10pt' if small else '11pt'
+            html = f"<table style='font-size:{fs}; color:#bbb; background:#232629; border-collapse:collapse;'>"
+            for k,v in rows:
+                html += ("<tr><td style='font-weight:bold; padding:2px 12px 2px 0; vertical-align:top;'>" +
+                         f"{k}</td><td style='padding:2px 0; word-break:break-word;'>" +
+                         f"{v}</td></tr>")
+            html += '</table>'
+            return html
+        primary_html = _table(rows_primary)
+        other_html = _table(other_rows, small=True)
+        # Metrics
+        metrics_html = "<div style='margin-bottom:10px;'><b>Metrics</b><br>"
         if metrics:
             blur_score, sharpness_metrics, aesthetic_score = metrics
             lines = [
@@ -96,25 +124,20 @@ class InfoPanel(QWidget):
                 f"Tenengrad: <b>{sharpness_metrics['tenengrad']:.1f}</b>" if sharpness_metrics else "Tenengrad: N/A",
                 f"Brenner: <b>{sharpness_metrics['brenner']:.1f}</b>" if sharpness_metrics else "Brenner: N/A",
                 f"Wavelet: <b>{sharpness_metrics['wavelet_energy']:.1f}</b>" if sharpness_metrics else "Wavelet: N/A",
-                f"Aesthetic: <b>{aesthetic_score:.2f}</b>" if aesthetic_score is not None else "Aesthetic: N/A"
+                f"Aesthetic: <b>{aesthetic_score:.2f}</b>" if aesthetic_score is not None else "Aesthetic: N/A",
             ]
-            metrics_str += "<br>".join(lines)
+            metrics_html += '<br>'.join(lines)
         else:
-            metrics_str += "No metrics available."
-        metrics_str += "</div>"
-        # File info section
-        file_info = f"<div style='margin-bottom:10px;'><b>File:</b> {img_name}<br>"
-        file_info += f"<b>Path:</b> {img_path}<br>"
-        file_info += f"<b>Group ID:</b> {group_idx}<br>"
-        file_info += f"<b>Group Hash:</b> {group_hash}<br>"
-        file_info += f"<b>Image Hash:</b> {image_hash}</div>"
-        # Keep probability section
-        if keep_prob is not None:
-            prob_str = f"<div style='margin-bottom:10px; font-size:16pt; color:#4caf50;'><b>Keep Probability:</b> {keep_prob:.2%}</div>"
-        else:
-            prob_str = ""
-        # EXIF section
-        exif_section = f"<div style='margin-top:10px;'><b>EXIF</b><br>{exif_table}{exif_more}</div>"
-        # Combine all sections
-        html = prob_str + file_info + metrics_str + exif_section
+            metrics_html += 'No metrics available.'
+        metrics_html += '</div>'
+        # File info & probability
+        file_info = (f"<div style='margin-bottom:10px;'><b>File:</b> {img_name}<br>"
+                     f"<b>Path:</b> {img_path}<br>"
+                     f"<b>Group ID:</b> {group_idx}<br>"
+                     f"<b>Group Hash:</b> {group_hash}<br>"
+                     f"<b>Image Hash:</b> {image_hash}</div>")
+        prob_html = (f"<div style='margin-bottom:10px; font-size:16pt; color:#4caf50;'><b>Keep Probability:</b> {keep_prob:.2%}</div>" if keep_prob is not None else '')
+        exif_section = ("<div style='margin-top:10px;'><b>EXIF (Primary)</b><br>" + primary_html +
+                        "<div style='margin-top:12px;'><b>All Other EXIF</b><br>" + other_html + '</div></div>')
+        html = prob_html + file_info + metrics_html + exif_section
         self.text_edit.setHtml(html)
