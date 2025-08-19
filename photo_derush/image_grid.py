@@ -160,7 +160,6 @@ class ImageGrid(QWidget):
         if pil_thumb is None:
             return  # skip if cannot load
         pix = pil2pixmap(pil_thumb)
-        # Show group as badge in top label
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
         top_label = QLabel(str(group_badge))
         top_label.setStyleSheet(f"background: {color}; color: #fff; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center;")
@@ -169,7 +168,6 @@ class ImageGrid(QWidget):
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: white; background: #222;")
         blur_label = QLabel("")
-        # Badge / label state
         lbl_val = self.labels_map.get(img_name)
         if lbl_val == 1:
             blur_label.setText("KEEP"); blur_label.setStyleSheet("color: #fff; background:#2e7d32; font-weight:bold; padding:2px;")
@@ -181,8 +179,8 @@ class ImageGrid(QWidget):
             blur_label.setStyleSheet("color: yellow; background: #222;")
         lbl = HoverEffectLabel()
         lbl.setPixmap(pix)
-        lbl.setMinimumSize(self.THUMB_SIZE, self.THUMB_SIZE)
-        lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
+        lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path, hash_str=hash_str, group_str=group_str):
             def handler(e):
@@ -212,12 +210,22 @@ class ImageGrid(QWidget):
             return handler
         lbl.mousePressEvent = mousePressEventFactory()
         lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory()
-        row_base = (idx // self.col_count) * 4
+        # --- NEW GRID LAYOUT ---
+        # Use globally imported QVBoxLayout, QWidget, QSizePolicy
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(2, 2, 2, 2)
+        vbox.setSpacing(4)
+        vbox.addWidget(top_label)
+        lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
+        lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        vbox.addWidget(lbl)
+        vbox.addWidget(bottom_label)
+        vbox.addWidget(blur_label)
+        container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        row = idx // self.col_count
         col = idx % self.col_count
-        self.grid.addWidget(lbl, row_base, col, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.grid.addWidget(top_label, row_base + 1, col)
-        self.grid.addWidget(bottom_label, row_base + 2, col)
-        self.grid.addWidget(blur_label, row_base + 3, col)
+        self.grid.addWidget(container, row, col)
         self.image_labels.append(lbl)
         self.top_labels.append(top_label)
         self.bottom_labels.append(bottom_label)
