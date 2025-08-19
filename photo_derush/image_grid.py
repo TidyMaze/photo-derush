@@ -131,10 +131,12 @@ class ImageGrid(QWidget):
         if pil_thumb is None:
             return  # skip if cannot load
         pix = pil2pixmap(pil_thumb)
-        top_label = QLabel("")
-        top_label.setStyleSheet(f"background: {color}; min-height: 8px;")
+        # Show group as badge in top label
+        group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
+        top_label = QLabel(group_badge)
+        top_label.setStyleSheet(f"background: {color}; color: #fff; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center;")
         date_str = str(os.path.getmtime(img_path)) if os.path.exists(img_path) else "N/A"
-        bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}\nGroup: {group_str}")
+        bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: white; background: #222;")
         blur_label = QLabel("")
