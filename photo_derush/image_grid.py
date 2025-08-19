@@ -47,6 +47,7 @@ class ImageGrid(QWidget):
         self._logged_keep_prob_images: set[str] = set()  # track images already logged for keep probability
         self._get_feature_vector_fn = get_feature_vector_fn
         self._last_prob_map = {}
+        self.selected_image_name = None  # Track the selected image name
         # Do not populate yet; caller may stream images
         if image_paths:
             self.populate_grid()
@@ -122,6 +123,34 @@ class ImageGrid(QWidget):
         group_str = group if group is not None else '...'
         self._add_thumbnail_row(img_name, idx, color=color, hash_str=hash_str, group_str=group_str, pil_thumb=pil_thumb)
         self.status_bar.showMessage(f"Loaded {len(self.image_labels)} images (thumbnails only, grouping pending)")
+        # After all thumbnails are loaded, restore selection and info panel
+        if not self._pending_thumbs:
+            if self.selected_image_name in self.image_name_to_widgets:
+                lbl, _, _, _ = self.image_name_to_widgets[self.selected_image_name]
+                for l in self.image_labels:
+                    if isinstance(l, HoverEffectLabel):
+                        l.set_selected(False)
+                lbl.set_selected(True)
+                # Update info panel for the selected image
+                img_path = os.path.join(self.directory, self.selected_image_name)
+                info = self.image_info.get(self.selected_image_name, {})
+                hash_str = info.get('hash', '...')
+                group = info.get('group')
+                group_str = group if group is not None else '...'
+                blur_score = compute_blur_score(img_path)
+                sharpness_metrics = compute_sharpness_features(img_path)
+                aesthetic_score = 42
+                metrics = (blur_score, sharpness_metrics, aesthetic_score)
+                keep_prob = None
+                if self.learner is not None:
+                    fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
+                    if fv_tuple is not None:
+                        fv, _ = fv_tuple
+                        keep_prob = float(self.learner.predict_keep_prob([fv])[0])
+                self.info_panel.update_info(self.selected_image_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
+            else:
+                self.selected_image_name = None
+                self.info_panel.update_info("", "", "", "", "", (), keep_prob=None)
 
     def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
@@ -161,6 +190,7 @@ class ImageGrid(QWidget):
                     if isinstance(l, HoverEffectLabel):
                         l.set_selected(False)
                 label.set_selected(True)
+                self.selected_image_name = img_name  # Track the selected image
                 blur_score = compute_blur_score(img_path)
                 sharpness_metrics = compute_sharpness_features(img_path)
                 aesthetic_score = 42
