@@ -1,15 +1,10 @@
 print("[Startup] main.py started (print statement)")
 import os
 from PIL import Image
-try:
-    LANCZOS_RESAMPLE = Image.Resampling.LANCZOS  # Pillow >=9.1.0
-except AttributeError:
-    LANCZOS_RESAMPLE = Image.LANCZOS  # type: ignore[attr-defined]
-
-import imagehash  # type: ignore
-import faiss  # type: ignore
-import numpy as np  # type: ignore
-import cv2  # type: ignore
+import imagehash
+import faiss
+import numpy as np
+import cv2
 import logging
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt, open_full_image_qt
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt_async
@@ -126,7 +121,7 @@ def compute_dhash(image_path):
     if img is None:
         raise FileNotFoundError(f"Cannot open image for dhash: {image_path}")
     try:
-        img.thumbnail((32, 32), LANCZOS_RESAMPLE)
+        img.thumbnail((32, 32), Image.Resampling.LANCZOS)
     except Exception:
         pass
     return imagehash.dhash(img)
@@ -176,15 +171,15 @@ def group_hashes(hashes, valid_paths, hamming_thresh=5):
         hashes_np = hashes_np.astype(np.uint8)
     if hashes_np.shape[1] != 8:
         raise ValueError(f"Expected hash shape (n, 8), got {hashes_np.shape}")
-    index = faiss.IndexBinaryFlat(64)  # type: ignore
-    index.add(hashes_np)  # type: ignore
+    index = faiss.IndexBinaryFlat(64)
+    index.add(hashes_np)
     clusters = []
     visited = set()
     for i, h in enumerate(hashes_np):
         if i in visited:
             continue
         query = h[np.newaxis, :].astype(np.uint8)
-        lims, D, I = index.range_search(query, hamming_thresh)  # type: ignore
+        lims, D, I = index.range_search(query, hamming_thresh)
         cluster = [valid_paths[j] for j in I[lims[0]:lims[1]] if j not in visited]
         for j in I[lims[0]:lims[1]]:
             visited.add(j)
