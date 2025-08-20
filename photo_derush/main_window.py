@@ -93,15 +93,7 @@ class LightroomMainWindow(QMainWindow):
                 border-top: 1px solid #333;
             }
         ''')
-        # Dark/Light mode toggle
-        self.is_dark_mode = True
-        self.dark_mode_action = QAction(QIcon.fromTheme("weather-clear-night"), "Toggle Dark/Light Mode", self)
-        self.dark_mode_action.setCheckable(True)
-        self.dark_mode_action.setChecked(True)
-        self.dark_mode_action.setToolTip("Toggle between dark and light mode")
-        self.dark_mode_action.triggered.connect(self.toggle_dark_mode)
         self.toolbar = SettingsToolbar(self)
-        self.toolbar.addAction(self.dark_mode_action)
         self.addToolBar(self.toolbar)
         # Toast notification system
         self.toast = QLabel("")

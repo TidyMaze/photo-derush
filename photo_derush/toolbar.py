@@ -97,7 +97,7 @@ class SettingsToolbar(QToolBar):
             }
         """)
 
-        # Ensure all toolbar icons are lightroom-light in dark mode, except dark_mode_action which should be light gray
+        # Ensure all toolbar icons are lightroom-light in dark mode
         def make_icon_light(action, force_light=True):
             icon = action.icon()
             if not icon.isNull():
@@ -115,9 +115,6 @@ class SettingsToolbar(QToolBar):
                 action.setIcon(QIcon(QPixmap.fromImage(img)))
         for action in [self.sort_by_group_action, self.keep_action, self.trash_action, self.unsure_action, self.predict_sort_action, self.predict_sort_asc_action, self.export_csv_action, self.reset_model_action]:
             make_icon_light(action, force_light=True)
-        # If dark_mode_action exists, make it light (not pure white, but light gray for contrast)
-        if hasattr(self, 'dark_mode_action'):
-            make_icon_light(self.dark_mode_action, force_light=False)
 
     def _emit_desc(self):
         # backward compat emit old signal

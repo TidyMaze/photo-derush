@@ -251,7 +251,8 @@ class ImageGrid(QWidget):
                 date_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
             except Exception as e:
                 logging.warning(f"Could not format date for {img_path}: {e}")
-        bottom_label = QLabel(f"{img_name}\nDate: {date_str}\nHash: {hash_str}")
+        # Remove hash from grid view label
+        bottom_label = QLabel(f"{img_name}\nDate: {date_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 11px;")
         # Use icons for label
