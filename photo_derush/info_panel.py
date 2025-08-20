@@ -132,10 +132,11 @@ class InfoPanel(QWidget):
             fs = '10pt' if small else '11pt'
             # Use LIGHTROOM_LIGHT for table background
             bg_col = f"rgb({LIGHTROOM_LIGHT.red()},{LIGHTROOM_LIGHT.green()},{LIGHTROOM_LIGHT.blue()})"
-            html = f"<table style='font-size:{fs}; color:#232629; background:{bg_col}; border-collapse:collapse;'>"
+            text_col = f"rgb({LIGHTROOM_LIGHT.red()},{LIGHTROOM_LIGHT.green()},{LIGHTROOM_LIGHT.blue()})"
+            html = f"<table style='font-size:{fs}; color:{text_col}; background:{bg_col}; border-collapse:collapse;'>"
             for k,v in rows:
-                html += ("<tr><td style='font-weight:bold; padding:2px 12px 2px 0; vertical-align:top; color:#232629;'>" +
-                         f"{k}</td><td style='padding:2px 0; word-break:break-word; color:#232629;'>" +
+                html += ("<tr><td style='font-weight:bold; padding:2px 12px 2px 0; vertical-align:top; color:" + text_col + ";'>" +
+                         f"{k}</td><td style='padding:2px 0; word-break:break-word; color:{text_col};'>"
                          f"{v}</td></tr>")
             html += '</table>'
             return html
