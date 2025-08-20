@@ -383,34 +383,68 @@ class ImageGrid(QWidget):
         self.THUMB_SIZE = size
         self.populate_grid()
 
+    def update_blur_label(self, img_name, blur_label):
+        lbl_val = self.labels_map.get(img_name)
+        badge_color = None
+        badge_icon = None
+        badge_tooltip = None
+        badge_size = 36
+        icon_size = 20
+        from PySide6.QtGui import QIcon, QColor, QPixmap, QImage
+        def make_icon_light(icon):
+            if not icon.isNull():
+                pixmap = icon.pixmap(icon_size, icon_size)
+                img = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
+                lr_light = LIGHTROOM_LIGHT
+                for y in range(img.height()):
+                    for x in range(img.width()):
+                        alpha = img.pixelColor(x, y).alpha()
+                        img.setPixelColor(x, y, QColor(lr_light.red(), lr_light.green(), lr_light.blue(), alpha))
+                return QIcon(QPixmap.fromImage(img))
+            return icon
+        if lbl_val == 1:
+            icon = QIcon.fromTheme("emblem-favorite")
+            badge_color = "#2e7d32"
+            badge_icon = make_icon_light(icon)
+            badge_tooltip = "Keep"
+        elif lbl_val == 0:
+            icon = QIcon.fromTheme("user-trash")
+            badge_color = "#b71c1c"
+            badge_icon = make_icon_light(icon)
+            badge_tooltip = "Trash"
+        elif lbl_val == -1:
+            icon = QIcon.fromTheme("dialog-question")
+            badge_color = "#ffeb3b"
+            badge_icon = make_icon_light(icon)
+            badge_tooltip = "Unsure"
+        else:
+            icon = QIcon()
+            badge_color = "transparent"
+            badge_icon = icon
+            badge_tooltip = ""
+        if badge_icon:
+            pixmap = badge_icon.pixmap(icon_size, icon_size)
+            blur_label.setPixmap(pixmap)
+            blur_label.setFixedSize(badge_size, badge_size)
+            blur_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            blur_label.setStyleSheet(f"background: {badge_color}; border-radius: {badge_size}px; border: 2px solid #23272e; margin: 4px; padding: 4px;")
+            if badge_tooltip:
+                blur_label.setToolTip(badge_tooltip)
+            else:
+                blur_label.setToolTip("")
+        else:
+            blur_label.setPixmap(QIcon().pixmap(icon_size, icon_size))
+            blur_label.setFixedSize(badge_size, badge_size)
+            blur_label.setStyleSheet(f"background: transparent; border-radius: {badge_size}px; margin: 4px; padding: 4px;")
+            blur_label.setToolTip("")
+
     def update_label(self, img_name, label):
         self.labels_map[img_name] = label
         widgets = self.image_name_to_widgets.get(img_name)
         if not widgets:
             return
-        # Instead of setting blur_label directly, trigger a UI refresh for the badge
-        # For now, re-add the thumbnail row for this image to update the badge
-        idx = self.image_labels.index(widgets[0]) if widgets[0] in self.image_labels else None
-        if idx is not None:
-            # Remove the old widget from the grid
-            for i in range(self.grid.count()):
-                item = self.grid.itemAt(i)
-                if item and item.widget() == widgets[0].parentWidget().parentWidget():
-                    self.grid.removeWidget(item.widget())
-                    item.widget().setParent(None)
-                    break
-            # Re-add the thumbnail row with updated label
-            info = self.image_info.get(img_name, {})
-            group = info.get('group')
-            color = self._last_prob_map.get(img_name, '#444444') if hasattr(self, '_last_prob_map') else '#444444'
-            hash_str = info.get('hash', '...')
-            group_str = group if group is not None else '...'
-            pil_thumb = None
-            import os
-            img_path = os.path.join(self.directory, img_name)
-            if os.path.exists(img_path):
-                pil_thumb = image_manager.get_thumbnail(img_path, (self.THUMB_SIZE, self.THUMB_SIZE))
-            self._add_thumbnail_row(img_name, idx, color=color, hash_str=hash_str, group_str=group_str, pil_thumb=pil_thumb)
+        blur_label = widgets[3]
+        self.update_blur_label(img_name, blur_label)
 
     def add_image(self, img_name: str):
         logging.info("[ImageGrid] Adding image: %s", img_name)
