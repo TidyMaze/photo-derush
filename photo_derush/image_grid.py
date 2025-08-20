@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QSize, QObject, Signal, QRunnable, QThreadPool
 from .widgets import HoverEffectLabel
 from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
 from .image_manager import image_manager
+from .feature_cache import FeatureVectorCache
 import sys
 sys.path.append('..')
 from ml.personal_learner import PersonalLearner
@@ -72,6 +73,8 @@ class ImageGrid(QWidget):
         self.base_bottom_texts = {}
         self._logged_keep_prob_images: set[str] = set()  # track images already logged for keep probability
         self._get_feature_vector_fn = get_feature_vector_fn
+        # Feature vector cache for fast lookup and parallel extraction
+        self._feature_cache = FeatureVectorCache(self._get_feature_vector_fn, max_workers=8)
         self._last_prob_map = {}
         self.selected_image_name = None  # Track the selected image name
         # Do not populate yet; caller may stream images
@@ -95,7 +98,7 @@ class ImageGrid(QWidget):
             sample_img = os.path.join(self.directory, img)
             break
         if isinstance(sample_img, (str, bytes, os.PathLike)) and os.path.exists(sample_img):
-            fv_tuple = self._get_feature_vector_fn(sample_img) if self._get_feature_vector_fn else None
+            fv_tuple = self._get_cached_feature_vector(sample_img)
             if fv_tuple:
                 fv, keys = fv_tuple
                 self.feature_keys = keys
@@ -122,6 +125,11 @@ class ImageGrid(QWidget):
         self.image_labels.clear(); self.top_labels.clear(); self.bottom_labels.clear(); self.blur_labels.clear(); self.image_name_to_widgets.clear()
         sorted_images = self.get_sorted_images()
         num_images = min(self.MAX_IMAGES, len(sorted_images))
+        # Precompute feature vectors in parallel for all images in the grid
+        img_paths = [os.path.join(self.directory, img) for img in sorted_images[:num_images]]
+        # Start batch extraction in background (non-blocking)
+        import threading
+        threading.Thread(target=self._feature_cache.batch_extract, args=(img_paths,), daemon=True).start()
         import colorsys
         group_to_color = {}
         used_groups = {self.image_info.get(img, {}).get('group') for img in sorted_images[:num_images]}
@@ -144,6 +152,13 @@ class ImageGrid(QWidget):
             loader = ThumbnailLoader(idx, img_name, info, group_to_color, default_color, self.directory, self.THUMB_SIZE, image_manager, self._thumb_emitter)
             self._pending_thumbs.add(img_name)
             self._thumb_threadpool.start(loader)
+
+    def _get_cached_feature_vector(self, img_path):
+        fv = self._feature_cache.get(img_path)
+        if fv is not None:
+            return fv
+        # Fallback to on-demand extraction if not yet cached
+        return self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
 
     def _on_thumb_ready(self, idx, img_name, info, group_to_color, default_color, pil_thumb):
         if pil_thumb is None:
@@ -178,7 +193,8 @@ class ImageGrid(QWidget):
                 metrics = (blur_score, sharpness_metrics, aesthetic_score)
                 keep_prob = None
                 if self.learner is not None:
-                    fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
+                    img_path = os.path.join(self.directory, self.selected_image_name)
+                    fv_tuple = self._get_cached_feature_vector(img_path)
                     if fv_tuple is not None:
                         fv, _ = fv_tuple
                         keep_prob = float(self.learner.predict_keep_prob([fv])[0])
@@ -521,7 +537,8 @@ class ImageGrid(QWidget):
             metrics = (blur_score, sharpness_metrics, aesthetic_score)
             keep_prob = None
             if self.learner is not None:
-                fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
+                img_path = os.path.join(self.directory, self.selected_image_name)
+                fv_tuple = self._get_cached_feature_vector(img_path)
                 if fv_tuple is not None:
                     fv, _ = fv_tuple
                     keep_prob = float(self.learner.predict_keep_prob([fv])[0])
