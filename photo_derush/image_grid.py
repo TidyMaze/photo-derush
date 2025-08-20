@@ -263,20 +263,31 @@ class ImageGrid(QWidget):
         badge_tooltip = None
         badge_size = 36  # Make badge bigger
         icon_size = 26   # Make icon inside badge bigger
+        def make_icon_light(icon):
+            if not icon.isNull():
+                pixmap = icon.pixmap(icon_size, icon_size)
+                img = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
+                lr_light = LIGHTROOM_LIGHT
+                for y in range(img.height()):
+                    for x in range(img.width()):
+                        alpha = img.pixelColor(x, y).alpha()
+                        img.setPixelColor(x, y, QColor(lr_light.red(), lr_light.green(), lr_light.blue(), alpha))
+                return QIcon(QPixmap.fromImage(img))
+            return icon
         if lbl_val == 1:
             icon = QIcon.fromTheme("emblem-favorite")
             badge_color = "#2e7d32"  # green
-            badge_icon = icon
+            badge_icon = make_icon_light(icon)
             badge_tooltip = "Keep"
         elif lbl_val == 0:
             icon = QIcon.fromTheme("user-trash")
             badge_color = "#b71c1c"  # red
-            badge_icon = icon
+            badge_icon = make_icon_light(icon)
             badge_tooltip = "Trash"
         elif lbl_val == -1:
             icon = QIcon.fromTheme("dialog-question")
             badge_color = "#ffeb3b"  # yellow
-            badge_icon = icon
+            badge_icon = make_icon_light(icon)
             badge_tooltip = "Unsure"
         if badge_icon:
             pixmap = badge_icon.pixmap(icon_size, icon_size)
