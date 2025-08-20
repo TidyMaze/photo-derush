@@ -50,9 +50,25 @@ class FeatureExtractionWorker(QRunnable):
         self.emitter = emitter
 
     def run(self):
-        def progress_callback(completed, total):
+        results = []
+        total = len(self.img_paths)
+        completed = 0
+        for img_path in self.img_paths:
+            cached = self.feature_cache.get(img_path)
+            if cached is not None:
+                results.append(cached)
+            else:
+                try:
+                    result = self.feature_cache.feature_vector_fn(img_path)
+                    self.feature_cache.set(img_path, result)
+                    results.append(result)
+                except Exception as e:
+                    import logging
+                    logging.error(f"Feature extraction failed for {img_path}: {e}")
+                    self.feature_cache.set(img_path, None)
+                    results.append(None)
+            completed += 1
             self.emitter.progress.emit(completed, total)
-        results = self.feature_cache.batch_extract(self.img_paths, progress_callback=progress_callback)
         self.emitter.finished.emit(results)
 
 class ImageGrid(QWidget):
