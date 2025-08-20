@@ -242,12 +242,6 @@ class ImageGrid(QWidget):
         spinner.hide()
         pix = pil2pixmap(pil_thumb)
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
-        # Only add top_label if group_badge is not empty
-        if group_badge:
-            top_label = QLabel(str(group_badge))
-            top_label.setStyleSheet(f"background: {color}; color: #e6e6dc; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
-        else:
-            top_label = None
         # Compute date_str before using it
         date_str = "N/A"
         if os.path.exists(img_path):
@@ -256,7 +250,6 @@ class ImageGrid(QWidget):
                 date_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
             except Exception as e:
                 logging.warning(f"Could not format date for {img_path}: {e}")
-        # Remove hash from grid view label
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: #e6e6e0; background: transparent; font-size: 11px;")
@@ -299,7 +292,6 @@ class ImageGrid(QWidget):
             blur_label.setPixmap(pixmap)
             blur_label.setFixedSize(badge_size, badge_size)
             blur_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            # Use a perfectly circular badge with no border artifacts
             blur_label.setStyleSheet(f"background: {badge_color}; border-radius: {badge_size}px; border: 2px solid #23272e; margin: 4px; padding: 4px;")
             if badge_tooltip:
                 blur_label.setToolTip(badge_tooltip)
@@ -307,7 +299,6 @@ class ImageGrid(QWidget):
             blur_label.setPixmap(QIcon().pixmap(icon_size, icon_size))
             blur_label.setFixedSize(badge_size, badge_size)
             blur_label.setStyleSheet(f"background: transparent; border-radius: {badge_size}px; margin: 4px; padding: 4px;")
-        # Stronger selection state: overlay
         class SelectableLabel(HoverEffectLabel):
             def set_selected(self, selected: bool):
                 if selected:
@@ -319,82 +310,40 @@ class ImageGrid(QWidget):
         lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
         lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Fade-in animation for thumbnail
-        lbl.setWindowOpacity(0.0)
-        anim = QPropertyAnimation(lbl, b"windowOpacity")
-        anim.setDuration(400)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
-        # Hover/focus effect
-        lbl.setStyleSheet("""
-            QLabel:hover {
-                border: 2px solid #4fc3f7;
-                /* box-shadow: 0 0 8px #4fc3f7; Removed unsupported property */
-            }
-            QLabel:focus {
-                border: 2px solid #81c784;
-            }
-        """)
-        def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path, hash_str=hash_str, group_str=group_str):
-            def handler(e):
-                for l in self.image_labels:
-                    if isinstance(l, HoverEffectLabel):
-                        l.set_selected(False)
-                label.set_selected(True)
-                self.selected_image_name = img_name  # Track the selected image
-                blur_score = compute_blur_score(img_path)
-                sharpness_metrics = compute_sharpness_features(img_path)
-                aesthetic_score = 42
-                metrics = (blur_score, sharpness_metrics, aesthetic_score)
-                keep_prob = None
-                if self.learner is not None:
-                    fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
-                    if fv_tuple is not None:
-                        fv, _ = fv_tuple
-                        keep_prob = float(self.learner.predict_keep_prob([fv])[0])
-                self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
-                if self.on_select:
-                    self.on_select(idx)
-            return handler
-        def mouseDoubleClickEventFactory(idx=idx, img_path=img_path):
-            def handler(e):
-                if self.on_open_fullscreen:
-                    self.on_open_fullscreen(idx, img_path)
-            return handler
-        lbl.mousePressEvent = mousePressEventFactory()
-        lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory()
-        # Context menu on right-click
-        def contextMenuEventFactory(img_name=img_name, img_path=img_path):
-            def handler(event):
-                menu = QMenu()
-                open_action = QAction("Open Fullscreen", menu)
-                show_action = QAction("Show in Finder", menu)
-                copy_action = QAction("Copy Path", menu)
-                open_action.triggered.connect(lambda: self.on_open_fullscreen(idx, img_path) if self.on_open_fullscreen else None)
-                show_action.triggered.connect(lambda: os.system(f'open "{img_path}"'))
-                copy_action.triggered.connect(lambda: QApplication.clipboard().setText(img_path))
-                menu.addAction(open_action)
-                menu.addAction(show_action)
-                menu.addAction(copy_action)
-                menu.exec(QCursor.pos())
-            return handler
-        lbl.setContextMenuPolicy(Qt.CustomContextMenu)
-        lbl.customContextMenuRequested.connect(contextMenuEventFactory())
-        # Add widgets to layout
-        if top_label:
-            vbox.insertWidget(0, top_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        vbox.insertWidget(1, blur_label, alignment=Qt.AlignmentFlag.AlignRight)
-        vbox.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
-        vbox.addWidget(bottom_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        # --- Compose overlay for group badge and label badge (blur_label) ---
+        from PySide6.QtWidgets import QHBoxLayout
+        overlay_widget = QWidget()
+        overlay_layout = QHBoxLayout(overlay_widget)
+        overlay_layout.setContentsMargins(0, 0, 0, 0)
+        overlay_layout.setSpacing(6)
+        group_label = QLabel(str(group_badge))
+        group_label.setStyleSheet(f"background: {color if group_badge else 'transparent'}; color: #e6e6dc; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
+        overlay_layout.addWidget(group_label, alignment=Qt.AlignmentFlag.AlignLeft)
+        overlay_layout.addWidget(blur_label, alignment=Qt.AlignmentFlag.AlignRight)
+        # Place overlay_widget above the image using a QVBoxLayout with setSpacing(0)
+        image_stack = QVBoxLayout()
+        image_stack.setContentsMargins(0, 0, 0, 0)
+        image_stack.setSpacing(0)
+        image_stack.addWidget(overlay_widget)
+        image_stack.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+        image_stack.addWidget(bottom_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        # Remove all widgets and spacers from vbox before adding the new stacked layout
+        for i in reversed(range(vbox.count())):
+            item = vbox.itemAt(i)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+            else:
+                vbox.removeItem(item)
+        vbox.addLayout(image_stack)
         cell_width = self.THUMB_SIZE + 20
         container.setFixedWidth(cell_width)
         container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.image_labels.append(lbl)
-        self.top_labels.append(top_label)
+        self.top_labels.append(group_label)
         self.bottom_labels.append(bottom_label)
         self.blur_labels.append(blur_label)
-        self.image_name_to_widgets[img_name] = (lbl, top_label, bottom_label, blur_label)
+        self.image_name_to_widgets[img_name] = (lbl, group_label, bottom_label, blur_label)
         # Update status bar with progress
         total_images = min(self.MAX_IMAGES, len(self.get_sorted_images()))
         loaded_images = len(self.image_labels)
