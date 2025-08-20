@@ -255,12 +255,14 @@ class ImageGrid(QWidget):
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 11px;")
-        # Use icons for label, now as a colored badge
+        # Use icons for label, now as a larger, more rounded badge
         blur_label = QLabel()
         lbl_val = self.labels_map.get(img_name)
         badge_color = None
         badge_icon = None
         badge_tooltip = None
+        badge_size = 36  # Make badge bigger
+        icon_size = 26   # Make icon inside badge bigger
         if lbl_val == 1:
             icon = QIcon.fromTheme("emblem-favorite")
             badge_color = "#2e7d32"  # green
@@ -277,17 +279,17 @@ class ImageGrid(QWidget):
             badge_icon = icon
             badge_tooltip = "Unsure"
         if badge_icon:
-            pixmap = badge_icon.pixmap(18, 18)
+            pixmap = badge_icon.pixmap(icon_size, icon_size)
             blur_label.setPixmap(pixmap)
-            blur_label.setFixedSize(24, 24)
+            blur_label.setFixedSize(badge_size, badge_size)
             blur_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            blur_label.setStyleSheet(f"background: {badge_color}; border-radius: 12px; border: 2px solid #23272e; margin: 2px; padding: 2px;")
+            blur_label.setStyleSheet(f"background: {badge_color}; border-radius: {badge_size//2}px; border: 2px solid #23272e; margin: 4px; padding: 4px;")
             if badge_tooltip:
                 blur_label.setToolTip(badge_tooltip)
         else:
-            blur_label.setPixmap(QIcon().pixmap(18, 18))
-            blur_label.setFixedSize(24, 24)
-            blur_label.setStyleSheet("background: transparent; border-radius: 12px; margin: 2px; padding: 2px;")
+            blur_label.setPixmap(QIcon().pixmap(icon_size, icon_size))
+            blur_label.setFixedSize(badge_size, badge_size)
+            blur_label.setStyleSheet(f"background: transparent; border-radius: {badge_size//2}px; margin: 4px; padding: 4px;")
         # Stronger selection state: overlay
         class SelectableLabel(HoverEffectLabel):
             def set_selected(self, selected: bool):

@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget, QGraphicsDropShad
 from .utils import extract_exif, format_gps_info
 
 # Lightroom-like light color (slightly darker for better contrast)
-LIGHTROOM_LIGHT = QColor(210, 210, 190)
+LIGHTROOM_LIGHT = QColor(200, 200, 200)
 
 class InfoPanel(QWidget):
     def __init__(self, parent=None):
