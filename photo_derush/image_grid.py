@@ -14,8 +14,8 @@ import os
 from PySide6.QtGui import QIcon, QMovie, QAction, QColor, QPixmap, QImage
 from PySide6.QtCore import QPropertyAnimation
 
-# Lightroom-like light color (slightly darker for better contrast)
-LIGHTROOM_LIGHT = QColor(210, 210, 190)
+# Lightroom-like light color (less yellow, more neutral gray)
+LIGHTROOM_LIGHT = QColor(200, 200, 200)
 
 class ThumbnailResultEmitter(QObject):
     finished = Signal(int, str, object, dict, str, object)  # idx, img_name, info, group_to_color, default_color, pil_thumb
@@ -255,34 +255,39 @@ class ImageGrid(QWidget):
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 11px;")
-        # Use icons for label
+        # Use icons for label, now as a colored badge
         blur_label = QLabel()
         lbl_val = self.labels_map.get(img_name)
-        def make_icon_light(icon):
-            if not icon.isNull():
-                pixmap = icon.pixmap(20, 20)
-                img = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
-                lr_light = LIGHTROOM_LIGHT
-                for y in range(img.height()):
-                    for x in range(img.width()):
-                        alpha = img.pixelColor(x, y).alpha()
-                        img.setPixelColor(x, y, QColor(lr_light.red(), lr_light.green(), lr_light.blue(), alpha))
-                return QIcon(QPixmap.fromImage(img))
-            return icon
+        badge_color = None
+        badge_icon = None
+        badge_tooltip = None
         if lbl_val == 1:
             icon = QIcon.fromTheme("emblem-favorite")
-            blur_label.setPixmap(make_icon_light(icon).pixmap(20, 20))
-            blur_label.setToolTip("Keep")
+            badge_color = "#2e7d32"  # green
+            badge_icon = icon
+            badge_tooltip = "Keep"
         elif lbl_val == 0:
             icon = QIcon.fromTheme("user-trash")
-            blur_label.setPixmap(make_icon_light(icon).pixmap(20, 20))
-            blur_label.setToolTip("Trash")
+            badge_color = "#b71c1c"  # red
+            badge_icon = icon
+            badge_tooltip = "Trash"
         elif lbl_val == -1:
             icon = QIcon.fromTheme("dialog-question")
-            blur_label.setPixmap(make_icon_light(icon).pixmap(20, 20))
-            blur_label.setToolTip("Unsure")
+            badge_color = "#ffeb3b"  # yellow
+            badge_icon = icon
+            badge_tooltip = "Unsure"
+        if badge_icon:
+            pixmap = badge_icon.pixmap(18, 18)
+            blur_label.setPixmap(pixmap)
+            blur_label.setFixedSize(24, 24)
+            blur_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            blur_label.setStyleSheet(f"background: {badge_color}; border-radius: 12px; border: 2px solid #23272e; margin: 2px; padding: 2px;")
+            if badge_tooltip:
+                blur_label.setToolTip(badge_tooltip)
         else:
-            blur_label.setPixmap(QIcon().pixmap(20, 20))
+            blur_label.setPixmap(QIcon().pixmap(18, 18))
+            blur_label.setFixedSize(24, 24)
+            blur_label.setStyleSheet("background: transparent; border-radius: 12px; margin: 2px; padding: 2px;")
         # Stronger selection state: overlay
         class SelectableLabel(HoverEffectLabel):
             def set_selected(self, selected: bool):
