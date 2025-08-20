@@ -10,6 +10,7 @@ from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt_async
 from photo_derush.image_manager import image_manager
 import time
 from collections import OrderedDict
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Configure logging if not already configured
 if not logging.getLogger().handlers:
@@ -119,21 +120,31 @@ def compute_dhash(image_path):
     return imagehash.dhash(img)
 
 def cluster_duplicates(image_paths, directory, hamming_thresh=5):
-    hashes = []
-    valid_paths = []
-    image_hashes = {}
-    for img_name in image_paths:
+    def hash_one(img_name):
         img_path = os.path.join(directory, img_name)
         try:
             dh = compute_dhash(img_path)
             h_bytes = int(str(dh), 16).to_bytes(8, 'big')
             hash_arr = np.frombuffer(h_bytes, dtype='uint8')
-            hashes.append(hash_arr)
-            valid_paths.append(img_name)
-            image_hashes[img_name] = hash_arr
-        except Exception:
-            continue
-        logging.info(f"Processed {img_name} with hash {dh}")
+            return img_name, hash_arr, dh, None
+        except Exception as e:
+            return img_name, None, None, e
+
+    hashes = []
+    valid_paths = []
+    image_hashes = {}
+    with ProcessPoolExecutor() as executor:
+        future_to_img = {executor.submit(hash_one, img_name): img_name for img_name in image_paths}
+        for i, future in enumerate(as_completed(future_to_img)):
+            img_name, hash_arr, dh, err = future.result()
+            if hash_arr is not None:
+                hashes.append(hash_arr)
+                valid_paths.append(img_name)
+                image_hashes[img_name] = hash_arr
+                if i % 20 == 0 or i == len(image_paths) - 1:
+                    logging.info(f"[Hashing] (parallel) {i+1}/{len(image_paths)} hashed")
+            else:
+                logging.warning(f"[Hashing] Failed to hash {img_name}: {err}")
 
     logging.info(f"Computed {len(hashes)} hashes for {len(image_paths)} images.")
     if not hashes:
