@@ -1,7 +1,7 @@
 import logging
 import datetime
 
-from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy
+from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy, QApplication
 from PySide6.QtCore import Qt, QObject, Signal, QRunnable, QThreadPool
 from .widgets import HoverEffectLabel
 from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
@@ -11,8 +11,29 @@ sys.path.append('..')
 from ml.personal_learner import PersonalLearner
 from ml.persistence import load_model
 import os
-from PySide6.QtGui import QIcon, QMovie
+from PySide6.QtGui import QIcon, QMovie, QAction
 from PySide6.QtCore import QPropertyAnimation
+
+class ThumbnailResultEmitter(QObject):
+    finished = Signal(int, str, object, dict, str, object)  # idx, img_name, info, group_to_color, default_color, pil_thumb
+
+class ThumbnailLoader(QRunnable):
+    def __init__(self, idx, img_name, info, group_to_color, default_color, directory, thumb_size, image_manager, emitter):
+        super().__init__()
+        self.idx = idx
+        self.img_name = img_name
+        self.info = info
+        self.group_to_color = group_to_color
+        self.default_color = default_color
+        self.directory = directory
+        self.thumb_size = thumb_size
+        self.image_manager = image_manager
+        self.emitter = emitter
+    def run(self):
+        import os
+        img_path = os.path.join(self.directory, self.img_name)
+        pil_thumb = self.image_manager.get_thumbnail(img_path, (self.thumb_size, self.thumb_size))
+        self.emitter.finished.emit(self.idx, self.img_name, self.info, self.group_to_color, self.default_color, pil_thumb)
 
 class ImageGrid(QWidget):
     def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, labels_map=None, get_feature_vector_fn=None, *args, **kwargs):
@@ -166,8 +187,8 @@ class ImageGrid(QWidget):
 
     def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
-        from PySide6.QtWidgets import QGraphicsDropShadowEffect
-        from PySide6.QtGui import QColor
+        from PySide6.QtWidgets import QGraphicsDropShadowEffect, QMenu
+        from PySide6.QtGui import QColor, QCursor
         img_path = os.path.join(self.directory, img_name)
         # Loading spinner placeholder
         spinner = QLabel()
@@ -196,7 +217,9 @@ class ImageGrid(QWidget):
             container.setGraphicsEffect(shadow)
         except Exception:
             pass
-        vbox.addWidget(spinner)
+        vbox.addStretch(1)
+        vbox.addWidget(spinner, alignment=Qt.AlignmentFlag.AlignCenter)
+        vbox.addStretch(1)
         row = idx // self.col_count
         col = idx % self.col_count
         self.grid.addWidget(container, row, col)
@@ -209,7 +232,8 @@ class ImageGrid(QWidget):
             error_label = QLabel()
             error_label.setPixmap(QIcon.fromTheme("dialog-error").pixmap(self.THUMB_SIZE, self.THUMB_SIZE))
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            vbox.addWidget(error_label)
+            error_label.setToolTip("Failed to load image")
+            vbox.addWidget(error_label, alignment=Qt.AlignmentFlag.AlignCenter)
             return
         # Remove spinner
         spinner.hide()
@@ -241,7 +265,14 @@ class ImageGrid(QWidget):
             blur_label.setToolTip("Unsure")
         else:
             blur_label.setPixmap(QIcon().pixmap(20, 20))
-        lbl = HoverEffectLabel()
+        # Stronger selection state: overlay
+        class SelectableLabel(HoverEffectLabel):
+            def set_selected(self, selected: bool):
+                if selected:
+                    self.setStyleSheet(self.styleSheet() + "background: rgba(74,144,226,0.18); border: 3px solid #4a90e2;")
+                else:
+                    self.setStyleSheet(self.styleSheet().replace("background: rgba(74,144,226,0.18); border: 3px solid #4a90e2;", ""))
+        lbl = SelectableLabel()
         lbl.setPixmap(pix)
         lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
         lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -291,6 +322,23 @@ class ImageGrid(QWidget):
             return handler
         lbl.mousePressEvent = mousePressEventFactory()
         lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory()
+        # Context menu on right-click
+        def contextMenuEventFactory(img_name=img_name, img_path=img_path):
+            def handler(event):
+                menu = QMenu()
+                open_action = QAction("Open Fullscreen", menu)
+                show_action = QAction("Show in Finder", menu)
+                copy_action = QAction("Copy Path", menu)
+                open_action.triggered.connect(lambda: self.on_open_fullscreen(idx, img_path) if self.on_open_fullscreen else None)
+                show_action.triggered.connect(lambda: os.system(f'open "{img_path}"'))
+                copy_action.triggered.connect(lambda: QApplication.clipboard().setText(img_path))
+                menu.addAction(open_action)
+                menu.addAction(show_action)
+                menu.addAction(copy_action)
+                menu.exec(QCursor.pos())
+            return handler
+        lbl.setContextMenuPolicy(Qt.CustomContextMenu)
+        lbl.customContextMenuRequested.connect(contextMenuEventFactory())
         vbox.addWidget(top_label)
         vbox.addWidget(lbl)
         bottom_label.setWordWrap(True)
@@ -419,23 +467,65 @@ class ImageGrid(QWidget):
                 except Exception:
                     pass
 
-class ThumbnailResultEmitter(QObject):
-    finished = Signal(int, str, object, dict, str, object)  # idx, img_name, info, group_to_color, default_color, pil_thumb
+    def resizeEvent(self, event):
+        # Responsive grid: adjust column count based on width
+        width = self.scroll.viewport().width()
+        new_col_count = max(1, width // (self.THUMB_SIZE + 32))
+        if new_col_count != self.col_count:
+            self.col_count = new_col_count
+            self.populate_grid()
+        super().resizeEvent(event)
 
-class ThumbnailLoader(QRunnable):
-    def __init__(self, idx, img_name, info, group_to_color, default_color, directory, thumb_size, image_manager, emitter):
-        super().__init__()
-        self.idx = idx
-        self.img_name = img_name
-        self.info = info
-        self.group_to_color = group_to_color
-        self.default_color = default_color
-        self.directory = directory
-        self.thumb_size = thumb_size
-        self.image_manager = image_manager
-        self.emitter = emitter
-    def run(self):
-        import os
-        img_path = os.path.join(self.directory, self.img_name)
-        pil_thumb = self.image_manager.get_thumbnail(img_path, (self.thumb_size, self.thumb_size))
-        self.emitter.finished.emit(self.idx, self.img_name, self.info, self.group_to_color, self.default_color, pil_thumb)
+    def keyPressEvent(self, event):
+        # Keyboard navigation in grid
+        if not self.image_labels:
+            return super().keyPressEvent(event)
+        idx = 0
+        if self.selected_image_name and self.selected_image_name in self.image_name_to_widgets:
+            idx = self.image_labels.index(self.image_name_to_widgets[self.selected_image_name][0])
+        key = event.key()
+        if key in (Qt.Key_Left, Qt.Key_A, Qt.Key_H):
+            idx = max(0, idx - 1)
+        elif key in (Qt.Key_Right, Qt.Key_D, Qt.Key_L):
+            idx = min(len(self.image_labels) - 1, idx + 1)
+        elif key in (Qt.Key_Up,):
+            idx = max(0, idx - self.col_count)
+        elif key in (Qt.Key_Down,):
+            idx = min(len(self.image_labels) - 1, idx + self.col_count)
+        elif key in (Qt.Key_Return, Qt.Key_Enter):
+            if self.on_open_fullscreen and self.selected_image_name:
+                img_path = os.path.join(self.directory, self.selected_image_name)
+                self.on_open_fullscreen(idx, img_path)
+                return
+        else:
+            return super().keyPressEvent(event)
+        # Update selection
+        lbl = self.image_labels[idx]
+        for l in self.image_labels:
+            if hasattr(l, 'set_selected'):
+                l.set_selected(False)
+        lbl.set_selected(True)
+        # Update info panel
+        img_name = None
+        for name, widgets in self.image_name_to_widgets.items():
+            if widgets[0] == lbl:
+                img_name = name
+                break
+        if img_name:
+            self.selected_image_name = img_name
+            img_path = os.path.join(self.directory, img_name)
+            info = self.image_info.get(img_name, {})
+            hash_str = info.get('hash', '...')
+            group = info.get('group')
+            group_str = group if group is not None else '...'
+            blur_score = compute_blur_score(img_path)
+            sharpness_metrics = compute_sharpness_features(img_path)
+            aesthetic_score = 42
+            metrics = (blur_score, sharpness_metrics, aesthetic_score)
+            keep_prob = None
+            if self.learner is not None:
+                fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
+                if fv_tuple is not None:
+                    fv, _ = fv_tuple
+                    keep_prob = float(self.learner.predict_keep_prob([fv])[0])
+            self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
