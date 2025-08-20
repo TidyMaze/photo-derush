@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QToolBar, QComboBox
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QIcon, QColor, QImage, QPixmap
 from PySide6.QtCore import Signal
 
 class SettingsToolbar(QToolBar):
@@ -56,6 +56,57 @@ class SettingsToolbar(QToolBar):
         self.zoom_selector.setToolTip("Zoom (cell size)")
         self.addWidget(self.zoom_selector)
         self.zoom_selector.currentTextChanged.connect(self._on_zoom_changed)
+        self.setStyleSheet("""
+            QWidget {
+                font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;
+                font-size: 13px;
+                color: #f0f0f0;
+            }
+            QToolBar {
+                background: #23272e;
+                border-bottom: 1px solid #333;
+                spacing: 6px;
+                padding: 4px 8px;
+                min-height: 36px;
+            }
+            QToolBar QToolButton {
+                background: transparent;
+                color: #fff;
+                border: none;
+                padding: 4px 10px;
+                margin: 0 2px;
+                border-radius: 6px;
+            }
+            QToolBar QToolButton:hover {
+                background: #333;
+                color: #fff;
+            }
+            QToolBar QComboBox {
+                background: #23272e;
+                color: #fff;
+                border: 1px solid #444;
+                border-radius: 5px;
+                padding: 2px 8px;
+                min-width: 60px;
+            }
+            QToolBar QLabel, QToolBar QAbstractButton {
+                color: #fff;
+            }
+        """)
+
+        # Ensure all toolbar icons are white in dark mode
+        def make_icon_white(action):
+            icon = action.icon()
+            if not icon.isNull():
+                pixmap = icon.pixmap(32, 32)
+                img = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
+                for y in range(img.height()):
+                    for x in range(img.width()):
+                        alpha = img.pixelColor(x, y).alpha()
+                        img.setPixelColor(x, y, QColor(255, 255, 255, alpha))
+                action.setIcon(QIcon(QPixmap.fromImage(img)))
+        for action in [self.sort_by_group_action, self.keep_action, self.trash_action, self.unsure_action, self.predict_sort_action, self.predict_sort_asc_action, self.export_csv_action, self.reset_model_action]:
+            make_icon_white(action)
 
     def _emit_desc(self):
         # backward compat emit old signal
