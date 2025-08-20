@@ -117,6 +117,11 @@ def compute_dhash(image_path):
     img = image_manager.get_image(image_path)
     if img is None:
         raise FileNotFoundError(f"Cannot open image for dhash: {image_path}")
+    # Resize to small thumbnail for faster hashing
+    try:
+        img.thumbnail((32, 32), Image.LANCZOS)
+    except Exception:
+        pass  # fallback: use as is if thumbnail fails
     return imagehash.dhash(img)
 
 def cluster_duplicates(image_paths, directory, hamming_thresh=5):
