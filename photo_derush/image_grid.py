@@ -294,13 +294,14 @@ class ImageGrid(QWidget):
             blur_label.setPixmap(pixmap)
             blur_label.setFixedSize(badge_size, badge_size)
             blur_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            blur_label.setStyleSheet(f"background: {badge_color}; border-radius: {badge_size//2}px; border: 2px solid #23272e; margin: 4px; padding: 4px;")
+            # Use a perfectly circular badge with no border artifacts
+            blur_label.setStyleSheet(f"background: {badge_color}; border-radius: {badge_size}px; border: 2px solid #23272e; margin: 4px; padding: 4px;")
             if badge_tooltip:
                 blur_label.setToolTip(badge_tooltip)
         else:
             blur_label.setPixmap(QIcon().pixmap(icon_size, icon_size))
             blur_label.setFixedSize(badge_size, badge_size)
-            blur_label.setStyleSheet(f"background: transparent; border-radius: {badge_size//2}px; margin: 4px; padding: 4px;")
+            blur_label.setStyleSheet(f"background: transparent; border-radius: {badge_size}px; margin: 4px; padding: 4px;")
         # Stronger selection state: overlay
         class SelectableLabel(HoverEffectLabel):
             def set_selected(self, selected: bool):
