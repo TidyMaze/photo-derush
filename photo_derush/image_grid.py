@@ -38,6 +38,20 @@ class ThumbnailLoader(QRunnable):
         pil_thumb = self.image_manager.get_thumbnail(img_path, (self.thumb_size, self.thumb_size))
         self.emitter.finished.emit(self.idx, self.img_name, self.info, self.group_to_color, self.default_color, pil_thumb)
 
+class FeatureExtractionEmitter(QObject):
+    finished = Signal(list)  # emits list of feature vectors
+
+class FeatureExtractionWorker(QRunnable):
+    def __init__(self, feature_cache, img_paths, emitter):
+        super().__init__()
+        self.feature_cache = feature_cache
+        self.img_paths = img_paths
+        self.emitter = emitter
+
+    def run(self):
+        results = self.feature_cache.batch_extract(self.img_paths)
+        self.emitter.finished.emit(results)
+
 class ImageGrid(QWidget):
     def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, labels_map=None, get_feature_vector_fn=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -125,11 +139,13 @@ class ImageGrid(QWidget):
         self.image_labels.clear(); self.top_labels.clear(); self.bottom_labels.clear(); self.blur_labels.clear(); self.image_name_to_widgets.clear()
         sorted_images = self.get_sorted_images()
         num_images = min(self.MAX_IMAGES, len(sorted_images))
-        # Precompute feature vectors in parallel for all images in the grid
         img_paths = [os.path.join(self.directory, img) for img in sorted_images[:num_images]]
-        # Start batch extraction in background (non-blocking)
-        import threading
-        threading.Thread(target=self._feature_cache.batch_extract, args=(img_paths,), daemon=True).start()
+        # Start batch extraction in background (non-blocking) using QRunnable
+        self._feature_extraction_emitter = FeatureExtractionEmitter()
+        self._feature_extraction_emitter.finished.connect(self._on_feature_extraction_done)
+        self._feature_threadpool = QThreadPool.globalInstance()
+        feature_worker = FeatureExtractionWorker(self._feature_cache, img_paths, self._feature_extraction_emitter)
+        self._feature_threadpool.start(feature_worker)
         import colorsys
         group_to_color = {}
         used_groups = {self.image_info.get(img, {}).get('group') for img in sorted_images[:num_images]}
@@ -202,6 +218,11 @@ class ImageGrid(QWidget):
             else:
                 self.selected_image_name = None
                 self.info_panel.update_info("", "", "", "", "", (), keep_prob=None)
+
+    def _on_feature_extraction_done(self, results):
+        import logging
+        logging.info(f"Feature extraction completed for {len(results)} images.")
+        # You can update the UI or cache here if needed
 
     def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
