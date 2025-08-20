@@ -1,17 +1,23 @@
 import os
 from PIL import Image
-import imagehash
-import faiss
-import numpy as np
-import cv2
+try:
+    LANCZOS_RESAMPLE = Image.Resampling.LANCZOS  # Pillow >=9.1.0
+except AttributeError:
+    LANCZOS_RESAMPLE = Image.LANCZOS  # type: ignore[attr-defined]
+
+import imagehash  # type: ignore
+import faiss  # type: ignore
+import numpy as np  # type: ignore
+import cv2  # type: ignore
 import logging
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt, open_full_image_qt
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt_async
 from photo_derush.image_manager import image_manager
 import time
 from collections import OrderedDict
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from precompute import compute_duplicate_groups
+import threading
 
 # Configure logging if not already configured
 if not logging.getLogger().handlers:
@@ -118,30 +124,36 @@ def compute_dhash(image_path):
     img = image_manager.get_image(image_path)
     if img is None:
         raise FileNotFoundError(f"Cannot open image for dhash: {image_path}")
-    # Resize to small thumbnail for faster hashing
     try:
-        img.thumbnail((32, 32), Image.LANCZOS)
+        img.thumbnail((32, 32), LANCZOS_RESAMPLE)
     except Exception:
-        pass  # fallback: use as is if thumbnail fails
+        pass
     return imagehash.dhash(img)
 
 def hash_one(img_name, directory):
+    import time
+    start = time.time()
     img_path = os.path.join(directory, img_name)
     try:
         dh = compute_dhash(img_path)
         h_bytes = int(str(dh), 16).to_bytes(8, 'big')
         hash_arr = np.frombuffer(h_bytes, dtype='uint8')
+        elapsed = time.time() - start
+        logging.getLogger(__name__).debug(f"[Hashing] {img_name} hashed in {elapsed:.3f}s (thread={threading.current_thread().name})")
         return img_name, hash_arr, dh, None
     except Exception as e:
+        elapsed = time.time() - start
+        logging.getLogger(__name__).error(f"[Hashing] {img_name} failed in {elapsed:.3f}s: {e}")
         return img_name, None, None, e
 
-def parallel_hash_images(image_paths, directory):
+def parallel_hash_images(image_paths, directory, max_workers=None, use_threads=False):
     """Hash images in parallel. Returns (valid_paths, hashes, image_hashes, errors)"""
     hashes = []
     valid_paths = []
     image_hashes = {}
     errors = {}
-    with ProcessPoolExecutor() as executor:
+    Executor = ThreadPoolExecutor if use_threads else ProcessPoolExecutor
+    with Executor(max_workers=max_workers) as executor:
         future_to_img = {executor.submit(hash_one, img_name, directory): img_name for img_name in image_paths}
         for i, future in enumerate(as_completed(future_to_img)):
             img_name, hash_arr, dh, err = future.result()
@@ -157,15 +169,21 @@ def group_hashes(hashes, valid_paths, hamming_thresh=5):
     """Group hashes using faiss. Returns clusters (list of lists of image names)."""
     if not hashes:
         return []
+    # Ensure hashes are np.uint8 and shape (n, 8) for 64 bits
     hashes_np = np.stack(hashes)
-    index = faiss.IndexBinaryFlat(64)
-    index.add(hashes_np)
+    if hashes_np.dtype != np.uint8:
+        hashes_np = hashes_np.astype(np.uint8)
+    if hashes_np.shape[1] != 8:
+        raise ValueError(f"Expected hash shape (n, 8), got {hashes_np.shape}")
+    index = faiss.IndexBinaryFlat(64)  # type: ignore
+    index.add(hashes_np)  # type: ignore
     clusters = []
     visited = set()
     for i, h in enumerate(hashes_np):
         if i in visited:
             continue
-        lims, D, I = index.range_search(h[np.newaxis, :], hamming_thresh)
+        query = h[np.newaxis, :].astype(np.uint8)
+        lims, D, I = index.range_search(query, hamming_thresh)  # type: ignore
         cluster = [valid_paths[j] for j in I[lims[0]:lims[1]] if j not in visited]
         for j in I[lims[0]:lims[1]]:
             visited.add(j)

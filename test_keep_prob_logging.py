@@ -3,18 +3,9 @@ import os
 from PIL import Image
 import pytest
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel, QStatusBar, QWidget
 
 from photo_derush.image_grid import ImageGrid
-
-
-class DummyInfoPanel:
-    def update_info(self, *args, **kwargs):
-        pass
-
-class DummyStatusBar:
-    def showMessage(self, msg):
-        pass
 
 
 def _ensure_app():
@@ -37,14 +28,21 @@ def test_keep_prob_logging_once(tmp_path, caplog):
     grid = ImageGrid(
         image_paths=["a.jpg", "b.jpg"],
         directory=str(tmp_path),
-        info_panel=DummyInfoPanel(),
-        status_bar=DummyStatusBar(),
+        info_panel=QWidget(),
+        status_bar=QStatusBar(),
         get_sorted_images=get_sorted_images,
         image_info={},
         on_open_fullscreen=None,
         on_select=None,
         labels_map={},
     )
+
+    # Setup real widgets for logging
+    grid.image_name_to_widgets = {
+        "a.jpg": (QLabel(), None, QLabel(), None),
+        "b.jpg": (QLabel(), None, QLabel(), None),
+    }
+    grid.base_bottom_texts = {"a.jpg": "", "b.jpg": ""}
 
     prob_map = {"a.jpg": 0.42, "b.jpg": 0.91}
     with caplog.at_level(logging.INFO):
@@ -67,4 +65,3 @@ def test_keep_prob_logging_once(tmp_path, caplog):
     # Basic UI cycle to avoid warnings
     for _ in range(5):
         app.processEvents()
-
