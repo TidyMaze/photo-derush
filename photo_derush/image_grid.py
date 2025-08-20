@@ -388,19 +388,29 @@ class ImageGrid(QWidget):
         widgets = self.image_name_to_widgets.get(img_name)
         if not widgets:
             return
-        _, _, _, blur_label = widgets
-        if label == 1:
-            blur_label.setText("KEEP")
-            blur_label.setStyleSheet("color: #e6e6dc; background:#2e7d32; font-weight:bold; padding:2px;")
-        elif label == 0:
-            blur_label.setText("TRASH")
-            blur_label.setStyleSheet("color: #e6e6dc; background:#b71c1c; font-weight:bold; padding:2px;")
-        elif label == -1:
-            blur_label.setText("UNSURE")
-            blur_label.setStyleSheet("color: #000; background:#ffeb3b; font-weight:bold; padding:2px;")
-        else:
-            blur_label.setText("")
-            blur_label.setStyleSheet("color: yellow; background: transparent; font-size: 12px;")
+        # Instead of setting blur_label directly, trigger a UI refresh for the badge
+        # For now, re-add the thumbnail row for this image to update the badge
+        idx = self.image_labels.index(widgets[0]) if widgets[0] in self.image_labels else None
+        if idx is not None:
+            # Remove the old widget from the grid
+            for i in range(self.grid.count()):
+                item = self.grid.itemAt(i)
+                if item and item.widget() == widgets[0].parentWidget().parentWidget():
+                    self.grid.removeWidget(item.widget())
+                    item.widget().setParent(None)
+                    break
+            # Re-add the thumbnail row with updated label
+            info = self.image_info.get(img_name, {})
+            group = info.get('group')
+            color = self._last_prob_map.get(img_name, '#444444') if hasattr(self, '_last_prob_map') else '#444444'
+            hash_str = info.get('hash', '...')
+            group_str = group if group is not None else '...'
+            pil_thumb = None
+            import os
+            img_path = os.path.join(self.directory, img_name)
+            if os.path.exists(img_path):
+                pil_thumb = image_manager.get_thumbnail(img_path, (self.THUMB_SIZE, self.THUMB_SIZE))
+            self._add_thumbnail_row(img_name, idx, color=color, hash_str=hash_str, group_str=group_str, pil_thumb=pil_thumb)
 
     def add_image(self, img_name: str):
         logging.info("[ImageGrid] Adding image: %s", img_name)
