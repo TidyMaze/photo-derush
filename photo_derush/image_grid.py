@@ -50,6 +50,8 @@ class FeatureExtractionWorker(QRunnable):
         self.emitter = emitter
 
     def run(self):
+        import threading
+        logging.info(f"[ThreadCheck] FeatureExtractionWorker running in thread: {threading.current_thread().name}")
         results = []
         total = len(self.img_paths)
         completed = 0
@@ -63,7 +65,6 @@ class FeatureExtractionWorker(QRunnable):
                     self.feature_cache.set(img_path, result)
                     results.append(result)
                 except Exception as e:
-                    import logging
                     logging.error(f"Feature extraction failed for {img_path}: {e}")
                     self.feature_cache.set(img_path, None)
                     results.append(None)
@@ -247,12 +248,15 @@ class ImageGrid(QWidget):
                 self.info_panel.update_info("", "", "", "", "", (), keep_prob=None)
 
     def _on_feature_extraction_done(self, results):
-        import logging
+        import threading
+        logging.info(f"[ThreadCheck] _on_feature_extraction_done running in thread: {threading.current_thread().name}")
         logging.info(f"Feature extraction completed for {len(results)} images.")
         self.progress_bar.hide()
         # You can update the UI or cache here if needed
 
     def _on_feature_extraction_progress(self, completed, total):
+        import threading
+        logging.info(f"[ThreadCheck] _on_feature_extraction_progress running in thread: {threading.current_thread().name}")
         if total > 0:
             self.progress_bar.setMaximum(total)
             self.progress_bar.setValue(completed)
@@ -262,6 +266,7 @@ class ImageGrid(QWidget):
     def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
         from PySide6.QtGui import QColor
+        import logging
         img_path = os.path.join(self.directory, img_name)
         # Loading spinner placeholder
         spinner = QLabel()
@@ -552,15 +557,15 @@ class ImageGrid(QWidget):
         if self.selected_image_name and self.selected_image_name in self.image_name_to_widgets:
             idx = self.image_labels.index(self.image_name_to_widgets[self.selected_image_name][0])
         key = event.key()
-        if key == Qt.Key_Left:
+        if key == Qt.Key.Key_Left:
             idx = max(0, idx - 1)
-        elif key == Qt.Key_Right:
+        elif key == Qt.Key.Key_Right:
             idx = min(len(self.image_labels) - 1, idx + 1)
-        elif key == Qt.Key_Up:
+        elif key == Qt.Key.Key_Up:
             idx = max(0, idx - self.col_count)
-        elif key == Qt.Key_Down:
+        elif key == Qt.Key.Key_Down:
             idx = min(len(self.image_labels) - 1, idx + self.col_count)
-        elif key in (Qt.Key_Return, Qt.Key_Enter):
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if self.on_open_fullscreen and self.selected_image_name:
                 img_path = os.path.join(self.directory, self.selected_image_name)
                 self.on_open_fullscreen(idx, img_path)
