@@ -11,8 +11,11 @@ sys.path.append('..')
 from ml.personal_learner import PersonalLearner
 from ml.persistence import load_model
 import os
-from PySide6.QtGui import QIcon, QMovie, QAction
+from PySide6.QtGui import QIcon, QMovie, QAction, QColor, QPixmap, QImage
 from PySide6.QtCore import QPropertyAnimation
+
+# Lightroom-like light color (not pure white)
+LIGHTROOM_LIGHT = QColor(230, 230, 220)
 
 class ThumbnailResultEmitter(QObject):
     finished = Signal(int, str, object, dict, str, object)  # idx, img_name, info, group_to_color, default_color, pil_thumb
@@ -240,7 +243,7 @@ class ImageGrid(QWidget):
         pix = pil2pixmap(pil_thumb)
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
         top_label = QLabel(str(group_badge))
-        top_label.setStyleSheet(f"background: {color}; color: #fff; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
+        top_label.setStyleSheet(f"background: {color}; color: #e6e6dc; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
         date_str = "N/A"
         if os.path.exists(img_path):
             try:
@@ -254,14 +257,28 @@ class ImageGrid(QWidget):
         # Use icons for label
         blur_label = QLabel()
         lbl_val = self.labels_map.get(img_name)
+        def make_icon_light(icon):
+            if not icon.isNull():
+                pixmap = icon.pixmap(20, 20)
+                img = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
+                lr_light = LIGHTROOM_LIGHT
+                for y in range(img.height()):
+                    for x in range(img.width()):
+                        alpha = img.pixelColor(x, y).alpha()
+                        img.setPixelColor(x, y, QColor(lr_light.red(), lr_light.green(), lr_light.blue(), alpha))
+                return QIcon(QPixmap.fromImage(img))
+            return icon
         if lbl_val == 1:
-            blur_label.setPixmap(QIcon.fromTheme("emblem-favorite").pixmap(20, 20))
+            icon = QIcon.fromTheme("emblem-favorite")
+            blur_label.setPixmap(make_icon_light(icon).pixmap(20, 20))
             blur_label.setToolTip("Keep")
         elif lbl_val == 0:
-            blur_label.setPixmap(QIcon.fromTheme("user-trash").pixmap(20, 20))
+            icon = QIcon.fromTheme("user-trash")
+            blur_label.setPixmap(make_icon_light(icon).pixmap(20, 20))
             blur_label.setToolTip("Trash")
         elif lbl_val == -1:
-            blur_label.setPixmap(QIcon.fromTheme("dialog-question").pixmap(20, 20))
+            icon = QIcon.fromTheme("dialog-question")
+            blur_label.setPixmap(make_icon_light(icon).pixmap(20, 20))
             blur_label.setToolTip("Unsure")
         else:
             blur_label.setPixmap(QIcon().pixmap(20, 20))
@@ -369,10 +386,10 @@ class ImageGrid(QWidget):
         _, _, _, blur_label = widgets
         if label == 1:
             blur_label.setText("KEEP")
-            blur_label.setStyleSheet("color: #fff; background:#2e7d32; font-weight:bold; padding:2px;")
+            blur_label.setStyleSheet("color: #e6e6dc; background:#2e7d32; font-weight:bold; padding:2px;")
         elif label == 0:
             blur_label.setText("TRASH")
-            blur_label.setStyleSheet("color: #fff; background:#b71c1c; font-weight:bold; padding:2px;")
+            blur_label.setStyleSheet("color: #e6e6dc; background:#b71c1c; font-weight:bold; padding:2px;")
         elif label == -1:
             blur_label.setText("UNSURE")
             blur_label.setStyleSheet("color: #000; background:#ffeb3b; font-weight:bold; padding:2px;")
@@ -450,7 +467,7 @@ class ImageGrid(QWidget):
                 pct = prob * 100.0
                 col = _interp_color(prob)
                 base_html = base.replace('\n', '<br>')
-                prob_html = f"<span style=\"background-color:{col}; color:#fff; font-weight:bold; padding:1px 4px; border-radius:3px;\">Prob: {pct:.0f}%</span>"
+                prob_html = f"<span style=\"background-color:{col}; color:#e6e6dc; font-weight:bold; padding:1px 4px; border-radius:3px;\">Prob: {pct:.0f}%</span>"
                 bottom_label.setText(f"{base_html}<br>{prob_html}")
                 # Border color to reinforce probability
                 try:

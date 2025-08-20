@@ -2,6 +2,9 @@ from PySide6.QtWidgets import QToolBar, QComboBox
 from PySide6.QtGui import QAction, QIcon, QColor, QImage, QPixmap
 from PySide6.QtCore import Signal
 
+# Lightroom-like light color (not pure white)
+LIGHTROOM_LIGHT = QColor(230, 230, 220)
+
 class SettingsToolbar(QToolBar):
     zoom_changed = Signal(int)
     keep_clicked = Signal()
@@ -71,7 +74,7 @@ class SettingsToolbar(QToolBar):
             }
             QToolBar QToolButton {
                 background: transparent;
-                color: #fff;
+                color: #e6e6dc;
                 border: none;
                 padding: 4px 10px;
                 margin: 0 2px;
@@ -79,34 +82,42 @@ class SettingsToolbar(QToolBar):
             }
             QToolBar QToolButton:hover {
                 background: #333;
-                color: #fff;
+                color: #e6e6dc;
             }
             QToolBar QComboBox {
                 background: #23272e;
-                color: #fff;
+                color: #e6e6dc;
                 border: 1px solid #444;
                 border-radius: 5px;
                 padding: 2px 8px;
                 min-width: 60px;
             }
             QToolBar QLabel, QToolBar QAbstractButton {
-                color: #fff;
+                color: #e6e6dc;
             }
         """)
 
-        # Ensure all toolbar icons are white in dark mode
-        def make_icon_white(action):
+        # Ensure all toolbar icons are lightroom-light in dark mode, except dark_mode_action which should be light gray
+        def make_icon_light(action, force_light=True):
             icon = action.icon()
             if not icon.isNull():
                 pixmap = icon.pixmap(32, 32)
                 img = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
+                lr_light = LIGHTROOM_LIGHT
+                lr_gray = QColor(200, 200, 200)
                 for y in range(img.height()):
                     for x in range(img.width()):
                         alpha = img.pixelColor(x, y).alpha()
-                        img.setPixelColor(x, y, QColor(255, 255, 255, alpha))
+                        if force_light:
+                            img.setPixelColor(x, y, QColor(lr_light.red(), lr_light.green(), lr_light.blue(), alpha))
+                        else:
+                            img.setPixelColor(x, y, QColor(lr_gray.red(), lr_gray.green(), lr_gray.blue(), alpha))
                 action.setIcon(QIcon(QPixmap.fromImage(img)))
         for action in [self.sort_by_group_action, self.keep_action, self.trash_action, self.unsure_action, self.predict_sort_action, self.predict_sort_asc_action, self.export_csv_action, self.reset_model_action]:
-            make_icon_white(action)
+            make_icon_light(action, force_light=True)
+        # If dark_mode_action exists, make it light (not pure white, but light gray for contrast)
+        if hasattr(self, 'dark_mode_action'):
+            make_icon_light(self.dark_mode_action, force_light=False)
 
     def _emit_desc(self):
         # backward compat emit old signal

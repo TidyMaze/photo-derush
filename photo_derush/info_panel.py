@@ -1,27 +1,33 @@
 import logging
-
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget, QGraphicsDropShadowEffect
 from .utils import extract_exif, format_gps_info
+
+# Lightroom-like light color (not pure white)
+LIGHTROOM_LIGHT = QColor(230, 230, 220)
 
 class InfoPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("""
+        # Set LIGHTROOM_LIGHT as the base text color for the right panel
+        self.setStyleSheet(f"""
             background: #23272e;
             border-radius: 14px;
             border: 1px solid #333;
+            color: rgb({LIGHTROOM_LIGHT.red()},{LIGHTROOM_LIGHT.green()},{LIGHTROOM_LIGHT.blue()});
         """)
         try:
             shadow = QGraphicsDropShadowEffect()
             shadow.setBlurRadius(16)
             shadow.setOffset(0, 3)
-            shadow.setColor(Qt.gray)
+            shadow.setColor(LIGHTROOM_LIGHT)
             self.setGraphicsEffect(shadow)
         except Exception:
             pass
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 14px; border: none; padding: 16px; font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;")
+        # Set LIGHTROOM_LIGHT as the base text color for the QTextEdit as well
+        self.text_edit.setStyleSheet(f"color: rgb({LIGHTROOM_LIGHT.red()},{LIGHTROOM_LIGHT.green()},{LIGHTROOM_LIGHT.blue()}); background: transparent; font-size: 14px; border: none; padding: 16px; font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;")
         self.text_edit.setTextInteractionFlags(
             self.text_edit.textInteractionFlags() | self.text_edit.textInteractionFlags().TextSelectableByMouse | self.text_edit.textInteractionFlags().TextSelectableByKeyboard
         )
@@ -124,10 +130,12 @@ class InfoPanel(QWidget):
             if not rows:
                 return "<i style='color:#666;'>None</i>"
             fs = '10pt' if small else '11pt'
-            html = f"<table style='font-size:{fs}; color:#bbb; background:#232629; border-collapse:collapse;'>"
+            # Use LIGHTROOM_LIGHT for table background
+            bg_col = f"rgb({LIGHTROOM_LIGHT.red()},{LIGHTROOM_LIGHT.green()},{LIGHTROOM_LIGHT.blue()})"
+            html = f"<table style='font-size:{fs}; color:#232629; background:{bg_col}; border-collapse:collapse;'>"
             for k,v in rows:
-                html += ("<tr><td style='font-weight:bold; padding:2px 12px 2px 0; vertical-align:top;'>" +
-                         f"{k}</td><td style='padding:2px 0; word-break:break-word;'>" +
+                html += ("<tr><td style='font-weight:bold; padding:2px 12px 2px 0; vertical-align:top; color:#232629;'>" +
+                         f"{k}</td><td style='padding:2px 0; word-break:break-word; color:#232629;'>" +
                          f"{v}</td></tr>")
             html += '</table>'
             return html
@@ -155,7 +163,7 @@ class InfoPanel(QWidget):
             chips = []
             for txt, good in explanations:
                 color = '#2e7d32' if good else '#b71c1c'
-                chips.append(f"<span style='background:{color}; color:#fff; padding:2px 6px; border-radius:4px; margin:2px; font-size:11pt;'>{txt}</span>")
+                chips.append(f"<span style='background:{color}; color:#e6e6dc; padding:2px 6px; border-radius:4px; margin:2px; font-size:11pt;'>{txt}</span>")
             expl_html = "<div style='margin:6px 0 12px 0;'><b>Explain:</b><br>" + ' '.join(chips) + '</div>'
         # File info & probability
         file_info = (f"<div style='margin-bottom:10px;'><b>File:</b> {img_name}<br>"
