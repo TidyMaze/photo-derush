@@ -242,8 +242,13 @@ class ImageGrid(QWidget):
         spinner.hide()
         pix = pil2pixmap(pil_thumb)
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
-        top_label = QLabel(str(group_badge))
-        top_label.setStyleSheet(f"background: {color}; color: #e6e6dc; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
+        # Only add top_label if group_badge is not empty
+        if group_badge:
+            top_label = QLabel(str(group_badge))
+            top_label.setStyleSheet(f"background: {color}; color: #e6e6dc; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
+        else:
+            top_label = None
+        # Compute date_str before using it
         date_str = "N/A"
         if os.path.exists(img_path):
             try:
@@ -376,11 +381,12 @@ class ImageGrid(QWidget):
             return handler
         lbl.setContextMenuPolicy(Qt.CustomContextMenu)
         lbl.customContextMenuRequested.connect(contextMenuEventFactory())
-        vbox.addWidget(top_label)
-        vbox.addWidget(lbl)
-        bottom_label.setWordWrap(True)
-        vbox.addWidget(bottom_label)
-        vbox.addWidget(blur_label)
+        # Add widgets to layout
+        if top_label:
+            vbox.insertWidget(0, top_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        vbox.insertWidget(1, blur_label, alignment=Qt.AlignmentFlag.AlignRight)
+        vbox.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+        vbox.addWidget(bottom_label, alignment=Qt.AlignmentFlag.AlignCenter)
         cell_width = self.THUMB_SIZE + 20
         container.setFixedWidth(cell_width)
         container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
