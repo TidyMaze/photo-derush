@@ -254,7 +254,7 @@ class ImageGrid(QWidget):
         # Remove hash from grid view label
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
-        bottom_label.setStyleSheet("color: #e0e0e0; background: transparent; font-size: 11px;")
+        bottom_label.setStyleSheet("color: #e6e6e0; background: transparent; font-size: 11px;")
         # Use icons for label, now as a larger, more rounded badge
         blur_label = QLabel()
         lbl_val = self.labels_map.get(img_name)
@@ -262,7 +262,7 @@ class ImageGrid(QWidget):
         badge_icon = None
         badge_tooltip = None
         badge_size = 36  # Make badge bigger
-        icon_size = 26   # Make icon inside badge bigger
+        icon_size = 20   # Make icon fit inside badge
         def make_icon_light(icon):
             if not icon.isNull():
                 pixmap = icon.pixmap(icon_size, icon_size)
