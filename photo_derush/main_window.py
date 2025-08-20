@@ -1017,16 +1017,18 @@ class LightroomMainWindow(QMainWindow):
             self.refresh_keep_prob()
             self._update_status_bar(action=f'select {idx+1}')
 
-    def open_fullscreen(self, start_index: int, path: str):
+    def open_fullscreen(self, start_index: int, path: str, image_list=None):
         if getattr(self, '_in_sort', False):
             return
         # Defensive bounds
-        if not self.sorted_images:
+        if image_list is None:
+            image_list = self.sorted_images
+        if not image_list:
             return
-        if not (0 <= start_index < len(self.sorted_images)):
+        if not (0 <= start_index < len(image_list)):
             start_index = 0
         self.current_img_idx = start_index
-        seq_paths = [os.path.join(self.directory, n) for n in self.sorted_images]
+        seq_paths = [os.path.join(self.directory, n) for n in image_list]
         from .viewer import open_full_image_qt
         open_full_image_qt(path, on_keep=self.on_keep_clicked, on_trash=self.on_trash_clicked,
                            on_unsure=self.on_unsure_clicked, image_sequence=seq_paths,

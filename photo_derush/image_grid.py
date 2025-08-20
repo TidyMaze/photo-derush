@@ -1,8 +1,9 @@
 import logging
 import datetime
 
-from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy, QApplication
-from PySide6.QtCore import Qt, QObject, Signal, QRunnable, QThreadPool
+from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy, QToolButton, QStackedLayout, QHBoxLayout, QGraphicsDropShadowEffect, QStyle
+from PySide6.QtGui import QIcon, QColor, QPixmap, QImage, QPainter, QMovie
+from PySide6.QtCore import Qt, QSize, QObject, Signal, QRunnable, QThreadPool
 from .widgets import HoverEffectLabel
 from .utils import pil2pixmap, compute_blur_score, compute_sharpness_features
 from .image_manager import image_manager
@@ -11,8 +12,6 @@ sys.path.append('..')
 from ml.personal_learner import PersonalLearner
 from ml.persistence import load_model
 import os
-from PySide6.QtGui import QIcon, QMovie, QAction, QColor, QPixmap, QImage
-from PySide6.QtCore import QPropertyAnimation
 
 # Lightroom-like light color (less yellow, more neutral gray)
 LIGHTROOM_LIGHT = QColor(200, 200, 200)
@@ -95,7 +94,7 @@ class ImageGrid(QWidget):
         for img in self.image_paths:
             sample_img = os.path.join(self.directory, img)
             break
-        if sample_img and os.path.exists(sample_img):
+        if isinstance(sample_img, (str, bytes, os.PathLike)) and os.path.exists(sample_img):
             fv_tuple = self._get_feature_vector_fn(sample_img) if self._get_feature_vector_fn else None
             if fv_tuple:
                 fv, keys = fv_tuple
@@ -190,8 +189,7 @@ class ImageGrid(QWidget):
 
     def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
-        from PySide6.QtWidgets import QGraphicsDropShadowEffect, QMenu
-        from PySide6.QtGui import QColor, QCursor
+        from PySide6.QtGui import QColor
         img_path = os.path.join(self.directory, img_name)
         # Loading spinner placeholder
         spinner = QLabel()
@@ -227,6 +225,8 @@ class ImageGrid(QWidget):
         col = idx % self.col_count
         self.grid.addWidget(container, row, col)
         self.grid.setColumnMinimumWidth(col, self.THUMB_SIZE + 20)
+        container.setFixedWidth(self.THUMB_SIZE + 20)
+        container.setFixedHeight(self.THUMB_SIZE + 60)
         # After thumbnail is ready, replace spinner with actual content
         if pil_thumb is None:
             pil_thumb = image_manager.get_thumbnail(img_path, (self.THUMB_SIZE, self.THUMB_SIZE))
@@ -244,7 +244,7 @@ class ImageGrid(QWidget):
         group_badge = group_str if group_str not in (None, '', '...', 'None') else ''
         # Compute date_str before using it
         date_str = "N/A"
-        if os.path.exists(img_path):
+        if img_path and isinstance(img_path, (str, bytes)) and os.path.exists(img_path):
             try:
                 ts = os.path.getmtime(img_path)
                 date_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
@@ -254,126 +254,69 @@ class ImageGrid(QWidget):
         self.base_bottom_texts[img_name] = bottom_label.text()
         bottom_label.setStyleSheet(f"color: {LIGHTROOM_LIGHT.name()}; background: transparent; font-size: 11px;")
         # Use icons for label, now as a larger, more rounded badge
-        blur_label = QLabel()
         lbl_val = self.labels_map.get(img_name)
-        badge_color = None
-        badge_icon = None
-        badge_tooltip = None
-        badge_size = 36  # Make badge bigger
-        icon_size = 20   # Make icon fit inside badge
-        def make_icon_light(icon):
+        badge_color = "#888"
+        badge_icon = QIcon()
+        badge_tooltip = "Unlabeled"
+        icon_size = 20
+        def make_icon(icon, color):
             if not icon.isNull():
                 pixmap = icon.pixmap(icon_size, icon_size)
-                img = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
-                lr_light = LIGHTROOM_LIGHT
-                for y in range(img.height()):
-                    for x in range(img.width()):
-                        alpha = img.pixelColor(x, y).alpha()
-                        img.setPixelColor(x, y, QColor(lr_light.red(), lr_light.green(), lr_light.blue(), alpha))
-                return QIcon(QPixmap.fromImage(img))
+                img = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+                painter = QPainter(img)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                painter.fillRect(img.rect(), QColor(color))
+                painter.end()
+                pm = QPixmap.fromImage(img)
+                pm.setDevicePixelRatio(self.devicePixelRatioF())
+                return QIcon(pm)
             return icon
         if lbl_val == 1:
-            icon = QIcon.fromTheme("emblem-favorite")
-            badge_color = "#2e7d32"  # green
-            badge_icon = make_icon_light(icon)
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)
+            badge_color = "#2e7d32"
+            badge_icon = make_icon(icon, "white")
             badge_tooltip = "Keep"
         elif lbl_val == 0:
-            icon = QIcon.fromTheme("user-trash")
-            badge_color = "#b71c1c"  # red
-            badge_icon = make_icon_light(icon)
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
+            badge_color = "#b71c1c"
+            badge_icon = make_icon(icon, "white")
             badge_tooltip = "Trash"
         elif lbl_val == -1:
-            icon = QIcon.fromTheme("dialog-question")
-            badge_color = "#ffeb3b"  # yellow
-            badge_icon = make_icon_light(icon)
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxQuestion)
+            badge_color = "#fbc02d"
+            badge_icon = make_icon(icon, "black")
             badge_tooltip = "Unsure"
-        if badge_icon:
-            pixmap = badge_icon.pixmap(icon_size, icon_size)
-            blur_label.setPixmap(pixmap)
-            blur_label.setFixedSize(badge_size, badge_size)
-            blur_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            blur_label.setStyleSheet(f"background: {badge_color}; border-radius: {badge_size}px; border: 2px solid #23272e; margin: 4px; padding: 4px;")
-            if badge_tooltip:
-                blur_label.setToolTip(badge_tooltip)
         else:
-            blur_label.setPixmap(QIcon().pixmap(icon_size, icon_size))
-            blur_label.setFixedSize(badge_size, badge_size)
-            blur_label.setStyleSheet(f"background: transparent; border-radius: {badge_size}px; margin: 4px; padding: 4px;")
-        class SelectableLabel(HoverEffectLabel):
-            def set_selected(self, selected: bool):
-                if selected:
-                    self.setStyleSheet(self.styleSheet() + "background: rgba(74,144,226,0.18); border: 3px solid #4a90e2;")
-                else:
-                    self.setStyleSheet(self.styleSheet().replace("background: rgba(74,144,226,0.18); border: 3px solid #4a90e2;", ""))
-        lbl = SelectableLabel()
+            # Fallback for unknown label
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxQuestion)
+            badge_color = "#888"
+            badge_icon = make_icon(icon, "black")
+            badge_tooltip = "Unlabeled"
+        overlay = OverlayWidget(group_badge, badge_icon, badge_color, badge_tooltip)
+        overlay.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
+        # Image label
+        lbl = HoverEffectLabel()
         lbl.setPixmap(pix)
         lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
-        lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Restore mouse press event for selection
-        def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path, hash_str=hash_str, group_str=group_str):
-            def handler(e):
-                for l in self.image_labels:
-                    if isinstance(l, HoverEffectLabel):
-                        l.set_selected(False)
-                label.set_selected(True)
-                self.selected_image_name = img_name  # Track the selected image
-                blur_score = compute_blur_score(img_path)
-                sharpness_metrics = compute_sharpness_features(img_path)
-                aesthetic_score = 42
-                metrics = (blur_score, sharpness_metrics, aesthetic_score)
-                keep_prob = None
-                if self.learner is not None:
-                    fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
-                    if fv_tuple is not None:
-                        fv, _ = fv_tuple
-                        keep_prob = float(self.learner.predict_keep_prob([fv])[0])
-                self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
-                if self.on_select:
-                    self.on_select(idx)
-            return handler
-        lbl.mousePressEvent = mousePressEventFactory()
-        # Restore double click event for fullscreen
-        def mouseDoubleClickEventFactory(idx=idx, img_path=img_path):
-            def handler(e):
-                if self.on_open_fullscreen:
-                    self.on_open_fullscreen(idx, img_path)
-            return handler
-        lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory()
-        # --- Compose overlay for group badge and label badge (blur_label) ---
-        from PySide6.QtWidgets import QHBoxLayout
-        overlay_widget = QWidget()
-        overlay_layout = QHBoxLayout(overlay_widget)
-        overlay_layout.setContentsMargins(0, 0, 0, 0)
-        overlay_layout.setSpacing(6)
-        group_label = QLabel(str(group_badge))
-        group_label.setStyleSheet(f"background: {color if group_badge else 'transparent'}; color: {LIGHTROOM_LIGHT.name()}; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
-        overlay_layout.addWidget(group_label, alignment=Qt.AlignmentFlag.AlignLeft)
-        overlay_layout.addWidget(blur_label, alignment=Qt.AlignmentFlag.AlignRight)
-        # Place overlay_widget above the image using a QVBoxLayout with setSpacing(0)
-        image_stack = QVBoxLayout()
-        image_stack.setContentsMargins(0, 0, 0, 0)
-        image_stack.setSpacing(0)
-        image_stack.addWidget(overlay_widget)
-        image_stack.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
-        image_stack.addWidget(bottom_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        # Remove all widgets and spacers from vbox before adding the new stacked layout
-        for i in reversed(range(vbox.count())):
-            item = vbox.itemAt(i)
-            widget = item.widget()
-            if widget is not None:
-                widget.setParent(None)
-            else:
-                vbox.removeItem(item)
-        vbox.addLayout(image_stack)
-        cell_width = self.THUMB_SIZE + 20
-        container.setFixedWidth(cell_width)
+        # Connect click/double-click to selection/fullscreen
+        lbl.clicked.connect(lambda name=img_name: self.on_thumbnail_clicked(name))
+        lbl.doubleClicked.connect(lambda name=img_name: self.on_thumbnail_double_clicked(name))
+        # Stack image and overlay
+        stack = QStackedLayout()
+        stack.setStackingMode(QStackedLayout.StackingMode.StackAll)
+        img_container = QWidget()
+        img_container.setLayout(stack)
+        stack.addWidget(lbl)
+        stack.addWidget(overlay)
+        vbox.addWidget(img_container, alignment=Qt.AlignmentFlag.AlignCenter)
+        vbox.addWidget(bottom_label, alignment=Qt.AlignmentFlag.AlignCenter)
         container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.image_labels.append(lbl)
-        self.top_labels.append(group_label)
+        self.top_labels.append(overlay.group_label)
         self.bottom_labels.append(bottom_label)
-        self.blur_labels.append(blur_label)
-        self.image_name_to_widgets[img_name] = (lbl, group_label, bottom_label, blur_label)
+        self.blur_labels.append(overlay.badge)
+        self.image_name_to_widgets[img_name] = (lbl, overlay.group_label, bottom_label, overlay.badge)
         # Update status bar with progress
         total_images = min(self.MAX_IMAGES, len(self.get_sorted_images()))
         loaded_images = len(self.image_labels)
@@ -385,58 +328,44 @@ class ImageGrid(QWidget):
 
     def update_blur_label(self, img_name, blur_label):
         lbl_val = self.labels_map.get(img_name)
-        badge_color = None
-        badge_icon = None
-        badge_tooltip = None
-        badge_size = 36
+        badge_color = "#888"
+        badge_icon = QIcon()
+        badge_tooltip = "Unlabeled"
         icon_size = 20
-        from PySide6.QtGui import QIcon, QColor, QPixmap, QImage
-        def make_icon_light(icon):
+        def make_icon(icon, color):
             if not icon.isNull():
                 pixmap = icon.pixmap(icon_size, icon_size)
-                img = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
-                lr_light = LIGHTROOM_LIGHT
-                for y in range(img.height()):
-                    for x in range(img.width()):
-                        alpha = img.pixelColor(x, y).alpha()
-                        img.setPixelColor(x, y, QColor(lr_light.red(), lr_light.green(), lr_light.blue(), alpha))
-                return QIcon(QPixmap.fromImage(img))
+                img = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+                painter = QPainter(img)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                painter.fillRect(img.rect(), QColor(color))
+                painter.end()
+                pm = QPixmap.fromImage(img)
+                pm.setDevicePixelRatio(self.devicePixelRatioF())
+                return QIcon(pm)
             return icon
         if lbl_val == 1:
-            icon = QIcon.fromTheme("emblem-favorite")
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)
             badge_color = "#2e7d32"
-            badge_icon = make_icon_light(icon)
+            badge_icon = make_icon(icon, "white")
             badge_tooltip = "Keep"
         elif lbl_val == 0:
-            icon = QIcon.fromTheme("user-trash")
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
             badge_color = "#b71c1c"
-            badge_icon = make_icon_light(icon)
+            badge_icon = make_icon(icon, "white")
             badge_tooltip = "Trash"
         elif lbl_val == -1:
-            icon = QIcon.fromTheme("dialog-question")
-            badge_color = "#ffeb3b"
-            badge_icon = make_icon_light(icon)
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxQuestion)
+            badge_color = "#fbc02d"
+            badge_icon = make_icon(icon, "black")
             badge_tooltip = "Unsure"
-        else:
-            icon = QIcon()
-            badge_color = "transparent"
-            badge_icon = icon
-            badge_tooltip = ""
-        if badge_icon:
-            pixmap = badge_icon.pixmap(icon_size, icon_size)
-            blur_label.setPixmap(pixmap)
-            blur_label.setFixedSize(badge_size, badge_size)
-            blur_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            blur_label.setStyleSheet(f"background: {badge_color}; border-radius: {badge_size}px; border: 2px solid #23272e; margin: 4px; padding: 4px;")
-            if badge_tooltip:
-                blur_label.setToolTip(badge_tooltip)
-            else:
-                blur_label.setToolTip("")
-        else:
-            blur_label.setPixmap(QIcon().pixmap(icon_size, icon_size))
-            blur_label.setFixedSize(badge_size, badge_size)
-            blur_label.setStyleSheet(f"background: transparent; border-radius: {badge_size}px; margin: 4px; padding: 4px;")
-            blur_label.setToolTip("")
+        # Find the badge QToolButton and update it
+        widgets = self.image_name_to_widgets.get(img_name)
+        if widgets:
+            badge_btn = widgets[3]
+            badge_btn.setIcon(badge_icon)
+            badge_btn.setStyleSheet(f"border-radius: 14px; background: {badge_color}; border: 2px solid white;")
+            badge_btn.setToolTip(badge_tooltip)
 
     def update_label(self, img_name, label):
         self.labels_map[img_name] = label
@@ -550,13 +479,13 @@ class ImageGrid(QWidget):
         if self.selected_image_name and self.selected_image_name in self.image_name_to_widgets:
             idx = self.image_labels.index(self.image_name_to_widgets[self.selected_image_name][0])
         key = event.key()
-        if key in (Qt.Key_Left, Qt.Key_A, Qt.Key_H):
+        if key == Qt.Key_Left:
             idx = max(0, idx - 1)
-        elif key in (Qt.Key_Right, Qt.Key_D, Qt.Key_L):
+        elif key == Qt.Key_Right:
             idx = min(len(self.image_labels) - 1, idx + 1)
-        elif key in (Qt.Key_Up,):
+        elif key == Qt.Key_Up:
             idx = max(0, idx - self.col_count)
-        elif key in (Qt.Key_Down,):
+        elif key == Qt.Key_Down:
             idx = min(len(self.image_labels) - 1, idx + self.col_count)
         elif key in (Qt.Key_Return, Qt.Key_Enter):
             if self.on_open_fullscreen and self.selected_image_name:
@@ -595,3 +524,76 @@ class ImageGrid(QWidget):
                     fv, _ = fv_tuple
                     keep_prob = float(self.learner.predict_keep_prob([fv])[0])
             self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
+
+    def on_thumbnail_clicked(self, img_name):
+        # Deselect all
+        for l in self.image_labels:
+            if hasattr(l, 'set_selected'):
+                l.set_selected(False)
+        # Select clicked
+        widgets = self.image_name_to_widgets.get(img_name)
+        if widgets:
+            lbl = widgets[0]
+            if hasattr(lbl, 'set_selected'):
+                lbl.set_selected(True)
+            self.selected_image_name = img_name
+            # Update info panel
+            img_path = os.path.join(self.directory, img_name)
+            info = self.image_info.get(img_name, {})
+            hash_str = info.get('hash', '...')
+            group = info.get('group')
+            group_str = group if group is not None else '...'
+            blur_score = compute_blur_score(img_path)
+            sharpness_metrics = compute_sharpness_features(img_path)
+            aesthetic_score = 42
+            metrics = (blur_score, sharpness_metrics, aesthetic_score)
+            keep_prob = None
+            if self.learner is not None:
+                fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
+                if fv_tuple is not None:
+                    fv, _ = fv_tuple
+                    keep_prob = float(self.learner.predict_keep_prob([fv])[0])
+            self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
+
+    def on_thumbnail_double_clicked(self, img_name):
+        import logging
+        logging.info(f"Double-clicked: {img_name}")
+        if self.on_open_fullscreen:
+            sorted_images = self.get_sorted_images()
+            idx = sorted_images.index(img_name)
+            img_path = os.path.join(self.directory, img_name)
+            self.on_open_fullscreen(idx, img_path, sorted_images)
+
+class OverlayWidget(QWidget):
+    def __init__(self, group_text, badge_icon, badge_color, badge_tooltip, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setStyleSheet("background: transparent;")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        # Group label (top-left)
+        safe_group_text = str(group_text) if group_text is not None else ''
+        self.group_label = QLabel(safe_group_text)
+        self.group_label.setStyleSheet("background: rgba(0,0,0,0.6); color: white; border-radius: 8px; padding: 2px 6px; font-size: 12px;")
+        self.group_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        layout.addWidget(self.group_label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        # Spacer
+        layout.addStretch(1)
+        # Badge (top-right)
+        self.badge = QToolButton()
+        self.badge.setIcon(badge_icon)
+        self.badge.setIconSize(QSize(20, 20))
+        self.badge.setFixedSize(28, 28)
+        self.badge.setStyleSheet(f"border-radius: 14px; background: {badge_color}; border: 2px solid white;")
+        self.badge.setToolTip(badge_tooltip)
+        self.badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        layout.addWidget(self.badge, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+
+    def update_badge(self, icon, color, tooltip):
+        self.badge.setIcon(icon)
+        self.badge.setStyleSheet(f"border-radius: 14px; background: {color}; border: 2px solid white;")
+        self.badge.setToolTip(tooltip)
+
+    def update_group(self, text):
+        self.group_label.setText(str(text) if text is not None else '')

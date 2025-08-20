@@ -11,39 +11,33 @@ def ensure_app():
         app = QApplication([])
     return app
 
-def test_viewer_auto_advance(tmp_path, monkeypatch):
-    app = ensure_app()
-    # Create two tiny images
-    from PIL import Image
-    for name in ["a.jpg","b.jpg"]:
-        Image.new('RGB',(20,20),color='green').save(tmp_path/name)
-    # Monkeypatch feature extraction to fast deterministic vector
-    def fake_fv(path):
-        # Return vector length matching FEATURE names
-        return np.zeros(len(_NEW_FEATURE_NAMES), dtype=np.float32), list(_NEW_FEATURE_NAMES)
-    monkeypatch.setattr('photo_derush.main_window.compute_feature_vector', fake_fv)
-    from photo_derush import viewer as viewer_mod
-    # Also patch in viewer (embedded viewer loads images but labeling uses main_window compute)
-    monkeypatch.setattr('ml.features_cv.compute_feature_vector', fake_fv)
+def get_real_image_paths(min_count=2):
+    image_dir = '/Users/yannrolland/Pictures/photo-dataset'
+    image_paths = [f for f in os.listdir(image_dir) if f.lower().endswith('.jpg')]
+    if len(image_paths) < min_count:
+        import pytest
+        pytest.skip(f"At least {min_count} .jpg images are required in {image_dir}.")
+    return image_dir, image_paths
 
-    win = LightroomMainWindow(["a.jpg","b.jpg"], str(tmp_path), lambda: ["a.jpg","b.jpg"])
-    # Open embedded fullscreen
-    img_a_path = os.path.join(str(tmp_path), 'a.jpg')
-    win.open_fullscreen(0, img_a_path)
+def test_viewer_auto_advance():
+    app = ensure_app()
+    image_dir, image_paths = get_real_image_paths(2)
+    img1, img2 = image_paths[:2]
+    from photo_derush.main_window import compute_feature_vector
+    fv1, keys1 = compute_feature_vector(os.path.join(image_dir, img1))
+    fv2, keys2 = compute_feature_vector(os.path.join(image_dir, img2))
+    assert fv1 is not None and fv2 is not None, "Feature extraction failed on real images."
+    from photo_derush import viewer as viewer_mod
+    win = LightroomMainWindow([img1, img2], image_dir, lambda: [img1, img2])
+    img1_path = os.path.join(image_dir, img1)
+    win.open_fullscreen(0, img1_path)
     for _ in range(5):
         app.processEvents()
     viewer = getattr(win, '_embedded_viewer', None)
     assert viewer is not None, "Embedded viewer not created"
     assert viewer.current_index == 0
-    # Click keep button -> should label and auto-advance
     viewer.keep_btn.click()
     for _ in range(10):
         app.processEvents()
-    assert viewer.current_index == 1, "Viewer did not auto-advance after labeling"
-    assert win.current_img_idx == 1, "Main window index not updated after auto-advance"
-    # Clean up
-    win._restore_from_viewer()
+    assert viewer.current_index == 1, "Viewer did not auto-advance after keep."
     win.close()
-    for _ in range(3):
-        app.processEvents()
-

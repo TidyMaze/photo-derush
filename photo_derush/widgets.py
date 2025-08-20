@@ -1,6 +1,9 @@
 from PySide6.QtWidgets import QLabel
+from PySide6.QtCore import Signal, Qt
 
 class HoverEffectLabel(QLabel):
+    clicked = Signal()
+    doubleClicked = Signal()
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._is_selected = False
@@ -21,4 +24,11 @@ class HoverEffectLabel(QLabel):
         if not self._is_selected:
             self.setStyleSheet(self._base_style)
         super().leaveEvent(event)
-
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.doubleClicked.emit()
+        super().mouseDoubleClickEvent(event)

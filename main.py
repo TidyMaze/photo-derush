@@ -125,24 +125,24 @@ def compute_dhash(image_path):
         pass  # fallback: use as is if thumbnail fails
     return imagehash.dhash(img)
 
+def hash_one(img_name, directory):
+    img_path = os.path.join(directory, img_name)
+    try:
+        dh = compute_dhash(img_path)
+        h_bytes = int(str(dh), 16).to_bytes(8, 'big')
+        hash_arr = np.frombuffer(h_bytes, dtype='uint8')
+        return img_name, hash_arr, dh, None
+    except Exception as e:
+        return img_name, None, None, e
+
 def parallel_hash_images(image_paths, directory):
     """Hash images in parallel. Returns (valid_paths, hashes, image_hashes, errors)"""
-    def hash_one(img_name):
-        img_path = os.path.join(directory, img_name)
-        try:
-            dh = compute_dhash(img_path)
-            h_bytes = int(str(dh), 16).to_bytes(8, 'big')
-            hash_arr = np.frombuffer(h_bytes, dtype='uint8')
-            return img_name, hash_arr, dh, None
-        except Exception as e:
-            return img_name, None, None, e
-
     hashes = []
     valid_paths = []
     image_hashes = {}
     errors = {}
     with ProcessPoolExecutor() as executor:
-        future_to_img = {executor.submit(hash_one, img_name): img_name for img_name in image_paths}
+        future_to_img = {executor.submit(hash_one, img_name, directory): img_name for img_name in image_paths}
         for i, future in enumerate(as_completed(future_to_img)):
             img_name, hash_arr, dh, err = future.result()
             if hash_arr is not None:

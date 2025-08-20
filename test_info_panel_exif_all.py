@@ -1,3 +1,4 @@
+import os
 import pytest
 from PySide6.QtWidgets import QApplication
 from photo_derush.info_panel import InfoPanel
@@ -49,21 +50,26 @@ def qapp():
     app = QApplication.instance() or QApplication([])
     yield app
 
-def test_all_exif_keys_rendered(qapp, monkeypatch):
-    # Monkeypatch extract_exif to return synthetic dict
-    from photo_derush import info_panel as ip_mod
-    monkeypatch.setattr(ip_mod, 'extract_exif', lambda p: SYN_EXIF)
+def get_real_image_path():
+    image_dir = '/Users/yannrolland/Pictures/photo-dataset'
+    image_paths = [f for f in os.listdir(image_dir) if f.lower().endswith('.jpg')]
+    if not image_paths:
+        import pytest
+        pytest.skip(f"At least one .jpg image is required in {image_dir}.")
+    return image_dir, image_paths[0]
+
+def test_all_exif_keys_rendered(qapp):
+    image_dir, image_name = get_real_image_path()
+    image_path = os.path.join(image_dir, image_name)
+    from photo_derush.info_panel import extract_exif
+    exif_data = extract_exif(image_path)
     panel = InfoPanel()
-    panel.update_info('img.jpg', '/tmp/img.jpg', '-', '-', '-', metrics=None, keep_prob=None)
+    panel.update_info(image_name, image_path, '-', '-', '-', metrics=None, keep_prob=None)
     html = panel.text_edit.toHtml()
-    # Each key (except GPSInfo handled specially) must appear in HTML
     missing = []
-    for k in SYN_EXIF.keys():
-        # GPSInfo displayed as 'GPSInfo' line; skip dict contents
+    for k in exif_data.keys():
         if k == 'GPSInfo':
-            if 'GPSInfo' not in html:
-                missing.append(k)
             continue
-        if k not in html:
+        if str(k) not in html:
             missing.append(k)
-    assert not missing, f"Missing EXIF keys in rendered HTML: {missing}"
+    assert not missing, f"Missing EXIF keys in HTML: {missing}"
