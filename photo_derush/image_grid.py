@@ -292,6 +292,8 @@ class ImageGrid(QWidget):
             badge_color = "#888"
             badge_icon = make_icon(icon, "black")
             badge_tooltip = "Unlabeled"
+        import logging
+        logging.info(f"Creating overlay for {img_name}: group_str={group_str}, lbl_val={lbl_val}, badge_color={badge_color}, badge_tooltip={badge_tooltip}")
         overlay = OverlayWidget(group_badge, badge_icon, badge_color, badge_tooltip)
         overlay.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
         # Image label

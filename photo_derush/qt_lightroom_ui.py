@@ -6,6 +6,7 @@ PySide6 port of the Lightroom UI from main.py (Tkinter version).
 - All event handling and image display is Qt idiomatic
 """
 import sys
+print("[Startup] qt_lightroom_ui.py top-level print (module execution)")
 from PySide6.QtWidgets import QApplication
 from .main_window import LightroomMainWindow
 from .viewer import open_full_image_qt
@@ -14,6 +15,10 @@ import threading
 from precompute import prepare_images_and_groups, MAX_IMAGES as PREP_MAX, list_images
 import logging
 import queue
+
+logging.basicConfig(level=logging.INFO)
+print("[Startup] qt_lightroom_ui.py started (print statement)")
+logging.info("[Startup] qt_lightroom_ui.py started.")
 
 def show_lightroom_ui_qt(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None, image_info=None):
     app = QApplication.instance() or QApplication(sys.argv)
@@ -80,6 +85,8 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
     def worker():
         try:
             images = list_images(directory)
+            print(f"[AsyncLoad] (worker) Images found (print): {images}")
+            logging.info(f"[AsyncLoad] (worker) Images found: {images}")
             subset = images[:max_images]
             logging.info("[AsyncLoad] (worker) Found %d images, streaming first %d", len(images), len(subset))
             # Provide sorted list early
@@ -92,6 +99,7 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
             msg_queue.put({'type': 'grouping', 'image_info': image_info})
             msg_queue.put({'type': 'done'})
         except Exception as e:
+            print(f"[AsyncLoad] Worker failed (print): {e}")
             logging.exception("[AsyncLoad] Worker failed: %s", e)
             msg_queue.put({'type': 'error', 'error': str(e)})
             msg_queue.put({'type': 'done'})
@@ -99,3 +107,9 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
     t = threading.Thread(target=worker, daemon=True)
     t.start()
     app.exec()
+
+if __name__ == "__main__":
+    # Use the same default directory as main.py
+    directory = '/Users/yannrolland/Pictures/photo-dataset'
+    print("[Main] Launching async Lightroom UI from qt_lightroom_ui.py")
+    show_lightroom_ui_qt_async(directory, PREP_MAX)

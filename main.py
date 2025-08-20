@@ -1,3 +1,4 @@
+print("[Startup] main.py started (print statement)")
 import os
 from PIL import Image
 try:
