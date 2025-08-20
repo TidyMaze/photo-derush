@@ -27,7 +27,7 @@ class InfoPanel(QWidget):
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
         # Set LIGHTROOM_LIGHT as the base text color for the QTextEdit as well
-        self.text_edit.setStyleSheet(f"color: rgb({LIGHTROOM_LIGHT.red()},{LIGHTROOM_LIGHT.green()},{LIGHTROOM_LIGHT.blue()}); background: transparent; font-size: 14px; border: none; padding: 16px; font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;")
+        self.text_edit.setStyleSheet(f"color: rgb({LIGHTROOM_LIGHT.red()},{LIGHTROOM_LIGHT.green()},{LIGHTROOM_LIGHT.blue()}); background: transparent; font-size: 14px; border: none; padding: 16px; font-family: system-ui, Arial, sans-serif;")
         self.text_edit.setTextInteractionFlags(
             self.text_edit.textInteractionFlags() | self.text_edit.textInteractionFlags().TextSelectableByMouse | self.text_edit.textInteractionFlags().TextSelectableByKeyboard
         )

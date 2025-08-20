@@ -97,7 +97,7 @@ class LightroomMainWindow(QMainWindow):
         self.addToolBar(self.toolbar)
         # Toast notification system
         self.toast = QLabel("")
-        self.toast.setStyleSheet("background: #444; color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 14px; z-index: 1000;")
+        self.toast.setStyleSheet("background: #444; color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 14px;")
         self.toast.setWindowFlags(self.toast.windowFlags() | Qt.WindowType.ToolTip)
         self.toast.hide()
         # Status bar

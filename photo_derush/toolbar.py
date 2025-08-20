@@ -61,7 +61,7 @@ class SettingsToolbar(QToolBar):
         self.zoom_selector.currentTextChanged.connect(self._on_zoom_changed)
         self.setStyleSheet("""
             QWidget {
-                font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;
+                font-family: system-ui, Arial, sans-serif;
                 font-size: 13px;
                 color: #f0f0f0;
             }
