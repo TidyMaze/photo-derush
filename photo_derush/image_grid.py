@@ -1,7 +1,7 @@
 import logging
 import datetime
 
-from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy, QToolButton, QStackedLayout, QHBoxLayout, QGraphicsDropShadowEffect, QStyle
+from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QScrollArea, QVBoxLayout, QSizePolicy, QToolButton, QStackedLayout, QHBoxLayout, QGraphicsDropShadowEffect, QStyle, QProgressBar
 from PySide6.QtGui import QIcon, QColor, QPixmap, QImage, QPainter, QMovie
 from PySide6.QtCore import Qt, QSize, QObject, Signal, QRunnable, QThreadPool
 from .widgets import HoverEffectLabel
@@ -40,6 +40,7 @@ class ThumbnailLoader(QRunnable):
 
 class FeatureExtractionEmitter(QObject):
     finished = Signal(list)  # emits list of feature vectors
+    progress = Signal(int, int)  # emits (completed, total)
 
 class FeatureExtractionWorker(QRunnable):
     def __init__(self, feature_cache, img_paths, emitter):
@@ -49,7 +50,9 @@ class FeatureExtractionWorker(QRunnable):
         self.emitter = emitter
 
     def run(self):
-        results = self.feature_cache.batch_extract(self.img_paths)
+        def progress_callback(completed, total):
+            self.emitter.progress.emit(completed, total)
+        results = self.feature_cache.batch_extract(self.img_paths, progress_callback=progress_callback)
         self.emitter.finished.emit(results)
 
 class ImageGrid(QWidget):
@@ -77,6 +80,13 @@ class ImageGrid(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setWidget(self.grid_container)
         layout = QVBoxLayout(self)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(1)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.hide()
+        layout.addWidget(self.progress_bar)
         layout.addWidget(self.scroll)
         self.setLayout(layout)
         self.learner = None
@@ -143,6 +153,7 @@ class ImageGrid(QWidget):
         # Start batch extraction in background (non-blocking) using QRunnable
         self._feature_extraction_emitter = FeatureExtractionEmitter()
         self._feature_extraction_emitter.finished.connect(self._on_feature_extraction_done)
+        self._feature_extraction_emitter.progress.connect(self._on_feature_extraction_progress)
         self._feature_threadpool = QThreadPool.globalInstance()
         feature_worker = FeatureExtractionWorker(self._feature_cache, img_paths, self._feature_extraction_emitter)
         self._feature_threadpool.start(feature_worker)
@@ -222,7 +233,15 @@ class ImageGrid(QWidget):
     def _on_feature_extraction_done(self, results):
         import logging
         logging.info(f"Feature extraction completed for {len(results)} images.")
+        self.progress_bar.hide()
         # You can update the UI or cache here if needed
+
+    def _on_feature_extraction_progress(self, completed, total):
+        if total > 0:
+            self.progress_bar.setMaximum(total)
+            self.progress_bar.setValue(completed)
+            if completed >= total:
+                self.progress_bar.hide()
 
     def _add_thumbnail_row(self, img_name, idx, color='#444444', hash_str='...', group_str='...', pil_thumb=None):
         import os
@@ -330,7 +349,6 @@ class ImageGrid(QWidget):
             badge_icon = make_icon(icon, "black")
             badge_tooltip = "Unlabeled"
         import logging
-        logging.info(f"Creating overlay for {img_name}: group_str={group_str}, lbl_val={lbl_val}, badge_color={badge_color}, badge_tooltip={badge_tooltip}")
         overlay = OverlayWidget(group_badge, badge_icon, badge_color, badge_tooltip)
         overlay.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
         # Image label
