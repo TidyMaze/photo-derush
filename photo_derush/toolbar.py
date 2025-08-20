@@ -2,8 +2,8 @@ from PySide6.QtWidgets import QToolBar, QComboBox
 from PySide6.QtGui import QAction, QIcon, QColor, QImage, QPixmap
 from PySide6.QtCore import Signal
 
-# Lightroom-like light color (not pure white)
-LIGHTROOM_LIGHT = QColor(230, 230, 220)
+# Lightroom-like light color (slightly darker for better contrast)
+LIGHTROOM_LIGHT = QColor(210, 210, 190)
 
 class SettingsToolbar(QToolBar):
     zoom_changed = Signal(int)

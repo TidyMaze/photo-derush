@@ -14,8 +14,8 @@ import os
 from PySide6.QtGui import QIcon, QMovie, QAction, QColor, QPixmap, QImage
 from PySide6.QtCore import QPropertyAnimation
 
-# Lightroom-like light color (not pure white)
-LIGHTROOM_LIGHT = QColor(230, 230, 220)
+# Lightroom-like light color (slightly darker for better contrast)
+LIGHTROOM_LIGHT = QColor(210, 210, 190)
 
 class ThumbnailResultEmitter(QObject):
     finished = Signal(int, str, object, dict, str, object)  # idx, img_name, info, group_to_color, default_color, pil_thumb

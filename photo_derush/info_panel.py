@@ -3,8 +3,8 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget, QGraphicsDropShadowEffect
 from .utils import extract_exif, format_gps_info
 
-# Lightroom-like light color (not pure white)
-LIGHTROOM_LIGHT = QColor(230, 230, 220)
+# Lightroom-like light color (slightly darker for better contrast)
+LIGHTROOM_LIGHT = QColor(210, 210, 190)
 
 class InfoPanel(QWidget):
     def __init__(self, parent=None):
