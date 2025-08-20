@@ -11,6 +11,7 @@ from photo_derush.image_manager import image_manager
 import time
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from precompute import compute_duplicate_groups
 
 # Configure logging if not already configured
 if not logging.getLogger().handlers:
@@ -183,66 +184,6 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
     clusters = group_hashes(hashes, valid_paths, hamming_thresh)
     logging.info(f"Found {len(clusters)} clusters with Hamming threshold {hamming_thresh}.")
     return clusters, image_hashes
-
-def compute_duplicate_groups(hashes):
-    print("[Duplicate Groups] Computing duplicate groups...")
-    if not hashes or not all(h is not None for h in hashes):
-        return {}, {}, {}
-    hashes_np = np.stack(hashes).astype('uint8')
-    index = faiss.IndexBinaryFlat(64)
-    index.add(hashes_np)
-    group_ids = {}
-    group_cardinality = {}
-    hash_map = {}
-    current_group = 1
-    clusters = []
-    assigned = set()
-    total = len(hashes_np)
-    if total == 0:
-        return {}, {}, {}
-    log_interval = max(1, total // 20)  # aim for ~20 logs
-    import time as _time
-    start_group_time = _time.perf_counter()
-    logging.info("[Grouping] Starting duplicate grouping over %d hashes", total)
-    for i in range(total):
-        if i in assigned:
-            # still log periodic progress
-            if (i + 1) % log_interval == 0 or (i + 1) == total:
-                elapsed = _time.perf_counter() - start_group_time
-                logging.info(
-                    "[Grouping] %d/%d (%.1f%%) processed (elapsed %.1fs)",
-                    i + 1, total, (i + 1) / total * 100.0, elapsed
-                )
-            continue
-        res = index.range_search(hashes_np[i][np.newaxis, :], 5)
-        lims, D, I = res
-        cluster = set(j for j in I[lims[0]:lims[1]] if j != i)
-        cluster.add(i)
-        if len(cluster) > 1:
-            for j in cluster:
-                group_ids[j] = current_group
-                assigned.add(j)
-            group_cardinality[current_group] = len(cluster)
-            clusters.append(list(cluster))
-            current_group += 1
-        # progress log
-        if (i + 1) % log_interval == 0 or (i + 1) == total:
-            elapsed = _time.perf_counter() - start_group_time
-            logging.info(
-                "[Grouping] %d/%d (%.1f%%) processed, groups=%d (elapsed %.1fs)",
-                i + 1, total, (i + 1) / total * 100.0, current_group - 1, elapsed
-            )
-    for idx in range(len(hashes)):
-        if idx not in group_ids:
-            group_ids[idx] = None
-    for idx, h in enumerate(hashes):
-        if h is not None:
-            hash_map[idx] = ''.join(f'{b:02x}' for b in h)
-        else:
-            hash_map[idx] = None
-    total_elapsed = _time.perf_counter() - start_group_time
-    logging.info("[Grouping] Completed in %.2fs. Groups=%d", total_elapsed, current_group - 1)
-    return group_ids, group_cardinality, hash_map
 
 def main_duplicate_detection(clusters=None, image_hashes=None):
     directory = '/Users/yannrolland/Pictures/photo-dataset'
