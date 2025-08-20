@@ -124,7 +124,8 @@ def compute_dhash(image_path):
         pass  # fallback: use as is if thumbnail fails
     return imagehash.dhash(img)
 
-def cluster_duplicates(image_paths, directory, hamming_thresh=5):
+def parallel_hash_images(image_paths, directory):
+    """Hash images in parallel. Returns (valid_paths, hashes, image_hashes, errors)"""
     def hash_one(img_name):
         img_path = os.path.join(directory, img_name)
         try:
@@ -138,6 +139,7 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
     hashes = []
     valid_paths = []
     image_hashes = {}
+    errors = {}
     with ProcessPoolExecutor() as executor:
         future_to_img = {executor.submit(hash_one, img_name): img_name for img_name in image_paths}
         for i, future in enumerate(as_completed(future_to_img)):
@@ -146,14 +148,14 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
                 hashes.append(hash_arr)
                 valid_paths.append(img_name)
                 image_hashes[img_name] = hash_arr
-                if i % 20 == 0 or i == len(image_paths) - 1:
-                    logging.info(f"[Hashing] (parallel) {i+1}/{len(image_paths)} hashed")
             else:
-                logging.warning(f"[Hashing] Failed to hash {img_name}: {err}")
+                errors[img_name] = err
+    return valid_paths, hashes, image_hashes, errors
 
-    logging.info(f"Computed {len(hashes)} hashes for {len(image_paths)} images.")
+def group_hashes(hashes, valid_paths, hamming_thresh=5):
+    """Group hashes using faiss. Returns clusters (list of lists of image names)."""
     if not hashes:
-        return [], {}
+        return []
     hashes_np = np.stack(hashes)
     index = faiss.IndexBinaryFlat(64)
     index.add(hashes_np)
@@ -168,9 +170,18 @@ def cluster_duplicates(image_paths, directory, hamming_thresh=5):
             visited.add(j)
         if len(cluster) > 1:
             clusters.append(cluster)
+    return clusters
 
+def cluster_duplicates(image_paths, directory, hamming_thresh=5):
+    valid_paths, hashes, image_hashes, errors = parallel_hash_images(image_paths, directory)
+    for i, img_name in enumerate(valid_paths):
+        if i % 20 == 0 or i == len(valid_paths) - 1:
+            logging.info(f"[Hashing] (parallel) {i+1}/{len(image_paths)} hashed")
+    for img_name, err in errors.items():
+        logging.warning(f"[Hashing] Failed to hash {img_name}: {err}")
+    logging.info(f"Computed {len(hashes)} hashes for {len(image_paths)} images.")
+    clusters = group_hashes(hashes, valid_paths, hamming_thresh)
     logging.info(f"Found {len(clusters)} clusters with Hamming threshold {hamming_thresh}.")
-
     return clusters, image_hashes
 
 def compute_duplicate_groups(hashes):
@@ -265,48 +276,24 @@ def duplicate_slayer(image_dir, trash_dir, show_ui=True):
     return kept, [os.path.join(trash_dir, t) for t in trashed]
 
 def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
-    """Prepare images and their hash/group metadata before launching the UI.
-
-    Returns (all_images_list, image_info_dict, stats_dict)
-    stats_dict keys: total_images, duplicate_group_count, duration_seconds
-    """
     images = list_images(directory)
     logging.info("[Prep] Found %d images in %s", len(images), directory)
     if not images:
         return [], {}, {"total_images": 0, "duplicate_group_count": 0, "duration_seconds": 0.0}
     logging.info("[Hashing] Starting hash + group computation for %d images", len(images))
     start_hash_time = time.perf_counter()
-    image_hashes = {}
-    hashes = []
-    total = len(images)
-    log_interval = max(1, total // 20)  # target ~20 progress updates
-    for idx, img in enumerate(images):
-        img_path = os.path.join(directory, img)
-        try:
-            dh = compute_dhash(img_path)
-            h_bytes = int(str(dh), 16).to_bytes(8, 'big')
-            hash_arr = np.frombuffer(h_bytes, dtype='uint8')
-            image_hashes[img] = hash_arr
-            hashes.append(hash_arr)
-        except Exception as ex:  # noqa: PERF203
-            logging.warning("[Hashing] Failed for %s: %s", img, ex)
-            image_hashes[img] = None
-            hashes.append(None)
-        if (idx + 1) % log_interval == 0 or (idx + 1) == total:
-            elapsed = time.perf_counter() - start_hash_time
-            logging.info(
-                "[Hashing] %d/%d (%.1f%%) hashed (elapsed %.1fs)",
-                idx + 1, total, (idx + 1) / total * 100.0, elapsed
-            )
+    valid_paths, hashes, image_hashes, errors = parallel_hash_images(images, directory)
+    for img_name, err in errors.items():
+        logging.warning("[Hashing] Failed for %s: %s", img_name, err)
     group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
     duration = time.perf_counter() - start_hash_time
     duplicate_group_count = len([g for g in set(group_ids.values()) if g is not None])
     logging.info("[Hashing] Finished hash + group computation in %.2fs. Duplicate groups: %d", duration, duplicate_group_count)
     image_info = {}
-    for idx, img in enumerate(images):
+    for idx, img in enumerate(valid_paths):
         image_info[img] = {"hash": hash_map.get(idx), "group": group_ids.get(idx)}
-    stats = {"total_images": len(images), "duplicate_group_count": duplicate_group_count, "duration_seconds": duration}
-    return images, image_info, stats
+    stats = {"total_images": len(valid_paths), "duplicate_group_count": duplicate_group_count, "duration_seconds": duration}
+    return valid_paths, image_info, stats
 
 def main():
     directory = '/Users/yannrolland/Pictures/photo-dataset'
