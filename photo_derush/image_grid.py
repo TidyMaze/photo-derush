@@ -310,6 +310,36 @@ class ImageGrid(QWidget):
         lbl.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
         lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Restore mouse press event for selection
+        def mousePressEventFactory(idx=idx, label=lbl, img_name=img_name, img_path=img_path, hash_str=hash_str, group_str=group_str):
+            def handler(e):
+                for l in self.image_labels:
+                    if isinstance(l, HoverEffectLabel):
+                        l.set_selected(False)
+                label.set_selected(True)
+                self.selected_image_name = img_name  # Track the selected image
+                blur_score = compute_blur_score(img_path)
+                sharpness_metrics = compute_sharpness_features(img_path)
+                aesthetic_score = 42
+                metrics = (blur_score, sharpness_metrics, aesthetic_score)
+                keep_prob = None
+                if self.learner is not None:
+                    fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
+                    if fv_tuple is not None:
+                        fv, _ = fv_tuple
+                        keep_prob = float(self.learner.predict_keep_prob([fv])[0])
+                self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
+                if self.on_select:
+                    self.on_select(idx)
+            return handler
+        lbl.mousePressEvent = mousePressEventFactory()
+        # Restore double click event for fullscreen
+        def mouseDoubleClickEventFactory(idx=idx, img_path=img_path):
+            def handler(e):
+                if self.on_open_fullscreen:
+                    self.on_open_fullscreen(idx, img_path)
+            return handler
+        lbl.mouseDoubleClickEvent = mouseDoubleClickEventFactory()
         # --- Compose overlay for group badge and label badge (blur_label) ---
         from PySide6.QtWidgets import QHBoxLayout
         overlay_widget = QWidget()
