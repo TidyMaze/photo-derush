@@ -5,6 +5,7 @@ from PIL import Image, ExifTags
 import imagehash
 import logging
 from .image_manager import image_manager
+import os
 
 def pil2pixmap(img: Image.Image):
     from PySide6.QtGui import QPixmap, QImage
@@ -48,6 +49,9 @@ def extract_exif(img_path):
     Returns mapping tag_name -> value; GPSInfo as nested dict if present.
     Legacy _getexif() support removed per requirement.
     """
+    if not img_path or not os.path.isfile(img_path):
+        logging.debug(f"[EXIF] Skipping EXIF extraction for invalid path: '{img_path}'")
+        return {}
     try:
         with Image.open(img_path) as im:
             merged = {}

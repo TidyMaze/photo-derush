@@ -252,7 +252,7 @@ class ImageGrid(QWidget):
                 logging.warning(f"Could not format date for {img_path}: {e}")
         bottom_label = QLabel(f"{img_name}\nDate: {date_str}")
         self.base_bottom_texts[img_name] = bottom_label.text()
-        bottom_label.setStyleSheet("color: #e6e6e0; background: transparent; font-size: 11px;")
+        bottom_label.setStyleSheet(f"color: {LIGHTROOM_LIGHT.name()}; background: transparent; font-size: 11px;")
         # Use icons for label, now as a larger, more rounded badge
         blur_label = QLabel()
         lbl_val = self.labels_map.get(img_name)
@@ -347,7 +347,7 @@ class ImageGrid(QWidget):
         overlay_layout.setContentsMargins(0, 0, 0, 0)
         overlay_layout.setSpacing(6)
         group_label = QLabel(str(group_badge))
-        group_label.setStyleSheet(f"background: {color if group_badge else 'transparent'}; color: #e6e6dc; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
+        group_label.setStyleSheet(f"background: {color if group_badge else 'transparent'}; color: {LIGHTROOM_LIGHT.name()}; font-weight: bold; border-radius: 8px; min-height: 18px; padding: 2px 8px; text-align: center; font-size: 12px;")
         overlay_layout.addWidget(group_label, alignment=Qt.AlignmentFlag.AlignLeft)
         overlay_layout.addWidget(blur_label, alignment=Qt.AlignmentFlag.AlignRight)
         # Place overlay_widget above the image using a QVBoxLayout with setSpacing(0)
