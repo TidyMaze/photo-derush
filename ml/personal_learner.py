@@ -150,7 +150,9 @@ class PersonalLearner:
                 logger.info('[Learner][FullRetrain] Loss computation failed epoch=%d: %s', epoch+1, e)
             self.last_retrain_loss_curve.append(loss)
             self.last_retrain_epochs_run = epoch + 1
-            logger.info('[Learner][FullRetrain][Epoch %d/%d] logloss=%.4f', epoch+1, max_epochs, loss)
+
+            if epoch % 100 == 0 or epoch == max_epochs - 1:
+                logger.info('[Learner][FullRetrain][Epoch %d/%d] logloss=%.4f', epoch+1, max_epochs, loss)
             # Early stopping logic (only if loss is finite)
             if loss == loss:  # not NaN
                 if loss + min_delta < best_loss:
