@@ -634,7 +634,12 @@ class LightroomMainWindow(QMainWindow):
 
     def _label_current_image(self, label):
         self.logger.info(f"[DEBUG] _label_current_image called with label={label}")
-        img_name = self.get_current_image()
+        # Use the selected image from the grid if available
+        img_name = None
+        if hasattr(self, 'image_grid') and getattr(self.image_grid, 'selected_image_name', None):
+            img_name = self.image_grid.selected_image_name
+        else:
+            img_name = self.get_current_image()
         if img_name is None:
             self.logger.info("[DEBUG] No current image to label.")
             return
@@ -721,16 +726,17 @@ class LightroomMainWindow(QMainWindow):
         # update UI badge
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
+            self.image_grid.select_image_by_name(img_name)  # Move selection update before refresh
         if self.learner is not None:
-            # Single image refresh for info panel
+            # Single image refresh for info panel and grid
             self.refresh_keep_prob()
-            # Batch refresh all visible thumbs (always refresh after any label change)
-            self._refresh_all_keep_probs()
-            logging.info("[Label] Updated keep probabilities for all images in grid after labeling %s", img_name)
+            # Removed batch refresh to avoid updating all images after labeling one
+            # self._refresh_all_keep_probs()
+            logging.info(f"[Label] Updated keep probability for labeled image {img_name}")
         self._update_status_bar(action=f"labeled {img_name}={label}")
-        # Restore selection to the labeled image after grid update
-        if hasattr(self, 'image_grid'):
-            self.image_grid.selected_image_name = img_name
+        # Remove redundant selection assignment
+        # if hasattr(self, 'image_grid'):
+        #     self.image_grid.selected_image_name = img_name
 
     def _evaluate_model(self):
         """Evaluate current learner on latest definitive labeled events (0/1) only.

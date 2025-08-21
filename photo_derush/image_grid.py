@@ -681,6 +681,33 @@ class ImageGrid(QWidget):
             img_path = os.path.join(self.directory, img_name)
             self.on_open_fullscreen(idx, img_path, sorted_images)
 
+    def select_image_by_name(self, img_name):
+        logging.info(f"[ImageGrid] select_image_by_name called with {img_name}")
+        self.selected_image_name = img_name
+        for l in self.image_labels:
+            if hasattr(l, 'set_selected'):
+                l.set_selected(False)
+        widgets = self.image_name_to_widgets.get(img_name)
+        if widgets:
+            lbl = widgets[0]
+            if hasattr(lbl, 'set_selected'):
+                lbl.set_selected(True)
+            # Optionally update info panel
+            img_path = os.path.join(self.directory, img_name)
+            info = self.image_info.get(img_name, {})
+            hash_str = info.get('hash', '...')
+            group = info.get('group')
+            group_str = group if group is not None else '...'
+            blur_score = compute_blur_score(img_path)
+            sharpness_metrics = compute_sharpness_features(img_path)
+            keep_prob = None
+            if self.learner is not None:
+                fv_tuple = self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
+                if fv_tuple is not None:
+                    fv, _ = fv_tuple
+                    keep_prob = float(self.learner.predict_keep_prob([fv])[0])
+            self.info_panel.update_info(img_name, img_path, "-", hash_str, group_str, None, keep_prob=keep_prob)
+
 class OverlayWidget(QWidget):
     def __init__(self, group_text, badge_icon, badge_color, badge_tooltip, parent=None):
         super().__init__(parent)
