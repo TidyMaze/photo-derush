@@ -208,28 +208,6 @@ def main_duplicate_detection(clusters=None, image_hashes=None):
     for idx, cluster in enumerate(clusters):
         print(f"Cluster {idx+1}: {cluster}")
 
-def duplicate_slayer(image_dir, trash_dir, show_ui=True):
-    images = [f for f in os.listdir(image_dir) if f.endswith('.jpg')]
-    print(f"[Duplicate Slayer] Found {len(images)} images in {image_dir}.")
-    if not images:
-        print("[Duplicate Slayer] No images found. Exiting.")
-        return [], []
-    trashed = []
-    kept = [os.path.join(image_dir, images[0])]
-    for img in images[1:]:
-        src = os.path.join(image_dir, img)
-        dst = os.path.join(trash_dir, img)
-        print(f"[Duplicate Slayer] Moving duplicate: {img} -> trash.")
-        os.rename(src, dst)
-        trashed.append(img)
-    all_images = [images[0]] + trashed
-    # Skip UI during automated tests
-    running_tests = os.environ.get("PYTEST_CURRENT_TEST") is not None
-    if show_ui and not running_tests:
-        print(f"[Duplicate Slayer] Loading {len(all_images[:MAX_IMAGES])} images in UI.")
-        show_lightroom_ui(all_images[:MAX_IMAGES], image_dir, trashed_paths=trashed[:MAX_IMAGES-1], trashed_dir=trash_dir)
-    return kept, [os.path.join(trash_dir, t) for t in trashed]
-
 def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
     images = list_images(directory)
     logging.info("[Prep] Found %d images in %s", len(images), directory)

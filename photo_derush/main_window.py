@@ -7,14 +7,6 @@ from .viewer import open_full_image_qt
 import os
 import json
 from ml.features import feature_vector, all_feature_names  # added all_feature_names import
-# Legacy alias for tests must be defined early so monkeypatching works
-compute_feature_vector = feature_vector  # noqa: E305
-try:
-    __all__
-except NameError:
-    __all__ = []
-if 'compute_feature_vector' not in __all__:
-    __all__.append('compute_feature_vector')
 from ml.features_cv import FEATURE_NAMES as _NEW_FEATURE_NAMES
 # Backward compatibility: expose feature_vector symbol (tests may monkeypatch it)
 from ml.personal_learner import PersonalLearner
@@ -45,7 +37,7 @@ class _FeatureTask(QRunnable):
 
     def run(self):  # Executes in worker thread
         try:
-            vec, keys = compute_feature_vector(self.path)
+            vec, keys = feature_vector(self.path)
             self.emitter.finished.emit(self.path, self.mtime, vec, keys)
         except Exception:
             import logging as _logging
@@ -580,7 +572,7 @@ class LightroomMainWindow(QMainWindow):
                 self.logger.info(f"[DEBUG] Feature cache HIT for {img_path}")
                 return cached[1]
         self.logger.info(f"[DEBUG] Feature cache MISS for {img_path}, recomputing feature vector")
-        vec, keys = compute_feature_vector(img_path)
+        vec, keys = feature_vector(img_path)
         self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
             persist_feature_cache_entry(img_path, mtime, vec, keys)
@@ -624,8 +616,8 @@ class LightroomMainWindow(QMainWindow):
         if img_path in self._pending_feature_tasks:
             return False
         self._pending_feature_tasks.add(img_path)
-        task = _FeatureTask(img_path, mtime, self._feature_emitter)
         self.logger.info('[FeatureAsync] Scheduling extraction path=%s', img_path)
+        task = _FeatureTask(img_path, mtime, self._feature_emitter)
         self._thread_pool.start(task)
         return True
 

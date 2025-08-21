@@ -51,7 +51,7 @@ class FeatureExtractionWorker(QRunnable):
 
     def run(self):
         import threading
-        logging.info(f"[ThreadCheck] FeatureExtractionWorker running in thread: {threading.current_thread().name}")
+        logging.info(f"[ThreadCheck] FeatureExtractionWorker running in thread: {threading.current_thread().name} for {len(self.img_paths)} images")
         results = []
         total = len(self.img_paths)
         completed = 0

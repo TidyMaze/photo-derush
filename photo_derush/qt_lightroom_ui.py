@@ -85,8 +85,7 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
     def worker():
         try:
             images = list_images(directory)
-            print(f"[AsyncLoad] (worker) Images found (print): {images}")
-            logging.info(f"[AsyncLoad] (worker) Images found: {images}")
+            logging.info(f"[AsyncLoad] (worker) Images found: {len(images)}")
             subset = images[:max_images]
             logging.info("[AsyncLoad] (worker) Found %d images, streaming first %d", len(images), len(subset))
             # Provide sorted list early
