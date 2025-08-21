@@ -22,6 +22,7 @@ import time
 from PySide6.QtGui import QFont, QAction, QIcon
 from PySide6.QtWidgets import QMessageBox, QStyle, QApplication, QLabel, QHBoxLayout, QFrame
 from PySide6.QtCore import QTimer, Qt
+from .viewmodel import LightroomViewModel
 
 
 class _FeatureResultEmitter(QObject):
@@ -112,58 +113,32 @@ class LightroomMainWindow(QMainWindow):
 
         self.left_panel = QWidget()
         self.sort_by_group = False
-        self.image_info = image_info or {}
         self.current_img_idx = 0
-        self.sorted_images = image_paths
-        self.learner = None
-        self.labels_map = self._build_labels_map_from_log()
         self.logger = logging.getLogger(__name__)
-        self._feature_cache = {}  # path -> (mtime, (fv, keys))
-        self._feature_emitter = _FeatureResultEmitter()
-        self._feature_emitter.finished.connect(self._on_async_feature_extracted)
-        self._thread_pool = QThreadPool.globalInstance()
-        self._pending_feature_tasks = set()
-        self._last_model_save_ts = 0.0
-        # Determine combined feature schema (numeric only) BEFORE using it
-        try:
-            self._combined_feature_names = all_feature_names(include_strings=False)
-        except Exception:
-            self._combined_feature_names = list(_NEW_FEATURE_NAMES)
-        # Load persisted feature cache (best-effort)
-        try:
-            persisted_cache = load_feature_cache()
-            if persisted_cache:
-                self._feature_cache.update(persisted_cache)
-                self.logger.info('[FeatureCache] Loaded %d cached feature vectors', len(persisted_cache))
-                invalid = []
-                for pth, (mt, tup) in list(self._feature_cache.items()):
-                    if not isinstance(tup, tuple) or len(tup) != 2:
-                        invalid.append(pth); continue
-                    vec, keys = tup
-                    if list(keys) == list(_NEW_FEATURE_NAMES):
-                        continue
-                    if list(keys) == list(self._combined_feature_names):
-                        continue
-                    invalid.append(pth)
-                for pth in invalid:
-                    self._feature_cache.pop(pth, None)
-                if invalid:
-                    self.logger.info('[FeatureCache] Dropped %d stale entries (schema mismatch)', len(invalid))
-            else:
-                self.logger.info('[FeatureCache] No persisted feature vectors loaded (empty or missing)')
-        except Exception as e:
-            self.logger.info('[FeatureCache] Failed loading persisted cache: %s', e)
-        # Cold-start training gate (require min samples per class before training)
-        self._cold_start_completed = False
-        # Do not init learner if no images yet
-        if self.sorted_images:
-            self._init_learner()
-        # create grid
-        self.image_grid = ImageGrid(self.sorted_images, directory, self.info_panel, self.status, self._compute_sorted_images,
-                                    image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
-                                    on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector_sync)
-        # Share learner instance with grid (avoid separate untrained model)
-        self.image_grid.learner = self.learner
+        self.labels_map = {}
+        self.learner = None
+        # --- ViewModel integration ---
+        self.viewmodel = LightroomViewModel(image_paths, directory, image_info=image_info)
+        # Connect ViewModel signals to UI update methods (to be implemented)
+        self.viewmodel.images_changed.connect(self._on_images_changed)
+        self.viewmodel.labels_changed.connect(self._on_labels_changed)
+        self.viewmodel.keep_probs_changed.connect(self._on_keep_probs_changed)
+        self.viewmodel.status_changed.connect(self._on_status_changed)
+        self.viewmodel.model_state_changed.connect(self._on_model_state_changed)
+        # create grid using ViewModel state
+        self.image_grid = ImageGrid(
+            self.viewmodel.sorted_images,
+            directory,
+            self.info_panel,
+            self.status,
+            self._compute_sorted_images,
+            image_info=self.viewmodel.image_info,
+            on_open_fullscreen=self.open_fullscreen,
+            on_select=self.on_select_image,
+            labels_map=self.viewmodel.labels_map,
+            get_feature_vector_fn=self.viewmodel._get_feature_vector_sync
+        )
+        self.image_grid.learner = self.viewmodel.learner
         self.splitter.addWidget(self.image_grid)
         self.splitter.addWidget(self.info_panel)
         self.splitter.setSizes([1000, 400])
@@ -176,29 +151,37 @@ class LightroomMainWindow(QMainWindow):
         self.toolbar.reset_model_clicked.connect(self.on_reset_model_clicked)
         self.toolbar.predict_sort_desc_clicked.connect(self.on_predict_sort_desc)
         self.toolbar.predict_sort_asc_clicked.connect(self.on_predict_sort_asc)
-        # Backward compat original signal -> desc
-        # self.toolbar.predict_sort_clicked.connect(self.on_predict_sort_desc)
-        # Legacy signal no longer auto-connected to avoid double invocation causing side-effects
         self._last_sort_time = 0.0
-
-        # After initialization, populate probabilities for all images (neutral if no learner)
-        if self.sorted_images:
-            self._refresh_all_keep_probs()
-            first = self.get_current_image()
-            if first:
-                self._schedule_feature_extraction(os.path.join(self.directory, first))
-                # Populate info panel (EXIF + placeholder prob) immediately
-                self.refresh_keep_prob()
-        # Initial status
         self._status_labels = {}
         self._init_status_widgets()
         self._update_status_bar()
-
-        # --- Auto Unsure labeling ---
         self._auto_unsure_threshold = (0.4, 0.7)
         self._auto_unsure_assigned = set()
         self._in_sort = False
-        self.sorted_images = image_paths
+        # Remove direct state management for sorted_images, image_info, labels_map, learner, _feature_cache, etc.
+        # All state is now managed by the ViewModel. The UI only responds to ViewModel signals
+
+    # --- ViewModel signal handlers (to be implemented) ---
+    def _on_images_changed(self, images):
+        self.image_grid.image_paths = images
+        self.image_grid.populate_grid()
+        self._update_status_bar(action='images changed')
+
+    def _on_labels_changed(self, labels):
+        self.image_grid.labels_map = labels
+        self.image_grid.populate_grid()
+        self._update_status_bar(action='labels changed')
+
+    def _on_keep_probs_changed(self, prob_map):
+        self.image_grid.update_keep_probabilities(prob_map)
+        self._update_status_bar(action='probs changed')
+
+    def _on_status_changed(self, status):
+        self.status.showMessage(status)
+
+    def _on_model_state_changed(self, model):
+        self.image_grid.learner = model
+        self._update_status_bar(action='model changed')
 
     def _init_status_widgets(self):
         if getattr(self, '_status_widgets_initialized', False):
@@ -257,7 +240,7 @@ class LightroomMainWindow(QMainWindow):
     def _update_status_bar(self, action: str | None = None):
         if not hasattr(self, 'status') or self.status is None:
             return
-        total = len(self.sorted_images)
+        total = len(self.viewmodel.sorted_images)
         idx = self.current_img_idx + 1 if 0 <= self.current_img_idx < total else 0
         keep = sum(1 for v in self.labels_map.values() if v == 1)
         trash = sum(1 for v in self.labels_map.values() if v == 0)
@@ -351,15 +334,15 @@ class LightroomMainWindow(QMainWindow):
                 info = self.image_info.get(img, {})
                 group = info.get("group")
                 return (group if group is not None else 999999, img)
-            return sorted(self.sorted_images, key=group_key)
-        return self.sorted_images
+            return sorted(self.viewmodel.sorted_images, key=group_key)
+        return self.viewmodel.sorted_images
 
     def load_images(self, image_paths, image_info):
         self.logger.info("[AsyncLoad] Applying prepared images: %d", len(image_paths))
         self.image_info = image_info or {}
-        self.sorted_images = image_paths
+        # self.sorted_images = image_paths  # Remove direct assignment
         if self.image_grid is None:
-            self.image_grid = ImageGrid(self.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
+            self.image_grid = ImageGrid(self.viewmodel.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
                                         image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
                                         on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector_sync)
             # Share learner instance with grid (avoid separate untrained model)
@@ -367,7 +350,7 @@ class LightroomMainWindow(QMainWindow):
             self.splitter.insertWidget(0, self.image_grid)
             self.splitter.setSizes([1000, 400])
         else:
-            self.image_grid.image_paths = self.sorted_images
+            self.image_grid.image_paths = self.viewmodel.sorted_images
             self.image_grid.image_info = self.image_info
             self.image_grid.populate_grid()
         try:
@@ -376,7 +359,7 @@ class LightroomMainWindow(QMainWindow):
             self.status.showMessage(f"Loaded {count} images")
         except Exception as e:
             self.logger.warning("[AsyncLoad] Could not determine grid count: %s", e)
-        if self.learner is None and self.sorted_images:
+        if self.learner is None and self.viewmodel.sorted_images:
             self._init_learner()
         self.refresh_keep_prob()
         # Also update probabilities for all thumbnails
@@ -431,8 +414,8 @@ class LightroomMainWindow(QMainWindow):
             if fv is not None:
                 sample_len = len(fv)
             else:
-                if self.sorted_images:
-                    sample_path = os.path.join(self.directory, self.sorted_images[0])
+                if self.viewmodel.sorted_images:
+                    sample_path = os.path.join(self.directory, self.viewmodel.sorted_images[0])
                     fv_tuple_mig = self._get_feature_vector_sync(sample_path)
                     sample_len = len(fv_tuple_mig[0]) if fv_tuple_mig else None
                 else:
@@ -486,8 +469,8 @@ class LightroomMainWindow(QMainWindow):
                         self.image_grid.learner = self.learner
                     return
         # Derive from first image if possible (untrained)
-        if self.sorted_images:
-            first_path = os.path.join(self.directory, self.sorted_images[0])
+        if self.viewmodel.sorted_images:
+            first_path = os.path.join(self.directory, self.viewmodel.sorted_images[0])
             fv_tuple = self._get_feature_vector_sync(first_path)
             if fv_tuple is not None:
                 fv0, _ = fv_tuple
@@ -498,20 +481,27 @@ class LightroomMainWindow(QMainWindow):
 
     def _init_learner(self):
         # Backwards-compat entry point – now just ensures learner.
-        if self.sorted_images:
+        if self.viewmodel.sorted_images:
             self._ensure_learner()
 
     def get_current_image(self):
-        if 0 <= self.current_img_idx < len(self.sorted_images):
-            return self.sorted_images[self.current_img_idx]
+        idx = self.current_img_idx
+        images = self.viewmodel.sorted_images
+        if 0 <= idx < len(images):
+            return images[idx]
         return None
 
     def on_keep_clicked(self):
-        self._label_current_image(1)
+        img_name = self.image_grid.selected_image_name if hasattr(self.image_grid, 'selected_image_name') else self.get_current_image()
+        self.viewmodel.label_image(img_name, 1)
+
     def on_trash_clicked(self):
-        self._label_current_image(0)
+        img_name = self.image_grid.selected_image_name if hasattr(self.image_grid, 'selected_image_name') else self.get_current_image()
+        self.viewmodel.label_image(img_name, 0)
+
     def on_unsure_clicked(self):
-        self._label_current_image(-1)
+        img_name = self.image_grid.selected_image_name if hasattr(self.image_grid, 'selected_image_name') else self.get_current_image()
+        self.viewmodel.label_image(img_name, -1)
 
     def _build_labels_map_from_log(self):
         labels = {}
@@ -726,8 +716,8 @@ class LightroomMainWindow(QMainWindow):
             self.image_grid.update_label(img_name, label)
             self.image_grid.select_image_by_name(img_name)
             # Synchronize current_img_idx to selected image
-            if img_name in self.sorted_images:
-                self.current_img_idx = self.sorted_images.index(img_name)
+            if img_name in self.viewmodel.sorted_images:
+                self.current_img_idx = self.viewmodel.sorted_images.index(img_name)
         if self.learner is not None:
             self.refresh_keep_prob()
             logging.info(f"[Label] Updated keep probability for labeled image {img_name}")
@@ -941,7 +931,7 @@ class LightroomMainWindow(QMainWindow):
                 self.current_img_idx -= 1
                 self.refresh_keep_prob()
         elif key in (Qt.Key.Key_Right, Qt.Key.Key_D, Qt.Key.Key_L):
-            if self.current_img_idx < len(self.sorted_images) - 1:
+            if self.current_img_idx < len(self.viewmodel.sorted_images) - 1:
                 self.current_img_idx += 1
                 self.refresh_keep_prob()
         elif key in (Qt.Key.Key_Space,):
@@ -1033,7 +1023,7 @@ class LightroomMainWindow(QMainWindow):
         self._update_status_bar(action='group sort on' if checked else 'group sort off')
 
     def on_select_image(self, idx: int):
-        if 0 <= idx < len(self.sorted_images):
+        if 0 <= idx < len(self.viewmodel.sorted_images):
             self.current_img_idx = idx
             self.refresh_keep_prob()
             self._update_status_bar(action=f'select {idx+1}')
@@ -1043,7 +1033,7 @@ class LightroomMainWindow(QMainWindow):
             return
         # Defensive bounds
         if image_list is None:
-            image_list = self.sorted_images
+            image_list = self.viewmodel.sorted_images
         if not image_list:
             return
         if not (0 <= start_index < len(image_list)):
@@ -1058,7 +1048,7 @@ class LightroomMainWindow(QMainWindow):
 
     def _on_viewer_index_change(self, path: str, idx: int):
         # Sync main window index when embedded viewer navigates
-        if 0 <= idx < len(self.sorted_images):
+        if 0 <= idx < len(self.viewmodel.sorted_images):
             self.current_img_idx = idx
             self.refresh_keep_prob()
             self._update_status_bar(action=f'viewer {idx+1}')
@@ -1094,7 +1084,7 @@ class LightroomMainWindow(QMainWindow):
         self._update_status_bar(action='viewer closed')
 
     def _collect_probabilities_for_sort(self):
-        names = list(self.sorted_images)
+        names = list(self.viewmodel.sorted_images)
         if not names:
             return {}
         if self.learner is None:
@@ -1135,24 +1125,24 @@ class LightroomMainWindow(QMainWindow):
     def on_predict_sort_desc(self):
         self._in_sort = True
         prob_map = self._collect_probabilities_for_sort()
-        self.sorted_images = sorted(self.sorted_images, key=lambda n: prob_map.get(n,0.5), reverse=True)
+        self.viewmodel.sorted_images = sorted(self.viewmodel.sorted_images, key=lambda n: prob_map.get(n,0.5), reverse=True)
         if self.image_grid:
-            self.image_grid.image_paths = self.sorted_images
+            self.image_grid.image_paths = self.viewmodel.sorted_images
             self.image_grid.populate_grid()
         self._last_sort_mode = 'desc'
-        self.current_img_idx = 0 if self.sorted_images else -1
+        self.current_img_idx = 0 if self.viewmodel.sorted_images else -1
         self._update_status_bar(action='sort desc')
         self._in_sort = False
 
     def on_predict_sort_asc(self):
         self._in_sort = True
         prob_map = self._collect_probabilities_for_sort()
-        self.sorted_images = sorted(self.sorted_images, key=lambda n: prob_map.get(n,0.5))
+        self.viewmodel.sorted_images = sorted(self.viewmodel.sorted_images, key=lambda n: prob_map.get(n,0.5))
         if self.image_grid:
-            self.image_grid.image_paths = self.sorted_images
+            self.image_grid.image_paths = self.viewmodel.sorted_images
             self.image_grid.populate_grid()
         self._last_sort_mode = 'asc'
-        self.current_img_idx = 0 if self.sorted_images else -1
+        self.current_img_idx = 0 if self.viewmodel.sorted_images else -1
         self._update_status_bar(action='sort asc')
         self._in_sort = False
 
