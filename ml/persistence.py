@@ -195,19 +195,12 @@ def persist_feature_cache_entry(path: str, mtime: float, fv, keys):
 
 def upgrade_event_log_to_current_schema(force: bool = False) -> bool:
     """Upgrade legacy feature vectors (CV-only) in the event log to the current combined schema.
+    Uses the feature vector cache for efficient extraction.
     Returns True if an upgrade was performed, False otherwise.
-    Logic:
-      * Determine current combined feature length via ml.features.all_feature_names(include_strings=False)
-      * Scan latest labeled events; if all labeled samples already match length (and not force), skip.
-      * Re-extract features (cv+exif) for each labeled event using its stored path (if exists) or by joining image name
-        with its directory component from the path (fallback: skip if path missing).
-      * Rewrite entire log preserving unlabeled events, updating labeled ones with new 'features' list.
     """
-    try:
-        from ml.features import feature_vector, all_feature_names
-    except Exception as e:  # noqa: PERF203
-        logger.info('[Upgrade] Cannot import feature extraction modules: %s', e)
-        return False
+    from ml.features import all_feature_names
+    from photo_derush.feature_cache import FeatureVectorCache
+    from ml.features import feature_vector
     target_len = len(all_feature_names(include_strings=False))
     latest = latest_labeled_events()
     if not latest:
@@ -215,27 +208,27 @@ def upgrade_event_log_to_current_schema(force: bool = False) -> bool:
     labeled = [ev for ev in latest.values() if ev.get('label') in (0,1) and isinstance(ev.get('features'), list)]
     if not labeled:
         return False
-    # Detect if upgrade needed
     legacy = [ev for ev in labeled if len(ev.get('features', [])) != target_len]
     if not legacy and not force:
         logger.info('[Upgrade] Event log already at current schema (len=%d)', target_len)
         return False
+
+    # Use feature vector cache for efficient extraction
+    cache = FeatureVectorCache(feature_vector)
     upgraded = 0
     for ev in labeled:
         path = ev.get('path') or ev.get('image')
-        if not path:
+        if not path or not os.path.exists(path):
             continue
-        if not os.path.exists(path):
-            continue
-        try:
-            logger.info('[Upgrade] Calling feature_vector for path=%s', path)
+        cached = cache.get(path)
+        if cached and isinstance(cached, tuple) and len(cached) == 2:
+            vec, keys = cached
+        else:
             vec, keys = feature_vector(path, include_strings=False)
-            logger.info('[Upgrade] feature_vector returned len=%d for path=%s', len(vec), path)
-            if len(vec) == target_len:
-                ev['features'] = vec.tolist() if hasattr(vec, 'tolist') else list(vec)
-                upgraded += 1
-        except Exception as e:  # noqa: PERF203
-            logger.info('[Upgrade] Failed re-extraction for %s: %s', path, e)
+            cache.set(path, (vec, keys))
+        if len(vec) == target_len:
+            ev['features'] = vec.tolist() if hasattr(vec, 'tolist') else list(vec)
+            upgraded += 1
     if not upgraded:
         logger.info('[Upgrade] No events re-extracted (maybe already current)')
         return False
@@ -251,18 +244,9 @@ def upgrade_event_log_to_current_schema(force: bool = False) -> bool:
         unlabeled[base] = ev
     combined = {**unlabeled, **{os.path.basename(ev.get('image') or ev.get('path')): ev for ev in latest.values()}}
     tmp_path = LOG_PATH + '.upgrade.tmp'
-    try:
-        with open(tmp_path, 'w') as f:
-            for ev in combined.values():
-                f.write(json.dumps(ev) + '\n')
-        os.replace(tmp_path, LOG_PATH)
-        logger.info('[Upgrade] Upgraded %d labeled events to new schema len=%d', upgraded, target_len)
-        return True
-    except Exception as e:  # noqa: PERF203
-        logger.info('[Upgrade] Failed to rewrite upgraded log: %s', e)
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception:
-            pass
-        return False
+    with open(tmp_path, 'w') as f:
+        for ev in combined.values():
+            f.write(json.dumps(ev) + '\n')
+    os.replace(tmp_path, LOG_PATH)
+    logger.info('[Upgrade] Upgraded %d labeled events to new schema len=%d', upgraded, target_len)
+    return True
