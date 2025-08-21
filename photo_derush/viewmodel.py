@@ -179,3 +179,12 @@ class LightroomViewModel(QObject):
                             self.model_state_changed.emit(self.learner)
         self.status_changed.emit(f"Labeled {img_name}={label}")
         # Optionally, emit keep_probs_changed if probabilities should be refreshed
+
+    def get_sorted_images(self, sort_by_group=False):
+        if sort_by_group and self.image_info:
+            def group_key(img):
+                info = self.image_info.get(img, {})
+                group = info.get("group")
+                return (group if group is not None else 999999, img)
+            return sorted(self.sorted_images, key=group_key)
+        return self.sorted_images

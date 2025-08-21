@@ -5,24 +5,20 @@ from .info_panel import InfoPanel
 from .image_grid import ImageGrid
 from .viewer import open_full_image_qt
 import os
-import json
-from ml.features import feature_vector, all_feature_names  # added all_feature_names import
-from ml.features_cv import FEATURE_NAMES as _NEW_FEATURE_NAMES
+from ml.features import feature_vector  # removed unused imports
 # Backward compatibility: expose feature_vector symbol (tests may monkeypatch it)
 from ml.personal_learner import PersonalLearner
 from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log
 from ml.persistence import load_model
-from ml.persistence import load_feature_cache, persist_feature_cache_entry
 # import helpers for latest-only logic
 from ml.persistence import latest_labeled_events, load_latest_labeled_samples
 import logging
-import numpy as np
 from PySide6.QtCore import QRunnable, QObject, Signal, QThreadPool
 import time
-from PySide6.QtGui import QFont, QAction, QIcon
-from PySide6.QtWidgets import QMessageBox, QStyle, QApplication, QLabel, QHBoxLayout, QFrame
+from PySide6.QtGui import QFont
 from PySide6.QtCore import QTimer, Qt
 from .viewmodel import LightroomViewModel
+from PySide6.QtWidgets import QApplication, QLabel
 
 
 class _FeatureResultEmitter(QObject):
@@ -131,7 +127,7 @@ class LightroomMainWindow(QMainWindow):
             directory,
             self.info_panel,
             self.status,
-            self._compute_sorted_images,
+            lambda: self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group),
             image_info=self.viewmodel.image_info,
             on_open_fullscreen=self.open_fullscreen,
             on_select=self.on_select_image,
@@ -328,43 +324,32 @@ class LightroomMainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _compute_sorted_images(self):
-        if self.sort_by_group and self.image_info:
-            def group_key(img):
-                info = self.image_info.get(img, {})
-                group = info.get("group")
-                return (group if group is not None else 999999, img)
-            return sorted(self.viewmodel.sorted_images, key=group_key)
-        return self.viewmodel.sorted_images
-
     def load_images(self, image_paths, image_info):
         self.logger.info("[AsyncLoad] Applying prepared images: %d", len(image_paths))
-        self.image_info = image_info or {}
-        # self.sorted_images = image_paths  # Remove direct assignment
+        self.viewmodel.image_info = image_info or {}
         if self.image_grid is None:
-            self.image_grid = ImageGrid(self.viewmodel.sorted_images, self.directory, self.info_panel, self.status, self._compute_sorted_images,
-                                        image_info=self.image_info, on_open_fullscreen=self.open_fullscreen,
-                                        on_select=self.on_select_image, labels_map=self.labels_map, get_feature_vector_fn=self._get_feature_vector_sync)
-            # Share learner instance with grid (avoid separate untrained model)
+            self.image_grid = ImageGrid(
+                self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group),
+                self.directory,
+                self.info_panel,
+                self.status,
+                lambda: self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group),
+                image_info=self.viewmodel.image_info,
+                on_open_fullscreen=self.open_fullscreen,
+                on_select=self.on_select_image,
+                labels_map=self.labels_map,
+                get_feature_vector_fn=self._get_feature_vector_sync
+            )
             self.image_grid.learner = self.learner
             self.splitter.insertWidget(0, self.image_grid)
             self.splitter.setSizes([1000, 400])
         else:
-            self.image_grid.image_paths = self.viewmodel.sorted_images
-            self.image_grid.image_info = self.image_info
+            self.image_grid.image_paths = self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group)
+            self.image_grid.image_info = self.viewmodel.image_info
             self.image_grid.populate_grid()
-        try:
-            count = len(getattr(self.image_grid, 'image_labels', []))
-            self.logger.info("[AsyncLoad] Grid populated with %d thumbnails", count)
-            self.status.showMessage(f"Loaded {count} images")
-        except Exception as e:
-            self.logger.warning("[AsyncLoad] Could not determine grid count: %s", e)
-        if self.learner is None and self.viewmodel.sorted_images:
-            self._init_learner()
-        self.refresh_keep_prob()
-        # Also update probabilities for all thumbnails
-        self._refresh_all_keep_probs()
-        self._update_status_bar(action='images loaded')
+        count = len(getattr(self.image_grid, 'image_labels', []))
+        self.logger.info("[AsyncLoad] Grid populated with %d thumbnails", count)
+        self.status.showMessage(f"Loaded {count} images")
 
     def update_grouping(self, image_info):
         """Update grouping metadata and refresh the grid."""
