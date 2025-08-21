@@ -59,13 +59,13 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
                 mtype = msg.get('type')
                 if mtype == 'image':
                     img_name = msg['name']
-                    logging.info("[AsyncLoad] (poll) Adding image %s", img_name)
+                    logging.debug("[AsyncLoad] (poll) Adding image %s", img_name)
                     if win.image_grid:
                         win.image_grid.add_image(img_name)
                     else:
                         logging.warning("[AsyncLoad] (poll) Image grid not ready, skipping %s", img_name)
                 elif mtype == 'grouping':
-                    logging.info("[AsyncLoad] (poll) Applying grouping metadata")
+                    logging.debug("[AsyncLoad] (poll) Applying grouping metadata")
                     win.update_grouping(msg['image_info'])
                     win.status.showMessage(f"Loaded {len(win.image_grid.image_labels)} images (groups ready)")
                 elif mtype == 'error':
@@ -85,16 +85,16 @@ def show_lightroom_ui_qt_async(directory, max_images=PREP_MAX):
     def worker():
         try:
             images = list_images(directory)
-            logging.info(f"[AsyncLoad] (worker) Images found: {len(images)}")
+            logging.debug(f"[AsyncLoad] (worker) Images found: {len(images)}")
             subset = images[:max_images]
-            logging.info("[AsyncLoad] (worker) Found %d images, streaming first %d", len(images), len(subset))
+            logging.debug("[AsyncLoad] (worker) Found %d images, streaming first %d", len(images), len(subset))
             # Provide sorted list early
             msg_queue.put({'type': 'sorted', 'list': subset})
             for img in subset:
                 msg_queue.put({'type': 'image', 'name': img})
             # Hashing & grouping
             images2, image_info, stats = prepare_images_and_groups(directory, max_images)
-            logging.info("[AsyncLoad] (worker) Grouping stats: %s", stats)
+            logging.debug("[AsyncLoad] (worker) Grouping stats: %s", stats)
             msg_queue.put({'type': 'grouping', 'image_info': image_info})
             msg_queue.put({'type': 'done'})
         except Exception as e:
