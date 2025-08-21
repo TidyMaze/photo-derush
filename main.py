@@ -9,7 +9,7 @@ from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt_async
 from photo_derush.image_manager import image_manager
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from precompute import compute_dhash
+from photo_derush.duplicate import cluster_duplicates
 
 # Configure logging if not already configured
 if not logging.getLogger().handlers:
@@ -103,81 +103,14 @@ def compute_sharpness_features(img_path):
 def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None):
     show_lightroom_ui_qt(image_paths, directory, trashed_paths, trashed_dir, on_window_opened=on_window_opened)
 
-def hash_one(img_name, directory):
-    import time
-    start = time.time()
-    img_path = os.path.join(directory, img_name)
-    try:
-        dh = compute_dhash(img_path)
-        h_bytes = int(str(dh), 16).to_bytes(8, 'big')
-        hash_arr = np.frombuffer(h_bytes, dtype='uint8')
-        elapsed = time.time() - start
-        logging.getLogger(__name__).debug(f"[Hashing] {img_name} hashed in {elapsed:.3f}s (thread={threading.current_thread().name})")
-        return img_name, hash_arr, dh, None
-    except Exception as e:
-        elapsed = time.time() - start
-        logging.getLogger(__name__).error(f"[Hashing] {img_name} failed in {elapsed:.3f}s: {e}")
-        return img_name, None, None, e
-
-def parallel_hash_images(image_paths, directory, max_workers=None, use_threads=False):
-    """Hash images in parallel. Returns (valid_paths, hashes, image_hashes, errors)"""
-    hashes = []
-    valid_paths = []
-    image_hashes = {}
-    errors = {}
-    Executor = ThreadPoolExecutor if use_threads else ProcessPoolExecutor
-    with Executor(max_workers=max_workers) as executor:
-        future_to_img = {executor.submit(hash_one, img_name, directory): img_name for img_name in image_paths}
-        for i, future in enumerate(as_completed(future_to_img)):
-            img_name, hash_arr, dh, err = future.result()
-            if hash_arr is not None:
-                hashes.append(hash_arr)
-                valid_paths.append(img_name)
-                image_hashes[img_name] = hash_arr
-            else:
-                errors[img_name] = err
-    return valid_paths, hashes, image_hashes, errors
-
-def group_hashes(hashes, valid_paths, hamming_thresh=5):
-    """Group hashes using faiss. Returns clusters (list of lists of image names)."""
-    if not hashes:
-        return []
-    # Ensure hashes are np.uint8 and shape (n, 8) for 64 bits
-    hashes_np = np.stack(hashes)
-    if hashes_np.dtype != np.uint8:
-        hashes_np = hashes_np.astype(np.uint8)
-    if hashes_np.shape[1] != 8:
-        raise ValueError(f"Expected hash shape (n, 8), got {hashes_np.shape}")
-    index = faiss.IndexBinaryFlat(64)
-    index.add(hashes_np)
-    clusters = []
-    visited = set()
-    for i, h in enumerate(hashes_np):
-        if i in visited:
-            continue
-        query = h[np.newaxis, :].astype(np.uint8)
-        lims, D, I = index.range_search(query, hamming_thresh)
-        cluster = [valid_paths[j] for j in I[lims[0]:lims[1]] if j not in visited]
-        for j in I[lims[0]:lims[1]]:
-            visited.add(j)
-        if len(cluster) > 1:
-            clusters.append(cluster)
-    return clusters
-
-def cluster_duplicates(image_paths, directory, hamming_thresh=5):
-    valid_paths, hashes, image_hashes, errors = parallel_hash_images(image_paths, directory)
-    for i, img_name in enumerate(valid_paths):
-        if i % 20 == 0 or i == len(valid_paths) - 1:
-            logging.info(f"[Hashing] (parallel) {i+1}/{len(image_paths)} hashed")
-    for img_name, err in errors.items():
-        logging.warning(f"[Hashing] Failed to hash {img_name}: {err}")
-    logging.info(f"Computed {len(hashes)} hashes for {len(image_paths)} images.")
-    clusters = group_hashes(hashes, valid_paths, hamming_thresh)
-    logging.info(f"Found {len(clusters)} clusters with Hamming threshold {hamming_thresh}.")
-    return clusters, image_hashes
-
 def main_duplicate_detection(clusters=None, image_hashes=None):
     directory = '/Users/yannrolland/Pictures/photo-dataset'
+    from photo_derush.duplicate import cluster_duplicates
+    import os
+    def list_images(directory):
+        exts = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
+        return [f for f in os.listdir(directory)
+                if os.path.isfile(os.path.join(directory, f)) and os.path.splitext(f)[1].lower() in exts]
     if clusters is None or image_hashes is None:
         images = list_images(directory)
         clusters, image_hashes = cluster_duplicates(images, directory)
