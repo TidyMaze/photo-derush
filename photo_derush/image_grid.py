@@ -262,8 +262,6 @@ class ImageGrid(QWidget):
         # You can update the UI or cache here if needed
 
     def _on_feature_extraction_progress(self, completed, total):
-        import threading
-        logging.info(f"[ThreadCheck] _on_feature_extraction_progress running in thread: {threading.current_thread().name}")
         if total > 0:
             self.progress_bar.setMaximum(total)
             self.progress_bar.setValue(completed)
