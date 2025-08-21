@@ -165,14 +165,14 @@ class ImageGrid(QWidget):
                 widget.setParent(None)
 
     def populate_grid(self):
-        logging.info("[ImageGrid] populate_grid called")
+        logging.debug("[ImageGrid] populate_grid called")
         prev_selected = getattr(self, 'selected_image_name', None)
         self.clear_grid()
         self.image_labels.clear(); self.top_labels.clear(); self.bottom_labels.clear(); self.blur_labels.clear(); self.image_name_to_widgets.clear()
         sorted_images = self.get_sorted_images()
         num_images = min(self.MAX_IMAGES, len(sorted_images))
         img_paths = [os.path.join(self.directory, img) for img in sorted_images[:num_images]]
-        logging.info(f"[ImageGrid] Starting feature extraction for {len(img_paths)} images")
+        logging.debug(f"[ImageGrid] Starting feature extraction for {len(img_paths)} images")
         # Start batch extraction in background (non-blocking) using QRunnable
         self._feature_extraction_emitter = FeatureExtractionEmitter()
         self._feature_extraction_emitter.finished.connect(self._on_feature_extraction_done)
@@ -237,9 +237,9 @@ class ImageGrid(QWidget):
     def _get_cached_feature_vector(self, img_path):
         fv = self._feature_cache.get(img_path)
         if fv is not None:
-            logging.info(f"[ImageGrid] Feature cache hit for {img_path}")
+            logging.debug(f"[ImageGrid] Feature cache hit for {img_path}")
             return fv
-        logging.info(f"[ImageGrid] Feature cache miss for {img_path}, computing features")
+        logging.debug(f"[ImageGrid] Feature cache miss for {img_path}, computing features")
         # Fallback to on-demand extraction if not yet cached
         return self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
 
@@ -483,7 +483,7 @@ class ImageGrid(QWidget):
             badge_btn.setToolTip(badge_tooltip)
 
     def update_label(self, img_name, label):
-        logging.info(f"[ImageGrid] update_label called for {img_name} with label {label}")
+        logging.debug(f"[ImageGrid] update_label called for {img_name} with label {label}")
         self.labels_map[img_name] = label
         widgets = self.image_name_to_widgets.get(img_name)
         if not widgets:
