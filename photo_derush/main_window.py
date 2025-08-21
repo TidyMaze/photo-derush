@@ -327,7 +327,7 @@ class LightroomMainWindow(QMainWindow):
             pass
 
     def load_images(self, image_paths, image_info):
-        self.logger.info("[AsyncLoad] Applying prepared images: %d", len(image_paths))
+        self.logger.debug("[AsyncLoad] Applying prepared images: %d", len(image_paths))
         self.viewmodel.image_info = image_info or {}
         if self.image_grid is None:
             self.image_grid = ImageGrid(
@@ -350,12 +350,12 @@ class LightroomMainWindow(QMainWindow):
             self.image_grid.image_info = self.viewmodel.image_info
             self.image_grid.populate_grid()
         count = len(getattr(self.image_grid, 'image_labels', []))
-        self.logger.info("[AsyncLoad] Grid populated with %d thumbnails", count)
+        self.logger.debug("[AsyncLoad] Grid populated with %d thumbnails", count)
         self.status.showMessage(f"Loaded {count} images")
 
     def update_grouping(self, image_info):
         """Update grouping metadata and refresh the grid."""
-        self.logger.info("[AsyncLoad] Updating grouping metadata (%d images)", len(image_info) if image_info else 0)
+        self.logger.debug("[AsyncLoad] Updating grouping metadata (%d images)", len(image_info) if image_info else 0)
         self.image_info = image_info or {}
         if self.image_grid:
             self.image_grid.image_info = self.image_info

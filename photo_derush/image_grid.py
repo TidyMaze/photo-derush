@@ -492,7 +492,7 @@ class ImageGrid(QWidget):
         self.update_blur_label(img_name, blur_label)
 
     def add_image(self, img_name: str):
-        logging.info("[ImageGrid] Adding image: %s", img_name)
+        logging.debug("[ImageGrid] Adding image: %s", img_name)
         if img_name in self.image_name_to_widgets or hasattr(self, '_pending_thumbs') and img_name in self._pending_thumbs:
             return
         if len(self.image_labels) >= self.MAX_IMAGES:
