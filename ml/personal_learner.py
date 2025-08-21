@@ -333,7 +333,6 @@ class PersonalLearner:
         importance_pairs.sort(key=lambda x: x[1], reverse=True)
         if top_n is not None:
             importance_pairs = importance_pairs[:top_n]
-        logger.info("[Learner][Explain] Feature importances: %s", importance_pairs)
         return importance_pairs
 
     def train_and_explain(self, X, y, top_n=None):

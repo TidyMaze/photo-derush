@@ -56,6 +56,6 @@ def feature_vector(image_path, include_strings=False):
         vec.append(v)
 
     logging.info("[Predict] Extracted %d features for image=%s: base=%d, exif=%d", len(vec), image_path, len(base), len(exif))
-    logging.info("[Predict] Feature keys: %s", keys)
+    logging.info("[Predict] Feature keys: %s", keys[:10])  # log first 10 keys for brevity
 
     return np.array(vec, dtype=np.float64), keys
