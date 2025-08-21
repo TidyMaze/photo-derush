@@ -549,22 +549,37 @@ class LightroomMainWindow(QMainWindow):
                 self.logger.info('[FeatureAsync] Prob update failed for %s: %s', path, e)
 
     def _get_feature_vector_sync(self, img_path):
+        self.logger.info(f"[DEBUG] _get_feature_vector_sync called for {img_path}")
         try:
             mtime = os.path.getmtime(img_path)
         except OSError:
+            self.logger.info(f"[DEBUG] OSError for {img_path} in _get_feature_vector_sync")
             return None
         cached = self._feature_cache.get(img_path)
         if cached and cached[0] == mtime:
             vec_cached, keys_cached = cached[1]
             cached_len = len(vec_cached) if hasattr(vec_cached, '__len__') else None
             combined_len = len(self._combined_feature_names)
-            # Legacy short vectors (e.g., tests seeding minimal arrays) are accepted; only purge if incompatible larger.
             if cached_len is not None and cached_len > combined_len:
-                self.logger.info('[FeatureCache] Purging cached vector (len=%d > combined len=%d) path=%s', cached_len, combined_len, img_path)
+                # Enhanced logging: log which features changed
+                set_cached = set(keys_cached) if keys_cached is not None else set()
+                set_combined = set(self._combined_feature_names) if self._combined_feature_names is not None else set()
+                added = sorted(set_combined - set_cached)
+                removed = sorted(set_cached - set_combined)
+                common = set_cached & set_combined
+                msg = f"[DEBUG] Purging cached vector (len={cached_len} > combined len={combined_len}) path={img_path}. "
+                if added:
+                    msg += f" Features added: {added}."
+                if removed:
+                    msg += f" Features removed: {removed}."
+                if not added and not removed:
+                    msg += " No feature name changes detected, but length mismatch."
+                self.logger.info(msg)
                 self._feature_cache.pop(img_path, None)
             else:
-                self.logger.debug('[FeatureCache] HIT sync (legacy acceptable) path=%s len=%s expected_max=%s', img_path, cached_len, combined_len)
+                self.logger.info(f"[DEBUG] Feature cache HIT for {img_path}")
                 return cached[1]
+        self.logger.info(f"[DEBUG] Feature cache MISS for {img_path}, recomputing feature vector")
         vec, keys = compute_feature_vector(img_path)
         self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
@@ -622,10 +637,13 @@ class LightroomMainWindow(QMainWindow):
             self._last_model_save_ts = now
 
     def _label_current_image(self, label):
+        self.logger.info(f"[DEBUG] _label_current_image called with label={label}")
         img_name = self.get_current_image()
         if img_name is None:
+            self.logger.info("[DEBUG] No current image to label.")
             return
         img_path = os.path.join(self.directory, img_name)
+        self.logger.info(f"[DEBUG] Getting feature vector for {img_path}")
         fv_tuple = self._get_feature_vector_sync(img_path)
         if fv_tuple is None:
             import logging as _logging

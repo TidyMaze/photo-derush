@@ -58,14 +58,17 @@ class FeatureExtractionWorker(QRunnable):
         for img_path in self.img_paths:
             cached = self.feature_cache.get(img_path)
             if cached is not None:
+                logging.info(f"[FeatureExtractionWorker] Cache HIT for {img_path}")
                 results.append(cached)
             else:
+                logging.info(f"[FeatureExtractionWorker] Cache MISS for {img_path}, extracting features...")
                 try:
                     result = self.feature_cache.feature_vector_fn(img_path)
                     self.feature_cache.set(img_path, result)
                     results.append(result)
+                    logging.info(f"[FeatureExtractionWorker] Feature extraction SUCCESS for {img_path}")
                 except Exception as e:
-                    logging.error(f"Feature extraction failed for {img_path}: {e}")
+                    logging.error(f"[FeatureExtractionWorker] Feature extraction FAILED for {img_path}: {e}")
                     self.feature_cache.set(img_path, None)
                     results.append(None)
             completed += 1
@@ -162,11 +165,13 @@ class ImageGrid(QWidget):
                 widget.setParent(None)
 
     def populate_grid(self):
+        logging.info("[ImageGrid] populate_grid called")
         self.clear_grid()
         self.image_labels.clear(); self.top_labels.clear(); self.bottom_labels.clear(); self.blur_labels.clear(); self.image_name_to_widgets.clear()
         sorted_images = self.get_sorted_images()
         num_images = min(self.MAX_IMAGES, len(sorted_images))
         img_paths = [os.path.join(self.directory, img) for img in sorted_images[:num_images]]
+        logging.info(f"[ImageGrid] Starting feature extraction for {len(img_paths)} images")
         # Start batch extraction in background (non-blocking) using QRunnable
         self._feature_extraction_emitter = FeatureExtractionEmitter()
         self._feature_extraction_emitter.finished.connect(self._on_feature_extraction_done)
@@ -200,7 +205,9 @@ class ImageGrid(QWidget):
     def _get_cached_feature_vector(self, img_path):
         fv = self._feature_cache.get(img_path)
         if fv is not None:
+            logging.info(f"[ImageGrid] Feature cache hit for {img_path}")
             return fv
+        logging.info(f"[ImageGrid] Feature cache miss for {img_path}, computing features")
         # Fallback to on-demand extraction if not yet cached
         return self._get_feature_vector_fn(img_path) if self._get_feature_vector_fn else None
 
@@ -446,6 +453,7 @@ class ImageGrid(QWidget):
             badge_btn.setToolTip(badge_tooltip)
 
     def update_label(self, img_name, label):
+        logging.info(f"[ImageGrid] update_label called for {img_name} with label {label}")
         self.labels_map[img_name] = label
         widgets = self.image_name_to_widgets.get(img_name)
         if not widgets:

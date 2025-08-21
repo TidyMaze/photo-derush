@@ -43,7 +43,7 @@ class InfoPanel(QWidget):
         Extra **kwargs ignored for forward compatibility.
         """
         exif = extract_exif(img_path)
-        logging.info(f"[InfoPanel] EXIF {img_name}: {list(exif.keys())}")
+        # logging.info(f"[InfoPanel] EXIF {img_name}: {list(exif.keys())}")
         # Ordered list of preferred primary fields (emojis optional)
         primary_fields = [
             ("DateTimeOriginal", "📅"),
