@@ -728,6 +728,9 @@ class LightroomMainWindow(QMainWindow):
             self._refresh_all_keep_probs()
             logging.info("[Label] Updated keep probabilities for all images in grid after labeling %s", img_name)
         self._update_status_bar(action=f"labeled {img_name}={label}")
+        # Restore selection to the labeled image after grid update
+        if hasattr(self, 'image_grid'):
+            self.image_grid.selected_image_name = img_name
 
     def _evaluate_model(self):
         """Evaluate current learner on latest definitive labeled events (0/1) only.

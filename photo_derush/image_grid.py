@@ -166,6 +166,7 @@ class ImageGrid(QWidget):
 
     def populate_grid(self):
         logging.info("[ImageGrid] populate_grid called")
+        prev_selected = getattr(self, 'selected_image_name', None)
         self.clear_grid()
         self.image_labels.clear(); self.top_labels.clear(); self.bottom_labels.clear(); self.blur_labels.clear(); self.image_name_to_widgets.clear()
         sorted_images = self.get_sorted_images()
@@ -201,6 +202,37 @@ class ImageGrid(QWidget):
             loader = ThumbnailLoader(idx, img_name, info, group_to_color, default_color, self.directory, self.THUMB_SIZE, image_manager, self._thumb_emitter)
             self._pending_thumbs.add(img_name)
             self._thumb_threadpool.start(loader)
+        # Restore selection after repopulating
+        if prev_selected and prev_selected in self.image_name_to_widgets:
+            lbl, _, _, _ = self.image_name_to_widgets[prev_selected]
+            for l in self.image_labels:
+                if hasattr(l, 'set_selected'):
+                    l.set_selected(False)
+            lbl.set_selected(True)
+            self.selected_image_name = prev_selected
+            # Update info panel for the selected image
+            img_path = os.path.join(self.directory, prev_selected)
+            info = self.image_info.get(prev_selected, {})
+            hash_str = info.get('hash', '...')
+            group = info.get('group')
+            group_str = group if group is not None else '...'
+            blur_score = compute_blur_score(img_path)
+            sharpness_metrics = compute_sharpness_features(img_path)
+            aesthetic_score = 42
+            metrics = (blur_score, sharpness_metrics, aesthetic_score)
+            keep_prob = None
+            if self.learner is not None:
+                fv_tuple = self._get_cached_feature_vector(img_path)
+                if fv_tuple is not None:
+                    fv, _ = fv_tuple
+                    keep_prob = float(self.learner.predict_keep_prob([fv])[0])
+            self.info_panel.update_info(prev_selected, img_path, "-", hash_str, group_str, metrics, keep_prob=keep_prob)
+        elif self.image_labels:
+            # If no previous selection, select the first image
+            lbl = self.image_labels[0]
+            if hasattr(lbl, 'set_selected'):
+                lbl.set_selected(True)
+            self.selected_image_name = sorted_images[0] if sorted_images else None
 
     def _get_cached_feature_vector(self, img_path):
         fv = self._feature_cache.get(img_path)
