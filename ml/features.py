@@ -34,7 +34,7 @@ def all_feature_names(include_strings=True):
     return FEATURE_NAMES + [k for k in EXIF_FEATURE_KEYS if k not in string_like]
 
 def feature_vector(image_path, include_strings=False):
-    logging.info("[Predict] Extracting feature vector for image=%s (unified cv+exif)", image_path)
+    logging.info("[Predict] Extracting feature vector for image=%s (unified cv+exif) include_strings=%s", image_path, include_strings)
     # Get technical features
     base = compute_quality_features_from_path(Path(image_path))
     # Get EXIF features
@@ -54,4 +54,8 @@ def feature_vector(image_path, include_strings=False):
         if not include_strings and isinstance(v, str):
             v = 0.0
         vec.append(v)
+
+    logging.info("[Predict] Extracted %d features for image=%s: base=%d, exif=%d", len(vec), image_path, len(base), len(exif))
+    logging.info("[Predict] Feature keys: %s", keys)
+
     return np.array(vec, dtype=np.float64), keys
