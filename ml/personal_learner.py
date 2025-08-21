@@ -97,7 +97,7 @@ class PersonalLearner:
             # Limit very large outputs to avoid log spam
             MAX_ROWS_LOG = 5
             shown_df = _df if len(_df) <= MAX_ROWS_LOG else _df.head(MAX_ROWS_LOG)
-            logger.info('[Learner][Dataset][Preview] rows=%d cols=%d (showing %d)\n%s', len(_df), X_arr.shape[1], len(shown_df), shown_df.to_string(index=False))
+            logger.info('[Learner][Dataset][Preview] rows=%d cols=%d (showing %d)', len(_df), X_arr.shape[1], len(shown_df))
             if len(_df) > MAX_ROWS_LOG:
                 logger.info('[Learner][Dataset][Preview] (truncated additional %d rows)', len(_df) - MAX_ROWS_LOG)
         except Exception as e:  # noqa: PERF203

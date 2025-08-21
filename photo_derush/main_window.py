@@ -173,6 +173,8 @@ class LightroomMainWindow(QMainWindow):
         self._update_status_bar(action='probs changed')
 
     def _on_status_changed(self, status):
+        import logging
+        logging.getLogger(__name__).info(f"[MainWindow] _on_status_changed called with: {status}")
         self.status.showMessage(status)
 
     def _on_model_state_changed(self, model):

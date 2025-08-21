@@ -177,6 +177,9 @@ class LightroomViewModel(QObject):
                             save_model(self.learner)
                             self.logger.info('[ViewModel][Training] Model saved after full retrain')
                             self.model_state_changed.emit(self.learner)
+                            self.logger.info('[ViewModel] Emitting status_changed: Training complete')
+                            self.status_changed.emit("Training complete")
+                            return  # Prevents emitting 'Labeled ...' below if training occurred
         self.status_changed.emit(f"Labeled {img_name}={label}")
         # Optionally, emit keep_probs_changed if probabilities should be refreshed
 

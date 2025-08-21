@@ -58,7 +58,7 @@ class FeatureExtractionWorker(QRunnable):
         for img_path in self.img_paths:
             cached = self.feature_cache.get(img_path)
             if cached is not None:
-                logging.info(f"[FeatureExtractionWorker] Cache HIT for {img_path}")
+                logging.debug(f"[FeatureExtractionWorker] Cache HIT for {img_path}")
                 results.append(cached)
             else:
                 logging.info(f"[FeatureExtractionWorker] Cache MISS for {img_path}, extracting features...")
