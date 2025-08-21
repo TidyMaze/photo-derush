@@ -634,7 +634,6 @@ class LightroomMainWindow(QMainWindow):
 
     def _label_current_image(self, label):
         self.logger.info(f"[DEBUG] _label_current_image called with label={label}")
-        # Use the selected image from the grid if available
         img_name = None
         if hasattr(self, 'image_grid') and getattr(self.image_grid, 'selected_image_name', None):
             img_name = self.image_grid.selected_image_name
@@ -658,7 +657,6 @@ class LightroomMainWindow(QMainWindow):
             new_n = len(fv)
             self.logger.info('[Learner][Migration-OnLabel] Detected feature length change %d -> %d; reinitializing model', old_n, new_n)
             self.learner = PersonalLearner(n_features=new_n)
-            # Rebuild from log filtering by new length
             rebuild_model_from_log(self.learner, expected_n_features=new_n)
             if hasattr(self.image_grid, 'learner'):
                 self.image_grid.learner = self.learner
@@ -726,12 +724,12 @@ class LightroomMainWindow(QMainWindow):
         # update UI badge
         if hasattr(self, 'image_grid'):
             self.image_grid.update_label(img_name, label)
-            self.image_grid.select_image_by_name(img_name)  # Move selection update before refresh
+            self.image_grid.select_image_by_name(img_name)
+            # Synchronize current_img_idx to selected image
+            if img_name in self.sorted_images:
+                self.current_img_idx = self.sorted_images.index(img_name)
         if self.learner is not None:
-            # Single image refresh for info panel and grid
             self.refresh_keep_prob()
-            # Removed batch refresh to avoid updating all images after labeling one
-            # self._refresh_all_keep_probs()
             logging.info(f"[Label] Updated keep probability for labeled image {img_name}")
         self._update_status_bar(action=f"labeled {img_name}={label}")
         # Remove redundant selection assignment
