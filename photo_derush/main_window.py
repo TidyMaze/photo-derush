@@ -37,7 +37,9 @@ class _FeatureTask(QRunnable):
 
     def run(self):  # Executes in worker thread
         try:
+            logging.info('[FeatureAsync] Calling feature_vector for path=%s', self.path)
             vec, keys = feature_vector(self.path)
+            logging.info('[FeatureAsync] feature_vector returned len=%d for path=%s', len(vec), self.path)
             self.emitter.finished.emit(self.path, self.mtime, vec, keys)
         except Exception:
             import logging as _logging
@@ -572,7 +574,9 @@ class LightroomMainWindow(QMainWindow):
                 self.logger.info(f"[DEBUG] Feature cache HIT for {img_path}")
                 return cached[1]
         self.logger.info(f"[DEBUG] Feature cache MISS for {img_path}, recomputing feature vector")
+        logging.info('[FeatureCache] Cache MISS for %s, recomputing feature vector', img_path)
         vec, keys = feature_vector(img_path)
+        logging.info('[FeatureCache] Extracted feature vector len=%d for %s', len(vec), img_path)
         self._feature_cache[img_path] = (mtime, (vec, keys))
         try:
             persist_feature_cache_entry(img_path, mtime, vec, keys)

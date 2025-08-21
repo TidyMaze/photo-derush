@@ -228,7 +228,9 @@ def upgrade_event_log_to_current_schema(force: bool = False) -> bool:
         if not os.path.exists(path):
             continue
         try:
+            logger.info('[Upgrade] Calling feature_vector for path=%s', path)
             vec, keys = feature_vector(path, include_strings=False)
+            logger.info('[Upgrade] feature_vector returned len=%d for path=%s', len(vec), path)
             if len(vec) == target_len:
                 ev['features'] = vec.tolist() if hasattr(vec, 'tolist') else list(vec)
                 upgraded += 1
