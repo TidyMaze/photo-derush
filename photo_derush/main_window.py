@@ -121,6 +121,9 @@ class LightroomMainWindow(QMainWindow):
         self.viewmodel.keep_probs_changed.connect(self._on_keep_probs_changed)
         self.viewmodel.status_changed.connect(self._on_status_changed)
         self.viewmodel.model_state_changed.connect(self._on_model_state_changed)
+        # Connect to metrics refresh on model or label change
+        self.viewmodel.model_state_changed.connect(self._on_model_or_labels_changed)
+        self.viewmodel.labels_changed.connect(self._on_model_or_labels_changed)
         # create grid using ViewModel state
         self.image_grid = ImageGrid(
             self.viewmodel.sorted_images,
@@ -180,6 +183,11 @@ class LightroomMainWindow(QMainWindow):
     def _on_model_state_changed(self, model):
         self.image_grid.learner = model
         self._update_status_bar(action='model changed')
+
+    def _on_model_or_labels_changed(self, *args, **kwargs):
+        self._refresh_all_keep_probs()
+        self._evaluate_model()
+        self._update_status_bar(action="metrics refreshed")
 
     def _init_status_widgets(self):
         if getattr(self, '_status_widgets_initialized', False):
@@ -716,6 +724,9 @@ class LightroomMainWindow(QMainWindow):
     def _evaluate_model(self):
         """Evaluate current learner on latest definitive labeled events (0/1) only.
         Returns a dict of metrics or None."""
+
+        logging.info("[Eval] Evaluating model on latest labeled samples")
+
         if self.learner is None:
             return None
         X, y, _images = load_latest_labeled_samples()
@@ -777,6 +788,7 @@ class LightroomMainWindow(QMainWindow):
             }
             self._last_metrics = metrics
             self.logger.info("[Eval][Store] %s", metrics)
+            self._update_status_bar(action='metrics updated')
             return metrics
         except Exception as e:
             self.logger.warning("[Eval] Failed evaluation: %s", e)
