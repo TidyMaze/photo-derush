@@ -49,7 +49,6 @@ class PersonalLearner:
         self._recent_X = []  # minibatch buffer
         self._recent_y = []
         self._buffer_max = 32
-        self.proba_clip = (0.01, 0.99)
         self.last_retrain_loss_curve = []  # list of per-epoch losses
         self.last_retrain_early_stopped = False
         self.last_retrain_epochs_run = 0
@@ -182,7 +181,7 @@ class PersonalLearner:
             self._recent_y = []
             self._buffer_max = 32
         if not hasattr(self, 'proba_clip'):
-            self.proba_clip = (0.01, 0.99)
+            pass
         # Backward compatibility: older persisted models may lack scaler
         if not hasattr(self, 'scaler') or self.scaler is None:
             from sklearn.preprocessing import StandardScaler as _SS
@@ -257,7 +256,7 @@ class PersonalLearner:
             self._recent_y = []
             self._buffer_max = 32
         if not hasattr(self, 'proba_clip'):
-            self.proba_clip = (0.01, 0.99)
+            pass
         # Backward compatibility: ensure scaler exists
         if not hasattr(self, 'scaler') or self.scaler is None:
             from sklearn.preprocessing import StandardScaler as _SS
@@ -283,9 +282,7 @@ class PersonalLearner:
             Xs = X
         logger.info('[Learner] predict_proba on %d samples', len(Xs))
         probs = self.model.predict_proba(Xs)
-        # clip probabilities to avoid extreme 0/1 saturation
-        low, high = self.proba_clip
-        probs = np.clip(probs, low, high)
+        # removed probability clipping
         return probs
 
     def predict_keep_prob(self, X):

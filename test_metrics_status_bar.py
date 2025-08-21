@@ -1,7 +1,8 @@
 import os
 import numpy as np
 from PySide6.QtWidgets import QApplication
-from photo_derush.main_window import LightroomMainWindow, _NEW_FEATURE_NAMES
+from photo_derush.main_window import LightroomMainWindow
+from photo_derush.viewmodel import _NEW_FEATURE_NAMES
 
 def ensure_app():
     app = QApplication.instance()
