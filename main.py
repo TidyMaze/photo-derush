@@ -1,19 +1,15 @@
 print("[Startup] main.py started (print statement)")
 import os
-from PIL import Image
-import imagehash
-import faiss
+import threading
 import numpy as np
 import cv2
 import logging
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt, open_full_image_qt
 from photo_derush.qt_lightroom_ui import show_lightroom_ui_qt_async
 from photo_derush.image_manager import image_manager
-import time
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-from precompute import compute_duplicate_groups
-import threading
+from precompute import compute_dhash
 
 # Configure logging if not already configured
 if not logging.getLogger().handlers:
@@ -81,15 +77,6 @@ def cache_thumbnail(src_path: str, thumb_path: str):
     logger.warning("[cache_thumbnail] Could not create thumbnail for %s", src_path)
     return None, False
 
-def list_images(directory):
-    exts = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
-    return [f for f in os.listdir(directory)
-            if os.path.isfile(os.path.join(directory, f)) and os.path.splitext(f)[1].lower() in exts]
-
-def list_extensions(directory):
-    return sorted(set(os.path.splitext(f)[1].lower() for f in os.listdir(directory)
-                     if os.path.isfile(os.path.join(directory, f)) and '.' in f))
-
 def is_image_extension(ext):
     return ext in {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
 
@@ -115,16 +102,6 @@ def compute_sharpness_features(img_path):
 
 def show_lightroom_ui(image_paths, directory, trashed_paths=None, trashed_dir=None, on_window_opened=None):
     show_lightroom_ui_qt(image_paths, directory, trashed_paths, trashed_dir, on_window_opened=on_window_opened)
-
-def compute_dhash(image_path):
-    img = image_manager.get_image(image_path)
-    if img is None:
-        raise FileNotFoundError(f"Cannot open image for dhash: {image_path}")
-    try:
-        img.thumbnail((32, 32), Image.Resampling.LANCZOS)
-    except Exception:
-        pass
-    return imagehash.dhash(img)
 
 def hash_one(img_name, directory):
     import time
@@ -207,26 +184,6 @@ def main_duplicate_detection(clusters=None, image_hashes=None):
     print(f"Found {len(clusters)} duplicate clusters.")
     for idx, cluster in enumerate(clusters):
         print(f"Cluster {idx+1}: {cluster}")
-
-def prepare_images_and_groups(directory: str, max_images: int = MAX_IMAGES):
-    images = list_images(directory)
-    logging.info("[Prep] Found %d images in %s", len(images), directory)
-    if not images:
-        return [], {}, {"total_images": 0, "duplicate_group_count": 0, "duration_seconds": 0.0}
-    logging.info("[Hashing] Starting hash + group computation for %d images", len(images))
-    start_hash_time = time.perf_counter()
-    valid_paths, hashes, image_hashes, errors = parallel_hash_images(images, directory)
-    for img_name, err in errors.items():
-        logging.warning("[Hashing] Failed for %s: %s", img_name, err)
-    group_ids, group_cardinality, hash_map = compute_duplicate_groups(hashes)
-    duration = time.perf_counter() - start_hash_time
-    duplicate_group_count = len([g for g in set(group_ids.values()) if g is not None])
-    logging.info("[Hashing] Finished hash + group computation in %.2fs. Duplicate groups: %d", duration, duplicate_group_count)
-    image_info = {}
-    for idx, img in enumerate(valid_paths):
-        image_info[img] = {"hash": hash_map.get(idx), "group": group_ids.get(idx)}
-    stats = {"total_images": len(valid_paths), "duplicate_group_count": duplicate_group_count, "duration_seconds": duration}
-    return valid_paths, image_info, stats
 
 def main():
     directory = '/Users/yannrolland/Pictures/photo-dataset'
