@@ -19,6 +19,9 @@ from PySide6.QtGui import QFont
 from PySide6.QtCore import QTimer, Qt
 from .viewmodel import LightroomViewModel
 from PySide6.QtWidgets import QApplication, QLabel
+from ml.persistence import persist_feature_cache_entry
+import numpy as np
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, log_loss, brier_score_loss
 
 
 class _FeatureResultEmitter(QObject):
@@ -50,6 +53,18 @@ class LightroomMainWindow(QMainWindow):
 
     def __init__(self, image_paths, directory, get_sorted_images, image_info=None):
         super().__init__()
+        self._feature_cache = {}  # Initialize feature cache
+        self._pending_feature_tasks = set()
+        self._feature_emitter = _FeatureResultEmitter()
+        from PySide6.QtCore import QThreadPool
+        self._thread_pool = QThreadPool()
+        try:
+            from ml.features import all_feature_names
+            self._combined_feature_names = all_feature_names(include_strings=False)
+        except Exception:
+            self._combined_feature_names = []
+        self._last_model_save_ts = 0.0
+        self._last_retrain_final_loss = None
         self.directory = directory
         self.setWindowTitle("Photo Derush (Qt)")
         self.resize(1400, 800)
