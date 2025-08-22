@@ -293,7 +293,16 @@ class ImageGrid(QWidget):
         logging.info(f"[ThreadCheck] _on_feature_extraction_done running in thread: {threading.current_thread().name}")
         logging.info(f"Feature extraction completed for {len(results)} images.")
         self.progress_bar.hide()
-        # You can update the UI or cache here if needed
+        # Refresh grid if sorting depends on features
+        if hasattr(self, 'get_sorted_images') and callable(self.get_sorted_images):
+            # Heuristic: if get_sorted_images uses features, repopulate
+            try:
+                sorted_images = list(self.get_sorted_images())
+                current_names = [lbl.text().split('\n')[0] for lbl in self.bottom_labels]
+                if sorted_images[:len(current_names)] != current_names:
+                    self.populate_grid()
+            except Exception as e:
+                logging.warning(f"Could not refresh grid after feature extraction: {e}")
 
     def _on_feature_extraction_progress(self, completed, total):
         if total > 0:
