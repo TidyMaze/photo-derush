@@ -6,6 +6,7 @@ from .image_grid import ImageGrid
 from .viewer import open_full_image_qt
 import os
 from ml.features import feature_vector  # removed unused imports
+from ml.features_cv import compute_feature_vector
 # Backward compatibility: expose feature_vector symbol (tests may monkeypatch it)
 from ml.personal_learner import PersonalLearner
 from ml.persistence import save_model, append_event, rebuild_model_from_log, clear_model_and_log
