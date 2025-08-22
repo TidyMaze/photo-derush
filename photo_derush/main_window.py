@@ -381,6 +381,36 @@ class LightroomMainWindow(QMainWindow):
         self.status.showMessage(f"Loaded {count} images")
         self._update_status_bar(action='images loaded')
 
+    def _update_image_grid(self, sorted_images=None, prob_map=None):
+        """Update image grid with new images and probabilities."""
+        if not self.image_grid:
+            # Use the same logic as in load_images to create the grid
+            self.image_grid = ImageGrid(
+                sorted_images or self.viewmodel.sorted_images,
+                self.directory,
+                self.info_panel,
+                self.status,
+                lambda: self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group),
+                image_info=self.viewmodel.image_info,
+                on_open_fullscreen=self.open_fullscreen,
+                on_select=self.on_select_image,
+                labels_map=self.labels_map,
+                get_feature_vector_fn=self._get_feature_vector_sync
+            )
+            self.image_grid.learner = self.learner
+            self.splitter.insertWidget(0, self.image_grid)
+            self.splitter.setSizes([1000, 400])
+        if sorted_images is not None:
+            self.image_grid.image_paths = sorted_images
+        self.image_grid.image_info = self.viewmodel.image_info
+        self.image_grid.populate_grid()
+        if prob_map is not None:
+            self.image_grid.update_keep_probabilities(prob_map)
+        count = len(getattr(self.image_grid, 'image_labels', []))
+        self.logger.debug("[AsyncLoad] Grid populated with %d thumbnails", count)
+        self.status.showMessage(f"Loaded {count} images")
+        self._update_status_bar(action='images loaded')
+
     def update_grouping(self, image_info):
         """Update grouping metadata and refresh the grid."""
         self.logger.debug("[AsyncLoad] Updating grouping metadata (%d images)", len(image_info) if image_info else 0)
@@ -944,7 +974,7 @@ class LightroomMainWindow(QMainWindow):
         subset_exif_keys = ["DateTimeOriginal", "ExposureTime", "FNumber", "ISOSpeedRatings", "FocalLength"]
         rows = []
         from .utils import extract_exif
-        for img_name in self.sorted_images:
+        for img_name in self.viewmodel.sorted_images:
             path = os.path.join(self.directory, img_name)
             label = self.labels_map.get(img_name, '')
             prob = ''
@@ -1154,107 +1184,19 @@ class LightroomMainWindow(QMainWindow):
             self._embedded_viewer = None
         self._update_status_bar(action='viewer closed')
 
-
-    def on_predict_sort_desc(self):
-        self._in_sort = True
-        prob_map = self._collect_probabilities_for_sort()
-        self.viewmodel.sorted_images = sorted(self.viewmodel.sorted_images, key=lambda n: prob_map.get(n,0.5), reverse=True)
-        if self.image_grid:
-            self.image_grid.image_paths = self.viewmodel.sorted_images
-            self.image_grid.populate_grid()
-        self._last_sort_mode = 'desc'
-        self.current_img_idx = 0 if self.viewmodel.sorted_images else -1
-        self._update_status_bar(action='sort desc')
-        self._in_sort = False
-
-    def on_predict_sort_asc(self):
-        self._in_sort = True
-        prob_map = self._collect_probabilities_for_sort()
-        self.viewmodel.sorted_images = sorted(self.viewmodel.sorted_images, key=lambda n: prob_map.get(n,0.5))
-        if self.image_grid:
-            self.image_grid.image_paths = self.viewmodel.sorted_images
-            self.image_grid.populate_grid()
-        self._last_sort_mode = 'asc'
-        self.current_img_idx = 0 if self.viewmodel.sorted_images else -1
-        self._update_status_bar(action='sort asc')
-        self._in_sort = False
-
     def on_reset_model_clicked(self):
+        """Reset the model and clear all labels and probabilities."""
         try:
             clear_model_and_log()
             self.logger.info('[Model] Cleared personal model + event log')
-        except Exception as e:  # noqa: PERF203
+        except Exception as e:
             self.logger.warning('[Model] Failed clearing model/log: %s', e)
         self.learner = None
         if hasattr(self.image_grid, 'learner'):
             self.image_grid.learner = None
-        # Rebuild labels map (will be empty except maybe unsure / previous entries ignored)
         self.labels_map = self._build_labels_map_from_log()
-        # Reset probabilities to neutral
         if self.image_grid:
             neutral = {n: 0.5 for n in self.image_grid.image_paths[:self.image_grid.MAX_IMAGES]}
             self.image_grid.update_keep_probabilities(neutral)
         self._cold_start_completed = False
         self._update_status_bar(action='model reset')
-
-    def toggle_dark_mode(self):
-        if self.is_dark_mode:
-            QApplication.instance().setStyleSheet('''
-                QWidget {
-                    font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;
-                    font-size: 13px;
-                    color: #23272e;
-                }
-                QMainWindow {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0f0f0, stop:1 #e0e0e0);
-                }
-                QScrollBar:vertical, QScrollBar:horizontal {
-                    background: #e0e0e0;
-                    border: none;
-                    width: 10px;
-                    margin: 0px;
-                }
-                QScrollBar::handle {
-                    background: #bbb;
-                    border-radius: 5px;
-                }
-                QScrollBar::add-line, QScrollBar::sub-line {
-                    background: none;
-                }
-                QStatusBar {
-                    background: #e0e0e0;
-                    color: #23272e;
-                    border-top: 1px solid #bbb;
-                }
-            ''')
-            self.is_dark_mode = False
-        else:
-            QApplication.instance().setStyleSheet('''
-                QWidget {
-                    font-family: 'Segoe UI', 'Roboto', 'San Francisco', Arial, sans-serif;
-                    font-size: 13px;
-                    color: #f0f0f0;
-                }
-                QMainWindow {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #23272e, stop:1 #181a20);
-                }
-                QScrollBar:vertical, QScrollBar:horizontal {
-                    background: #23272e;
-                    border: none;
-                    width: 10px;
-                    margin: 0px;
-                }
-                QScrollBar::handle {
-                    background: #444;
-                    border-radius: 5px;
-                }
-                QScrollBar::add-line, QScrollBar::sub-line {
-                    background: none;
-                }
-                QStatusBar {
-                    background: #23272e;
-                    color: #f0f0f0;
-                    border-top: 1px solid #333;
-                }
-            ''')
-            self.is_dark_mode = True
