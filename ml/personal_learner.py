@@ -6,7 +6,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 class PersonalLearner:
-    def __init__(self, n_features, classes=[0, 1]):
+    def __init__(self, n_features, classes=None):
+        if classes is None:
+            classes = [0, 1]
         self.n_features = n_features
         self.classes = np.array(classes)
         # Big banner log for new model creation
@@ -32,20 +34,15 @@ class PersonalLearner:
         # Will hold canonical feature names (e.g., FEATURE_NAMES) once inferred
         self.feature_names = None
         # Attempt to infer feature names immediately (covers full_retrain path which bypasses partial_fit)
-        try:  # noqa: PERF203
-            from ml.features_cv import FEATURE_NAMES as _CV_FN  # light import
-            if n_features == len(_CV_FN):
-                self.feature_names = list(_CV_FN)
-            else:
-                try:
-                    from ml.features import all_feature_names as _ALL_FN
-                    all_full = _ALL_FN(include_strings=False)
-                    if n_features == len(all_full):
-                        self.feature_names = list(all_full)
-                except Exception:  # noqa: PERF203
-                    pass
-        except Exception:  # noqa: PERF203
-            pass
+        # Remove all fallback try/excepts and let errors propagate
+        from ml.features_cv import FEATURE_NAMES as _CV_FN
+        if n_features == len(_CV_FN):
+            self.feature_names = list(_CV_FN)
+        else:
+            from ml.features import all_feature_names as _ALL_FN
+            all_full = _ALL_FN(include_strings=False)
+            if n_features == len(all_full):
+                self.feature_names = list(all_full)
         self._recent_X = []  # minibatch buffer
         self._recent_y = []
         self._buffer_max = 32
@@ -60,7 +57,6 @@ class PersonalLearner:
         import numpy as _np
         from sklearn.preprocessing import StandardScaler as _SS
         from sklearn.linear_model import SGDClassifier as _SGD
-        from sklearn.metrics import log_loss as _log_loss
         X_arr = _np.asarray(X, dtype=_np.float64)
         y_arr = _np.asarray(y, dtype=_np.int64)
         if X_arr.ndim == 1:
@@ -73,17 +69,14 @@ class PersonalLearner:
             self.n_features = X_arr.shape[1]
         # If feature_names not yet assigned, attempt now (important for EXIF features visibility)
         if self.feature_names is None:
-            try:  # noqa: PERF203
-                from ml.features import all_feature_names as _ALL_FN
-                all_full = _ALL_FN(include_strings=False)
-                if len(all_full) == self.n_features:
-                    self.feature_names = list(all_full)
-                else:
-                    from ml.features_cv import FEATURE_NAMES as _CV_FN
-                    if len(_CV_FN) == self.n_features:
-                        self.feature_names = list(_CV_FN)
-            except Exception:  # noqa: PERF203
-                pass
+            from ml.features import all_feature_names as _ALL_FN
+            all_full = _ALL_FN(include_strings=False)
+            if len(all_full) == self.n_features:
+                self.feature_names = list(all_full)
+            else:
+                from ml.features_cv import FEATURE_NAMES as _CV_FN
+                if len(_CV_FN) == self.n_features:
+                    self.feature_names = list(_CV_FN)
         # --- New: log dataset snapshot as DataFrame prior to training ---
         try:  # noqa: PERF203
             import pandas as _pd
@@ -204,21 +197,14 @@ class PersonalLearner:
             self.model = _SGD(loss="log_loss", max_iter=1, warm_start=True, verbose=1)
             self.scaler = _SS(with_mean=True, with_std=True)
             self._is_initialized = False
-        # Attempt to capture canonical feature names (only if lengths match)
-        try:  # noqa: PERF203
-            from .features_cv import FEATURE_NAMES as _FN  # local import to avoid hard dependency if module path changes
-            if self.feature_names is None and self.n_features == len(_FN):
-                self.feature_names = list(_FN)
-        except Exception:  # noqa: PERF203
-            pass
-        # Try to set feature_names to the full list (including EXIF) if available
-        try:
-            from ml.features import all_feature_names as _ALL_FN
-            all_names = _ALL_FN(include_strings=False)
-            if self.feature_names is None and self.n_features == len(all_names):
-                self.feature_names = list(all_names)
-        except Exception:
-            pass
+        # Remove all fallback try/excepts and let errors propagate
+        from .features_cv import FEATURE_NAMES as _FN
+        if self.feature_names is None and self.n_features == len(_FN):
+            self.feature_names = list(_FN)
+        from ml.features import all_feature_names as _ALL_FN
+        all_names = _ALL_FN(include_strings=False)
+        if self.feature_names is None and self.n_features == len(all_names):
+            self.feature_names = list(all_names)
         # Buffer update (store original post-padding X,y)
         for row, lbl in zip(X, y):
             if len(self._recent_X) >= self._buffer_max:
@@ -287,10 +273,11 @@ class PersonalLearner:
 
     def predict_keep_prob(self, X):
         proba = self.predict_proba(X)
-        # Robustly check for single-class model
-        if proba.shape[1] < 2 or (hasattr(self.model, 'classes_') and len(self.model.classes_) < 2):
+        model_classes = getattr(self.model, 'classes_', None)
+        # Fail if class 1 is not present in model.classes_ or proba shape is not binary
+        if model_classes is None or 1 not in model_classes or proba.shape[1] < 2:
             raise ValueError(f"predict_proba returned shape {proba.shape}, expected at least 2 columns for binary classification.")
-        keep_probs = proba[:, 1]
+        keep_probs = proba[:, list(model_classes).index(1)]
         logger.info("[Learner] predict_keep_prob -> min=%.4f max=%.4f avg=%.4f", float(np.min(keep_probs)), float(np.max(keep_probs)), float(np.mean(keep_probs)))
         return keep_probs
 
@@ -312,17 +299,14 @@ class PersonalLearner:
             return []
         # Late binding of feature names if still missing (covers legacy saved models)
         if self.feature_names is None:
-            try:  # noqa: PERF203
-                from ml.features import all_feature_names as _ALL_FN
-                all_full = _ALL_FN(include_strings=False)
-                if len(all_full) == getattr(self.model.coef_, 'shape', [None, None])[1]:
-                    self.feature_names = list(all_full)
-                else:
-                    from ml.features_cv import FEATURE_NAMES as _CV_FN
-                    if len(_CV_FN) == getattr(self.model.coef_, 'shape', [None, None])[1]:
-                        self.feature_names = list(_CV_FN)
-            except Exception:  # noqa: PERF203
-                pass
+            from ml.features import all_feature_names as _ALL_FN
+            all_full = _ALL_FN(include_strings=False)
+            if len(all_full) == getattr(self.model.coef_, 'shape', [None, None])[1]:
+                self.feature_names = list(all_full)
+            else:
+                from ml.features_cv import FEATURE_NAMES as _CV_FN
+                if len(_CV_FN) == getattr(self.model.coef_, 'shape', [None, None])[1]:
+                    self.feature_names = list(_CV_FN)
         importances = np.abs(self.model.coef_)
         # For binary classification, coef_ shape is (1, n_features)
         if importances.ndim == 2 and importances.shape[0] == 1:
