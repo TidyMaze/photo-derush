@@ -286,6 +286,9 @@ class PersonalLearner:
         return probs
 
     def predict_keep_prob(self, X):
+        # Explicitly check for single-class model
+        if hasattr(self.model, 'classes_') and len(self.model.classes_) < 2:
+            raise ValueError(f"predict_proba returned shape (N, 1), expected at least 2 columns for binary classification.")
         proba = self.predict_proba(X)
         if proba.shape[1] < 2:
             raise ValueError(f"predict_proba returned shape {proba.shape}, expected at least 2 columns for binary classification.")

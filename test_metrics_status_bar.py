@@ -49,12 +49,21 @@ def test_metrics_status_bar():
     win._label_current_image(0)
     win.current_img_idx = 1
     win._label_current_image(1)
+    import logging
     win._refresh_all_keep_probs()
+    logging.warning(f'AFTER _refresh_all_keep_probs: {win.status.currentMessage()} {win._last_metrics}')
+    assert win._last_metrics is not None, 'No metrics after _refresh_all_keep_probs'
+    assert 'acc' in win._last_metrics, f"No 'acc' in metrics after _refresh_all_keep_probs: {win._last_metrics}"
     # Explicitly evaluate model and update status bar
     win._evaluate_model()
+    logging.warning(f'AFTER _evaluate_model: {win.status.currentMessage()} {win._last_metrics}')
+    assert win._last_metrics is not None, 'No metrics after _evaluate_model'
+    assert 'acc' in win._last_metrics, f"No 'acc' in metrics after _evaluate_model: {win._last_metrics}"
     win._update_status_bar()
+    logging.warning(f'AFTER _update_status_bar: {win.status.currentMessage()} {win._last_metrics}')
     for _ in range(20):
         app.processEvents()
     msg = win.status.currentMessage()
+    logging.warning(f'FINAL STATUS: {msg} {win._last_metrics}')
     assert msg is None or 'acc=' in msg, f"Expected metrics 'acc=' in status message, got: {msg}"
     win.close()

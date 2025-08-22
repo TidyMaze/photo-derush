@@ -76,6 +76,7 @@ class FeatureExtractionWorker(QRunnable):
         self.emitter.finished.emit(results)
 
 class ImageGrid(QWidget):
+    grid_populated = Signal()
     def __init__(self, image_paths, directory, info_panel, status_bar, get_sorted_images, image_info=None, on_open_fullscreen=None, on_select=None, labels_map=None, get_feature_vector_fn=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.image_paths = image_paths
@@ -285,6 +286,7 @@ class ImageGrid(QWidget):
             else:
                 self.selected_image_name = None
                 self.info_panel.update_info("", "", "", "", "", (), keep_prob=None)
+            self.grid_populated.emit()
 
     def _on_feature_extraction_done(self, results):
         import threading

@@ -154,6 +154,7 @@ class LightroomMainWindow(QMainWindow):
             get_feature_vector_fn=self.viewmodel._get_feature_vector_sync
         )
         self.image_grid.learner = self.viewmodel.learner
+        self.image_grid.grid_populated.connect(lambda: self._update_status_bar(action='grid populated'))
         self.splitter.addWidget(self.image_grid)
         self.splitter.addWidget(self.info_panel)
         self.splitter.setSizes([1000, 400])
@@ -376,6 +377,7 @@ class LightroomMainWindow(QMainWindow):
         count = len(getattr(self.image_grid, 'image_labels', []))
         self.logger.debug("[AsyncLoad] Grid populated with %d thumbnails", count)
         self.status.showMessage(f"Loaded {count} images")
+        self._update_status_bar(action='images loaded')
 
     def update_grouping(self, image_info):
         """Update grouping metadata and refresh the grid."""
