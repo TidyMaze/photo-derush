@@ -354,9 +354,10 @@ class LightroomMainWindow(QMainWindow):
     def load_images(self, image_paths, image_info):
         self.logger.debug("[AsyncLoad] Applying prepared images: %d", len(image_paths))
         self.viewmodel.image_info = image_info or {}
+        sorted_images, prob_map = self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group, return_prob_map=True)
         if self.image_grid is None:
             self.image_grid = ImageGrid(
-                self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group),
+                sorted_images,
                 self.directory,
                 self.info_panel,
                 self.status,
@@ -371,9 +372,10 @@ class LightroomMainWindow(QMainWindow):
             self.splitter.insertWidget(0, self.image_grid)
             self.splitter.setSizes([1000, 400])
         else:
-            self.image_grid.image_paths = self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group)
+            self.image_grid.image_paths = sorted_images
             self.image_grid.image_info = self.viewmodel.image_info
             self.image_grid.populate_grid()
+        self.image_grid.update_keep_probabilities(prob_map)
         count = len(getattr(self.image_grid, 'image_labels', []))
         self.logger.debug("[AsyncLoad] Grid populated with %d thumbnails", count)
         self.status.showMessage(f"Loaded {count} images")
@@ -541,12 +543,15 @@ class LightroomMainWindow(QMainWindow):
                 self._schedule_feature_extraction(path)
 
     def _sort_images(self, mode):
-        prob_map = self._collect_probabilities_for_sort()
         reverse = (mode == 'desc')
-        self.viewmodel.sorted_images = sorted(self.viewmodel.sorted_images, key=lambda n: prob_map.get(n, 0.5), reverse=reverse)
+        sorted_images, prob_map = self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group, return_prob_map=True)
+        if reverse:
+            sorted_images = list(reversed(sorted_images))
+        self.viewmodel.sorted_images = sorted_images
         if self.image_grid:
-            self.image_grid.image_paths = self.viewmodel.sorted_images
+            self.image_grid.image_paths = sorted_images
             self.image_grid.populate_grid()
+            self.image_grid.update_keep_probabilities(prob_map)
         self._last_sort_mode = mode
         self.current_img_idx = 0 if self.viewmodel.sorted_images else -1
         self._update_status_bar(action=f'sort {mode}')
@@ -1149,44 +1154,6 @@ class LightroomMainWindow(QMainWindow):
             self._embedded_viewer = None
         self._update_status_bar(action='viewer closed')
 
-    def _collect_probabilities_for_sort(self):
-        names = list(self.viewmodel.sorted_images)
-        if not names:
-            return {}
-        if self.learner is None:
-            return {n: 0.5 for n in names}
-        vecs = []
-        valid_names = []
-        for n in names:
-            path = os.path.join(self.directory, n)
-            cached = self._feature_cache.get(path)
-            if cached:
-                vecs.append(cached[1][0])
-                valid_names.append(n)
-        if not vecs:
-            return {n:0.5 for n in names}
-        try:
-            probs = self.learner.predict_keep_prob(vecs)
-        except Exception:
-            # Fallback: if learner returns binary probs shape (N,2)
-            try:
-                import numpy as _np
-                probs = _np.asarray(probs)
-                if probs.ndim == 2 and probs.shape[1] == 2:
-                    probs = probs[:,1]
-            except Exception:
-                return {n:0.5 for n in names}
-        # If predict_keep_prob returns 1D array -> fine
-        import numpy as _np
-        probs_arr = _np.asarray(probs)
-        if probs_arr.ndim == 2 and probs_arr.shape[1] == 2:
-            probs_arr = probs_arr[:,1]
-        prob_map = {n: float(p) for n,p in zip(valid_names, probs_arr)}
-        # Assign neutral to missing
-        for n in names:
-            if n not in prob_map:
-                prob_map[n] = 0.5
-        return prob_map
 
     def on_predict_sort_desc(self):
         self._in_sort = True

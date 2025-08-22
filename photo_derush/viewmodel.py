@@ -183,11 +183,38 @@ class LightroomViewModel(QObject):
         self.status_changed.emit(f"Labeled {img_name}={label}")
         # Optionally, emit keep_probs_changed if probabilities should be refreshed
 
-    def get_sorted_images(self, sort_by_group=False):
+    def get_sorted_images(self, sort_by_group=False, return_prob_map=False):
+        # Compute keep probabilities for all images
+        prob_map = {}
+        if self.learner is not None and self._feature_cache:
+            X = []
+            names = []
+            for img in self.sorted_images:
+                fv = self._feature_cache.get(os.path.join(self.directory, img))
+                if fv is not None and isinstance(fv, tuple):
+                    fv = fv[0]  # (features, keys)
+                if fv is not None:
+                    X.append(fv)
+                    names.append(img)
+            if X:
+                try:
+                    probs = self.learner.predict_keep_prob(X)
+                    for img, p in zip(names, probs):
+                        prob_map[img] = float(p)
+                except Exception as e:
+                    self.logger.warning(f"[ViewModel] Probability prediction failed: {e}")
+        # Default neutral probability for missing
+        for img in self.sorted_images:
+            if img not in prob_map:
+                prob_map[img] = 0.5
         if sort_by_group and self.image_info:
             def group_key(img):
                 info = self.image_info.get(img, {})
                 group = info.get("group")
                 return (group if group is not None else 999999, img)
-            return sorted(self.sorted_images, key=group_key)
-        return self.sorted_images
+            sorted_imgs = sorted(self.sorted_images, key=group_key)
+        else:
+            sorted_imgs = sorted(self.sorted_images, key=lambda n: prob_map.get(n, 0.5), reverse=True)
+        if return_prob_map:
+            return sorted_imgs, prob_map
+        return sorted_imgs
