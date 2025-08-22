@@ -165,15 +165,10 @@ class ImageGrid(QWidget):
             if widget:
                 widget.setParent(None)
 
-    def populate_grid(self):
+    def populate_grid(self, trigger_feature_extraction=True):
         if getattr(self, '_feature_extraction_in_progress', False):
             logging.info("[ImageGrid] Feature extraction already in progress, skipping populate_grid call.")
             return
-        if getattr(self, '_feature_extraction_just_completed', False):
-            logging.info("[ImageGrid] Feature extraction just completed, skipping redundant populate_grid call.")
-            return
-        self._feature_extraction_in_progress = True
-        self._feature_extraction_just_completed = False
         logging.debug("[ImageGrid] populate_grid called")
         prev_selected = getattr(self, 'selected_image_name', None)
         self.clear_grid()
@@ -181,14 +176,14 @@ class ImageGrid(QWidget):
         sorted_images = self.get_sorted_images()
         num_images = min(self.MAX_IMAGES, len(sorted_images))
         img_paths = [os.path.join(self.directory, img) for img in sorted_images[:num_images]]
-        logging.debug(f"[ImageGrid] Starting feature extraction for {len(img_paths)} images")
-        # Start batch extraction in background (non-blocking) using QRunnable
-        self._feature_extraction_emitter = FeatureExtractionEmitter()
-        self._feature_extraction_emitter.finished.connect(self._on_feature_extraction_done)
-        self._feature_extraction_emitter.progress.connect(self._on_feature_extraction_progress)
-        self._feature_threadpool = QThreadPool.globalInstance()
-        feature_worker = FeatureExtractionWorker(self._feature_cache, img_paths, self._feature_extraction_emitter)
-        self._feature_threadpool.start(feature_worker)
+        if trigger_feature_extraction:
+            self._feature_extraction_in_progress = True
+            self._feature_extraction_emitter = FeatureExtractionEmitter()
+            self._feature_extraction_emitter.finished.connect(self._on_feature_extraction_done)
+            self._feature_extraction_emitter.progress.connect(self._on_feature_extraction_progress)
+            self._feature_threadpool = QThreadPool.globalInstance()
+            feature_worker = FeatureExtractionWorker(self._feature_cache, img_paths, self._feature_extraction_emitter)
+            self._feature_threadpool.start(feature_worker)
         import colorsys
         group_to_color = {}
         used_groups = {self.image_info.get(img, {}).get('group') for img in sorted_images[:num_images]}
@@ -301,22 +296,15 @@ class ImageGrid(QWidget):
         logging.info(f"[ThreadCheck] _on_feature_extraction_done running in thread: {threading.current_thread().name}")
         logging.info(f"Feature extraction completed for {len(results)} images.")
         self.progress_bar.hide()
-        # Prevent infinite repopulation loop
-        if getattr(self, '_feature_extraction_in_progress', False):
-            self._feature_extraction_in_progress = False
-        else:
-            logging.warning("[ImageGrid] _on_feature_extraction_done called but extraction not marked as in progress.")
-        # Only allow one repopulation after feature extraction
-        if getattr(self, '_feature_extraction_just_completed', False):
-            logging.info("[ImageGrid] Feature extraction just completed, not repopulating grid again.")
-            return
+        self._feature_extraction_in_progress = False
+        # Refresh grid if sorting depends on features
         if hasattr(self, 'get_sorted_images') and callable(self.get_sorted_images):
             try:
                 sorted_images = list(self.get_sorted_images())
                 current_names = [lbl.text().split('\n')[0] for lbl in self.bottom_labels]
                 if sorted_images[:len(current_names)] != current_names:
-                    self._feature_extraction_just_completed = True
-                    self.populate_grid()
+                    logging.info("[ImageGrid] Sort order changed after feature extraction, repopulating grid without triggering another extraction.")
+                    self.populate_grid(trigger_feature_extraction=False)
             except Exception as e:
                 logging.warning(f"Could not refresh grid after feature extraction: {e}")
 
