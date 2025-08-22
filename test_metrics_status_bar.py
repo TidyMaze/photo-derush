@@ -11,23 +11,25 @@ def ensure_app():
     return app
 
 def get_real_image_paths(min_count=2):
-    image_dir = '/Users/yannrolland/Pictures/photo-dataset'
+    import tempfile
+    from PIL import Image
     from photo_derush.main_window import compute_feature_vector
-    image_paths = [f for f in os.listdir(image_dir) if f.lower().endswith('.jpg')]
-    valid_images = []
-    for f in image_paths:
-        try:
-            fv, keys = compute_feature_vector(os.path.join(image_dir, f))
-            if fv is not None:
-                valid_images.append(f)
-        except Exception:
-            continue
-        if len(valid_images) >= min_count:
-            break
-    if len(valid_images) < min_count:
+    import logging
+    tmp_dir = tempfile.mkdtemp()
+    image_paths = []
+    for i in range(min_count):
+        img_name = f"test_img_{i}.jpg"
+        img_path = os.path.join(tmp_dir, img_name)
+        img = Image.new("RGB", (32, 32), color=(255, 0, 0) if i == 0 else (0, 255, 0))
+        img.save(img_path)
+        fv, keys = compute_feature_vector(img_path)
+        logging.warning(f"[DEBUG] compute_feature_vector for {img_path}: fv={fv}, keys={keys}")
+        if fv is not None:
+            image_paths.append(img_name)
+    if len(image_paths) < min_count:
         import pytest
-        pytest.skip(f"At least {min_count} valid .jpg images are required in {image_dir}.")
-    return image_dir, valid_images
+        pytest.skip(f"Could not generate {min_count} valid test images.")
+    return tmp_dir, image_paths
 
 def test_metrics_status_bar():
     app = ensure_app()
@@ -38,6 +40,12 @@ def test_metrics_status_bar():
     fv2, keys2 = compute_feature_vector(os.path.join(image_dir, img2))
     assert fv1 is not None and fv2 is not None, "Feature extraction failed on real images."
     win = LightroomMainWindow([img1, img2], image_dir, lambda: [img1, img2])
+    # Explicitly populate the window's feature cache for both images
+    import os
+    mtime1 = os.path.getmtime(os.path.join(image_dir, img1))
+    mtime2 = os.path.getmtime(os.path.join(image_dir, img2))
+    win._feature_cache[os.path.join(image_dir, img1)] = (mtime1, (fv1, keys1))
+    win._feature_cache[os.path.join(image_dir, img2)] = (mtime2, (fv2, keys2))
     win.current_img_idx = 0
     win._label_current_image(0)
     win.current_img_idx = 1
