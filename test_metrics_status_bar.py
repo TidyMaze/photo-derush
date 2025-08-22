@@ -41,7 +41,6 @@ def test_metrics_status_bar():
     assert fv1 is not None and fv2 is not None, "Feature extraction failed on real images."
     win = LightroomMainWindow([img1, img2], image_dir, lambda: [img1, img2])
     # Explicitly populate the window's feature cache for both images
-    import os
     mtime1 = os.path.getmtime(os.path.join(image_dir, img1))
     mtime2 = os.path.getmtime(os.path.join(image_dir, img2))
     win._feature_cache[os.path.join(image_dir, img1)] = (mtime1, (fv1, keys1))
