@@ -118,6 +118,31 @@ def main_duplicate_detection(clusters=None, image_hashes=None):
     for idx, cluster in enumerate(clusters):
         print(f"Cluster {idx+1}: {cluster}")
 
+def duplicate_slayer(src_dir, trash_dir):
+    """
+    Remove duplicate files (by content) in src_dir, move duplicates to trash_dir, keep one copy.
+    Returns (kept, trashed): lists of file paths.
+    """
+    import hashlib
+    kept = []
+    trashed = []
+    hashes = {}
+    for fname in os.listdir(src_dir):
+        fpath = os.path.join(src_dir, fname)
+        if not os.path.isfile(fpath):
+            continue
+        with open(fpath, 'rb') as f:
+            file_hash = hashlib.md5(f.read()).hexdigest()
+        if file_hash not in hashes:
+            hashes[file_hash] = fpath
+            kept.append(fpath)
+        else:
+            # Move duplicate to trash
+            dest = os.path.join(trash_dir, fname)
+            os.rename(fpath, dest)
+            trashed.append(fpath)
+    return kept, trashed
+
 def main():
     directory = '/Users/yannrolland/Pictures/photo-dataset'
     print("Welcome to Photo Derush Script (async mode)!")

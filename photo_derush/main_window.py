@@ -522,6 +522,49 @@ class LightroomMainWindow(QMainWindow):
                 labels[os.path.basename(img)] = lbl
         return labels
 
+    def _all_features_ready(self):
+        # Returns True if all images in sorted_images have a feature vector cached
+        for n in self.viewmodel.sorted_images:
+            path = os.path.join(self.directory, n)
+            if self._feature_cache.get(path) is None:
+                return False
+        return True
+
+    def _trigger_feature_extraction_for_missing(self):
+        # Triggers feature extraction for all images missing a feature vector
+        for n in self.viewmodel.sorted_images:
+            path = os.path.join(self.directory, n)
+            if self._feature_cache.get(path) is None:
+                self._schedule_feature_extraction(path)
+
+    def _sort_images(self, mode):
+        prob_map = self._collect_probabilities_for_sort()
+        reverse = (mode == 'desc')
+        self.viewmodel.sorted_images = sorted(self.viewmodel.sorted_images, key=lambda n: prob_map.get(n, 0.5), reverse=reverse)
+        if self.image_grid:
+            self.image_grid.image_paths = self.viewmodel.sorted_images
+            self.image_grid.populate_grid()
+        self._last_sort_mode = mode
+        self.current_img_idx = 0 if self.viewmodel.sorted_images else -1
+        self._update_status_bar(action=f'sort {mode}')
+        self._in_sort = False
+
+    def on_predict_sort_asc(self):
+        if not self._all_features_ready():
+            self._pending_sort_mode = 'asc'
+            self._trigger_feature_extraction_for_missing()
+            self._update_status_bar(action='Waiting for features to sort (asc)...')
+            return
+        self._sort_images('asc')
+
+    def on_predict_sort_desc(self):
+        if not self._all_features_ready():
+            self._pending_sort_mode = 'desc'
+            self._trigger_feature_extraction_for_missing()
+            self._update_status_bar(action='Waiting for features to sort (desc)...')
+            return
+        self._sort_images('desc')
+
     def _on_async_feature_extracted(self, path, mtime, vec, keys):
         self._pending_feature_tasks.discard(path)
         if vec is None:
@@ -541,6 +584,12 @@ class LightroomMainWindow(QMainWindow):
                 self.image_grid.update_keep_probabilities({os.path.basename(path): prob})
             except Exception as e:  # noqa: PERF203
                 self.logger.info('[FeatureAsync] Prob update failed for %s: %s', path, e)
+        # If a sort is pending and all features are now ready, perform the sort
+        if hasattr(self, '_pending_sort_mode') and self._pending_sort_mode:
+            if self._all_features_ready():
+                mode = self._pending_sort_mode
+                self._pending_sort_mode = None
+                self._sort_images(mode)
 
     def _get_feature_vector_sync(self, img_path):
         self.logger.info(f"[DEBUG] _get_feature_vector_sync called for {img_path}")

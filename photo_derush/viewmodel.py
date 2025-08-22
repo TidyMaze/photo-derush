@@ -8,6 +8,7 @@ from ml.persistence import (
     load_model, load_feature_cache, persist_feature_cache_entry,
     latest_labeled_events, load_latest_labeled_samples
 )
+from ml.features_cv import FEATURE_NAMES as _NEW_FEATURE_NAMES
 
 class LightroomViewModel(QObject):
     images_changed = Signal(list)
@@ -35,7 +36,6 @@ class LightroomViewModel(QObject):
         try:
             return all_feature_names(include_strings=False)
         except Exception:
-            from ml.features_cv import FEATURE_NAMES as _NEW_FEATURE_NAMES
             return list(_NEW_FEATURE_NAMES)
 
     def _init_feature_cache(self):

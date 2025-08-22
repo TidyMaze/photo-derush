@@ -287,6 +287,8 @@ class PersonalLearner:
 
     def predict_keep_prob(self, X):
         proba = self.predict_proba(X)
+        if proba.shape[1] < 2:
+            raise ValueError(f"predict_proba returned shape {proba.shape}, expected at least 2 columns for binary classification.")
         keep_probs = proba[:, 1]
         logger.info("[Learner] predict_keep_prob -> min=%.4f max=%.4f avg=%.4f", float(np.min(keep_probs)), float(np.max(keep_probs)), float(np.mean(keep_probs)))
         return keep_probs

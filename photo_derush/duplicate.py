@@ -27,8 +27,10 @@ def _hamming(a, b):
     except Exception:
         return 9999
 
-def cluster_duplicates(image_paths, directory='.', hash_type='dhash', distance_threshold=5, use_faiss=True):
+def cluster_duplicates(image_paths, directory='.', hash_type='dhash', distance_threshold=5, use_faiss=True, hamming_thresh=None):
     """Group near-duplicate images using hashes and optional FAISS for speed."""
+    if hamming_thresh is not None:
+        distance_threshold = hamming_thresh
     hashes = {}
     hash_arrs = []
     valid_names = []
