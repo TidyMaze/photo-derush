@@ -298,15 +298,7 @@ class ImageGrid(QWidget):
         self.progress_bar.hide()
         self._feature_extraction_in_progress = False
         # Refresh grid if sorting depends on features
-        if hasattr(self, 'get_sorted_images') and callable(self.get_sorted_images):
-            try:
-                sorted_images = list(self.get_sorted_images())
-                current_names = [lbl.text().split('\n')[0] for lbl in self.bottom_labels]
-                if sorted_images[:len(current_names)] != current_names:
-                    logging.info("[ImageGrid] Sort order changed after feature extraction, repopulating grid without triggering another extraction.")
-                    self.populate_grid(trigger_feature_extraction=False)
-            except Exception as e:
-                logging.warning(f"Could not refresh grid after feature extraction: {e}")
+        self.populate_grid(trigger_feature_extraction=False)
 
     def _on_feature_extraction_progress(self, completed, total):
         if total > 0:
