@@ -940,31 +940,31 @@ class LightroomMainWindow(QMainWindow):
 
     def refresh_keep_prob(self):
         img_name = self.get_current_image()
-        if img_name is None:
+        if not img_name:
             return
-        self._ensure_learner()  # May initialize (untrained) or rebuild from log
-        img_path = os.path.join(self.directory, img_name)
-        keep_prob = None
-        explanations = []
-        if self.learner is None:
+        self._ensure_learner()
+        if not self.learner:
             self.logger.info("[Predict] Skipping keep_prob prediction (no learner)")
-        else:
-            fv_tuple = self._get_feature_vector_sync(img_path)
-            if fv_tuple is None:
-                self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
-            else:
-                fv, keys = fv_tuple
-                try:
-                    self.logger.info("[Predict] Computing keep probability for image=%s", img_name)
-                    keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
-                    if keep_prob is not None:
-                        self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
-                        # Auto mark unsure for single image path
-                        self._auto_mark_unsure_if_needed([img_name], [keep_prob])
-                        explanations = self._explain_vector(fv, keys)
-                except Exception as e:  # noqa: PERF203
-                    self.logger.warning("[Predict] Prediction failed for %s: %s", img_path, e)
-        # Always update info panel (ensures EXIF is displayed even before model exists)
+            self.info_panel.update_info(img_name, os.path.join(self.directory, img_name), "-", "-", "-", keep_prob=None, explanations=None)
+            return
+        img_path = os.path.join(self.directory, img_name)
+        fv_tuple = self._get_feature_vector_sync(img_path)
+        if not fv_tuple:
+            self.logger.warning("[Predict] Feature extraction failed for %s; cannot predict", img_path)
+            self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=None, explanations=None)
+            return
+        fv, keys = fv_tuple
+        keep_prob = None
+        explanations = None
+        try:
+            self.logger.info("[Predict] Computing keep probability for image=%s", img_name)
+            keep_prob = float(self.learner.predict_keep_prob([fv])[0]) if fv is not None else None
+            if keep_prob is not None:
+                self.logger.info("[Predict] keep_prob=%.4f image=%s", keep_prob, img_name)
+                self._auto_mark_unsure_if_needed([img_name], [keep_prob])
+                explanations = self._explain_vector(fv, keys)
+        except Exception as e:
+            self.logger.warning("[Predict] Prediction failed for %s: %s", img_path, e)
         self.info_panel.update_info(img_name, img_path, "-", "-", "-", keep_prob=keep_prob, explanations=explanations)
         if keep_prob is not None:
             logging.info("[Predict] Updated keep_prob for image=%s: %.4f", img_name, keep_prob)
