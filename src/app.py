@@ -12,6 +12,7 @@ from collections import deque
 logging.basicConfig(level=logging.INFO)
 CONFIG_PATH = os.path.expanduser('~/.photo_app_config.json')
 thumb_size = 128
+MAX_IMAGES = 100  # Change this value to control how many images are loaded and displayed
 
 def load_last_dir():
     with open(CONFIG_PATH, 'r') as f:
@@ -38,7 +39,7 @@ class ImageLoaderWorker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
 
-    def __init__(self, image_paths, max_images):
+    def __init__(self, image_paths, max_images=MAX_IMAGES):
         super().__init__()
         self.image_paths = image_paths
         self.max_images = max_images
@@ -178,7 +179,7 @@ def main():
         scroll_area.setWidget(grid_widget)
         layout.addWidget(scroll_area)
 
-        max_images = 10  # Show up to 10 images in the grid for testing
+        max_images = MAX_IMAGES  # Use the constant
         images_per_row = 10
         label_refs = {}  # Keep references to labels for event handling
         image_buffers = {}  # Keep references to QByteArray buffers to prevent GC
@@ -232,6 +233,16 @@ def main():
             exif_worker.exif_loaded.connect(gui_updater.update_exif)
             exif_worker_thread.start()
 
+        def handle_image_loaded(path, data):
+            import threading
+            logging.info(f"[UI] handle_image_loaded running in thread: {threading.current_thread().name}")
+            idx = len(label_refs)
+            if idx >= max_images:
+                return
+            qimg = QImage.fromData(data)
+            icon = QIcon(QPixmap.fromImage(qimg))
+            add_image_to_grid(idx, path, icon)
+
         if not image_paths:
             logging.info("No images found in the selected directory.")
             layout.addWidget(QLabel("No images found in the selected directory."))
@@ -244,38 +255,10 @@ def main():
             logging.info("[DEBUG] Before QApplication exec")
             logging.info("Entering app event loop.")
 
-            # Start image loading in background thread
-            class GridImageAdder(QObject):
-                image_ready = Signal(int, str, QIcon)
-                def __init__(self, batch_size=1, interval=100):
-                    super().__init__()
-                    self.idx = 0
-                    self.queue = deque()
-                    self.batch_size = batch_size
-                    self.timer = QTimer()
-                    self.timer.setInterval(interval)  # ms
-                    self.timer.timeout.connect(self.process_batch)
-                def add(self, path, data):
-                    if self.idx < max_images:
-                        self.queue.append((self.idx, path, data))
-                        self.idx += 1
-                        if not self.timer.isActive():
-                            self.timer.start()
-                def process_batch(self):
-                    for _ in range(min(self.batch_size, len(self.queue))):
-                        idx, path, data = self.queue.popleft()
-                        qimg = QImage.fromData(data)
-                        icon = QIcon(QPixmap.fromImage(qimg))
-                        self.image_ready.emit(idx, path, icon)
-                    if not self.queue:
-                        self.timer.stop()
-
-            image_adder = GridImageAdder()
-            image_adder.image_ready.connect(add_image_to_grid, Qt.ConnectionType.QueuedConnection)
             image_loader = ImageLoaderWorker(image_paths, max_images)
             image_thread = QThread()
             image_loader.moveToThread(image_thread)
-            image_loader.image_loaded.connect(image_adder.add)
+            image_loader.image_loaded.connect(handle_image_loaded, Qt.ConnectionType.QueuedConnection)
             image_thread.started.connect(image_loader.load_images)
             image_loader.finished.connect(image_thread.quit)
             image_loader.finished.connect(image_loader.deleteLater)
