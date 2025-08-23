@@ -1,8 +1,8 @@
 import sys
 import logging
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar, QGridLayout, QScrollArea
+from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar
 from PySide6.QtGui import QIcon, QPixmap, QImage
-from PySide6.QtCore import QObject, Signal, QThread, Qt, QTimer
+from PySide6.QtCore import QObject, Signal, QThread, QTimer
 from PIL import Image, ExifTags
 import os
 import json
@@ -202,11 +202,13 @@ def main():
             last_exif_path = path
             exif_view.setText("Loading EXIF...")
             # Abort previous worker if running
-            if exif_worker_thread is not None and hasattr(exif_worker_thread, 'isRunning') and exif_worker_thread.isRunning():
+            if exif_worker_thread is not None:
                 if exif_worker is not None and hasattr(exif_worker, 'abort'):
                     exif_worker.abort()
-                exif_worker_thread.quit()
-                exif_worker_thread.wait()
+                if hasattr(exif_worker_thread, 'quit') and callable(exif_worker_thread.quit):
+                    exif_worker_thread.quit()
+                if hasattr(exif_worker_thread, 'wait') and callable(exif_worker_thread.wait):
+                    exif_worker_thread.wait()
             exif_worker = ExifLoaderWorker(path)
             exif_worker_thread = QThread()
             exif_worker.moveToThread(exif_worker_thread)
@@ -245,19 +247,22 @@ def main():
                 def process_batch(self):
                     for _ in range(min(self.batch_size, len(self.queue))):
                         path, data = self.queue.popleft()
-                        qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", QImage.Format_RGB32))
-                        qimg = QImage(data, thumb_size, thumb_size, qimage_format)
+                        # Use only formats that are guaranteed to exist
+                        qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", None))
+                        if qimage_format is None:
+                            raise RuntimeError("No suitable QImage format found.")
+                        qimg = QImage(data, thumb_size, thumb_size, qimage_format).copy()
                         icon = QIcon(QPixmap.fromImage(qimg))
                         self.grid_adder_func(self.idx, path, icon)
                         self.idx += 1
-                    if not self.queue or self.idx >= max_images:
+                    if not self.queue:
                         self.timer.stop()
 
             image_adder = GridImageAdder(add_image_to_grid)
             image_loader = ImageLoaderWorker(image_paths)
             image_thread = QThread()
             image_loader.moveToThread(image_thread)
-            image_loader.image_loaded.connect(image_adder.add, Qt.QueuedConnection)
+            image_loader.image_loaded.connect(image_adder.add)
             image_thread.started.connect(image_loader.load_images)
             image_loader.finished.connect(image_thread.quit)
             image_loader.finished.connect(image_loader.deleteLater)
