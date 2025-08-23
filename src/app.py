@@ -47,23 +47,19 @@ class ImageLoaderWorker(QObject):
         qimage_format = getattr(QImage, "Format_RGBA8888", QImage.Format_RGB32)
         for idx, path in enumerate(self.image_paths, 1):
             logging.info(f"[BG] Loading image: {path}")
-            try:
-                img = Image.open(path)
-                w, h = img.size
-                min_dim = min(w, h)
-                left = (w - min_dim) // 2
-                top = (h - min_dim) // 2
-                right = left + min_dim
-                bottom = top + min_dim
-                img_cropped = img.crop((left, top, right, bottom)).resize((128, 128), Image.Resampling.LANCZOS)
-                img_cropped = img_cropped.convert("RGBA")
-                data = img_cropped.tobytes("raw", "RGBA")
-                qimg = QImage(data, 128, 128, qimage_format)
-                pixmap = QPixmap.fromImage(qimg)
-                icon = QIcon(pixmap)
-            except Exception as e:
-                logging.warning(f"Failed to process image {path}: {e}")
-                icon = QIcon()
+            img = Image.open(path)
+            w, h = img.size
+            min_dim = min(w, h)
+            left = (w - min_dim) // 2
+            top = (h - min_dim) // 2
+            right = left + min_dim
+            bottom = top + min_dim
+            img_cropped = img.crop((left, top, right, bottom)).resize((128, 128), Image.Resampling.LANCZOS)
+            img_cropped = img_cropped.convert("RGBA")
+            data = img_cropped.tobytes("raw", "RGBA")
+            qimg = QImage(data, 128, 128, qimage_format)
+            pixmap = QPixmap.fromImage(qimg)
+            icon = QIcon(pixmap)
             self.image_loaded.emit(path, icon)
             self.progress.emit(idx, total)
         self.finished.emit()
@@ -83,31 +79,27 @@ class ExifLoaderWorker(QObject):
     def load_exif(self):
         import time
         start = time.time()
-        try:
-            img = Image.open(self.path)
-            getexif = getattr(img, "_getexif", None)
-            if not callable(getexif):
-                self.exif_loaded.emit(self.path, {})
-                logging.info(f"No _getexif for {self.path} (took {time.time()-start:.3f}s)")
-                return
-            exif_data = getexif()
-            exif_time = time.time() - start
-            logging.info(f"[BG] _getexif for {self.path} took {exif_time:.3f}s")
-            if not exif_data:
-                self.exif_loaded.emit(self.path, {})
-                return
-            exif = {}
-            if isinstance(exif_data, dict):
-                for tag, value in exif_data.items():
-                    tag_name = ExifTags.TAGS.get(tag, str(tag))
-                    exif[tag_name] = value
-            if self._abort:
-                logging.info(f"EXIF load for {self.path} aborted.")
-                return
-            self.exif_loaded.emit(self.path, exif)
-        except Exception as e:
-            logging.warning(f"Could not read EXIF for {self.path}: {e}")
-            self.exif_error.emit(self.path, str(e))
+        img = Image.open(self.path)
+        getexif = getattr(img, "_getexif", None)
+        if not callable(getexif):
+            self.exif_loaded.emit(self.path, {})
+            logging.info(f"No _getexif for {self.path} (took {time.time()-start:.3f}s)")
+            return
+        exif_data = getexif()
+        exif_time = time.time() - start
+        logging.info(f"[BG] _getexif for {self.path} took {exif_time:.3f}s")
+        if not exif_data:
+            self.exif_loaded.emit(self.path, {})
+            return
+        exif = {}
+        if isinstance(exif_data, dict):
+            for tag, value in exif_data.items():
+                tag_name = ExifTags.TAGS.get(tag, str(tag))
+                exif[tag_name] = value
+        if self._abort:
+            logging.info(f"EXIF load for {self.path} aborted.")
+            return
+        self.exif_loaded.emit(self.path, exif)
 
 class GuiUpdater(QObject):
     def __init__(self, exif_view, get_last_exif_path, get_exif_worker_thread, parent=None):
@@ -127,17 +119,6 @@ class GuiUpdater(QObject):
         else:
             lines = [f"{k}: {v}" for k, v in sorted(exif.items())]
             self.exif_view.setText("\n".join(lines))
-        if exif_worker_thread is not None:
-            exif_worker_thread.quit()
-            exif_worker_thread.wait()
-
-    def update_exif_error(self, error_path, msg):
-        last_exif_path = self.get_last_exif_path()
-        exif_worker_thread = self.get_exif_worker_thread()
-        if last_exif_path != error_path:
-            logging.info(f"Stale EXIF error for {error_path}, ignoring.")
-            return
-        self.exif_view.setText("No EXIF data or not a photo.")
         if exif_worker_thread is not None:
             exif_worker_thread.quit()
             exif_worker_thread.wait()
@@ -245,7 +226,6 @@ def main():
         exif_worker.moveToThread(exif_worker_thread)
         exif_worker_thread.started.connect(exif_worker.load_exif)
         exif_worker.exif_loaded.connect(gui_updater.update_exif)
-        exif_worker.exif_error.connect(gui_updater.update_exif_error)
         exif_worker_thread.start()
 
     if not image_paths:
