@@ -7,6 +7,7 @@ from PySide6.QtGui import QImage, QPixmap
 from PIL import Image as PILImage
 import piexif
 import numpy as np
+from PySide6.QtWidgets import QApplication
 
 # def test_file_scanner(tmp_path):
 #     # Create dummy image files
@@ -31,7 +32,7 @@ def test_image_loader(tmp_path):
     image = QImage(800, 600, QImage.Format_RGB32)
     image.fill(0xFF0000)  # Red
     image.save(str(img_path))
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = QApplication.instance() or QApplication([])
     loop = QEventLoop()
     result = []
     def on_loaded(pixmap, info, exif):
@@ -73,7 +74,7 @@ def test_image_loader_with_exif(tmp_path):
     }
     exif_bytes = piexif.dump(exif_dict)
     pil_img.save(str(img_path), exif=exif_bytes)
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = QApplication.instance() or QApplication([])
     loop = QEventLoop()
     result = []
     def on_loaded(pixmap, info, exif):
@@ -94,7 +95,8 @@ def test_image_loader_with_exif(tmp_path):
     assert exif.get('LensModel') == 'TestLens'
 
 def test_exif_loader_worker(tmp_path):
-    from PySide6.QtCore import QEventLoop, QCoreApplication
+    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtWidgets import QApplication
     from PIL import Image as PILImage
     import piexif
     import numpy as np
@@ -105,17 +107,23 @@ def test_exif_loader_worker(tmp_path):
     exif_dict = {"0th": {piexif.ImageIFD.Make: u"TestMake"}}
     exif_bytes = piexif.dump(exif_dict)
     pil_img.save(str(img_path), exif=exif_bytes)
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = QApplication.instance() or QApplication([])
     loop = QEventLoop()
     result = {}
     def on_loaded(path, exif):
         result["path"] = path
         result["exif"] = exif
+        print(f"on_loaded called: {path}, exif: {exif}")
+        loop.quit()
+    def on_timeout():
+        print("Timeout reached in test_exif_loader_worker")
         loop.quit()
     worker = ExifLoaderWorker(str(img_path))
     worker.exif_loaded.connect(on_loaded)
-    worker.load_exif()
+    QTimer.singleShot(0, worker.load_exif)
+    QTimer.singleShot(3000, on_timeout)  # 3 second timeout
     loop.exec()
+    assert "path" in result, "Signal was not emitted in time"
     assert result["path"] == str(img_path)
     assert "Make" in result["exif"]
     assert result["exif"]["Make"] == "TestMake"
