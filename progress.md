@@ -5,6 +5,7 @@ Plan:
 4. [x] Move long tasks off GUI thread
 5. [x] Add tests
 6. [x] Add image preview on selection
+7. [ ] Add file info panel for selected image
 
 Steps Executed:
 - 2025-08-23: Set up minimal project structure
@@ -15,6 +16,7 @@ Steps Executed:
 - 2025-08-23: Ran app and verified basic functionality
 - 2025-08-23: Planning and starting image preview feature
 - 2025-08-23: Implemented and verified image preview feature
+- 2025-08-23: Planning and starting file info panel feature
 
-Progress: 100%
-Next step: Plan and implement the next feature (suggested: file info panel or filter by file type)
+Progress: 90%
+Next step: Implement file info panel for selected image

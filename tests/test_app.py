@@ -29,16 +29,21 @@ def test_image_loader(tmp_path):
     app = QCoreApplication.instance() or QCoreApplication([])
     loop = QEventLoop()
     result = []
-    def on_loaded(pixmap):
-        result.append(pixmap)
+    def on_loaded(pixmap, info):
+        result.append((pixmap, info))
         loop.quit()
     loader = ImageLoader(str(img_path))
     loader.image_loaded.connect(on_loaded)
     loader.start()
     loop.exec()
     assert result
-    pixmap = result[0]
+    pixmap, info = result[0]
     assert isinstance(pixmap, QPixmap)
     assert not pixmap.isNull()
     # Should be scaled to 256x256 or less
     assert pixmap.width() <= 256 and pixmap.height() <= 256
+    # Check file info
+    assert info['width'] == 800
+    assert info['height'] == 600
+    assert info['size'] == os.stat(str(img_path)).st_size
+    assert abs(info['mtime'] - os.stat(str(img_path)).st_mtime) < 2  # Allow 2s drift
