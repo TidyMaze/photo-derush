@@ -37,6 +37,7 @@ class PhotoViewModel(QObject):
     exif_changed = Signal(dict)
     progress_changed = Signal(int, int)
     thumbnail_loaded = Signal(str, object)  # path, QImage or PIL Image
+    selected_image_changed = Signal(str)
 
     def __init__(self, directory, max_images=100):
         super().__init__()
@@ -75,6 +76,7 @@ class PhotoViewModel(QObject):
     def select_image(self, filename):
         path = self.model.get_image_path(filename)
         self.selected_image = path
+        self.selected_image_changed.emit(path)
         exif = self.model.load_exif(path)
         self.exif = exif
         self.exif_changed.emit(exif)

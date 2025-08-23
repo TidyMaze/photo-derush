@@ -61,6 +61,7 @@ class PhotoView(QMainWindow):
         self.viewmodel.exif_changed.connect(self._on_exif_changed)
         self.viewmodel.thumbnail_loaded.connect(self._on_thumbnail_loaded)
         self.viewmodel.progress_changed.connect(self._on_progress_changed)
+        self.viewmodel.selected_image_changed.connect(self._on_selected_image_changed)
 
     def _on_images_changed(self, images):
         # Only clear grid if images list is empty (full reload)
@@ -84,7 +85,7 @@ class PhotoView(QMainWindow):
 
     def _on_label_clicked(self, filename):
         self.viewmodel.select_image(filename)
-        self.open_btn.setEnabled(True)
+        # self.open_btn.setEnabled(True)  # Remove direct state management
 
     def _on_open_in_viewer(self):
         self.viewmodel.open_selected_in_viewer()
@@ -101,7 +102,7 @@ class PhotoView(QMainWindow):
                         data = thumb.tobytes()
                         w, h = thumb.size
                         # Use Format_RGBA8888 if available, else fallback
-                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_ARGB32)
+                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_RGB32)
                         qimg = QImage(data, w, h, img_format)
                         pixmap = QPixmap.fromImage(qimg)
                     label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
@@ -127,3 +128,6 @@ class PhotoView(QMainWindow):
     def _on_filetype_changed(self, idx):
         exts = self.filetype_combo.currentData()
         self.viewmodel.set_file_types(exts)
+
+    def _on_selected_image_changed(self, path):
+        self.open_btn.setEnabled(bool(path))
