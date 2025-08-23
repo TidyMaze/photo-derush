@@ -35,6 +35,6 @@ class ThumbnailCache:
         cache_path = self.get_cache_path(path)
         try:
             image.save(cache_path, format="PNG")
-        except Exception:
-            pass
-
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to save thumbnail to cache: {e}")
