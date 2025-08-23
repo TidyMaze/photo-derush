@@ -573,22 +573,32 @@ class LightroomMainWindow(QMainWindow):
                 self._schedule_feature_extraction(path)
 
     def _sort_images(self, mode):
+        self.logger.info(f"[Sort] Requested sort mode: {mode}")
         reverse = (mode == 'desc')
         sorted_images, prob_map = self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group, return_prob_map=True)
+        self.logger.info(f"[Sort] Images fetched from viewmodel (count={len(sorted_images)}), reverse={reverse}")
         if reverse:
             sorted_images = list(reversed(sorted_images))
+            self.logger.info(f"[Sort] Images reversed for descending order")
+        self.logger.info(f"[Sort] Sorted images: {sorted_images[:10]}{'...' if len(sorted_images) > 10 else ''}")
         self.viewmodel.sorted_images = sorted_images
         if self.image_grid:
+            self.logger.info(f"[Sort] Assigning sorted images to grid (count={len(sorted_images)})")
             self.image_grid.image_paths = sorted_images
+            self.logger.info(f"[Sort] Populating grid with sorted images")
             self.image_grid.populate_grid()
+            self.logger.info(f"[Sort] Updating keep probabilities in grid")
             self.image_grid.update_keep_probabilities(prob_map)
+        self.logger.info(f"[Sort] Sort complete, mode={mode}, total images={len(sorted_images)}")
         self._last_sort_mode = mode
         self.current_img_idx = 0 if self.viewmodel.sorted_images else -1
         self._update_status_bar(action=f'sort {mode}')
         self._in_sort = False
 
     def on_predict_sort_asc(self):
+        self.logger.info("[Sort] Ascending sort requested")
         if not self._all_features_ready():
+            self.logger.info("[Sort] Not all features ready, will trigger extraction and defer sort (asc)")
             self._pending_sort_mode = 'asc'
             self._trigger_feature_extraction_for_missing()
             self._update_status_bar(action='Waiting for features to sort (asc)...')
@@ -596,7 +606,9 @@ class LightroomMainWindow(QMainWindow):
         self._sort_images('asc')
 
     def on_predict_sort_desc(self):
+        self.logger.info("[Sort] Descending sort requested")
         if not self._all_features_ready():
+            self.logger.info("[Sort] Not all features ready, will trigger extraction and defer sort (desc)")
             self._pending_sort_mode = 'desc'
             self._trigger_feature_extraction_for_missing()
             self._update_status_bar(action='Waiting for features to sort (desc)...')
@@ -626,6 +638,7 @@ class LightroomMainWindow(QMainWindow):
         if hasattr(self, '_pending_sort_mode') and self._pending_sort_mode:
             if self._all_features_ready():
                 mode = self._pending_sort_mode
+                self.logger.info(f"[Sort] All features ready, triggering pending sort: {mode}")
                 self._pending_sort_mode = None
                 self._sort_images(mode)
 
