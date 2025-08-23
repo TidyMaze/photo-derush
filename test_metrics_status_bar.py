@@ -32,7 +32,7 @@ def get_real_image_paths(min_count=2):
     return tmp_dir, image_paths
 
 def test_metrics_status_bar():
-    app = ensure_app()
+    raise NotImplementedError("LightroomMainWindow is deprecated and should not be used.")
     image_dir, image_paths = get_real_image_paths(2)
     img1, img2 = image_paths[:2]
     from photo_derush.main_window import compute_feature_vector, LightroomMainWindow

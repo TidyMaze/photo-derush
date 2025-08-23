@@ -42,3 +42,4 @@ def test_viewer_auto_advance():
         app.processEvents()
     assert viewer.current_index == 1, "Viewer did not auto-advance after keep."
     win.close()
+

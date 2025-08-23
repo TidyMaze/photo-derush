@@ -39,3 +39,4 @@ def test_fullscreen_guard(caplog):
         import pytest
         pytest.skip(f"UI cannot be tested in headless environment: {e}")
     win.close()
+

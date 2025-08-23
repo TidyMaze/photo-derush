@@ -1,6 +1,7 @@
 import sys
 import logging
-from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow
+from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QListWidget, QListWidgetItem, QLabel, QVBoxLayout, QWidget
+from PySide6.QtGui import QIcon, QPixmap
 import os
 import json
 
@@ -39,9 +40,32 @@ def main():
     save_last_dir(dir_path)
     image_files = get_image_files(dir_path)
     image_paths = [os.path.join(dir_path, f) for f in image_files]
+
     win = QMainWindow()
-    win.setWindowTitle("Photo App - Placeholder Window")
-    win.resize(800, 600)
+    win.setWindowTitle("Photo App - Image Browser")
+    win.resize(1000, 700)
+
+    central_widget = QWidget()
+    layout = QVBoxLayout(central_widget)
+    list_widget = QListWidget()
+    list_widget.setIconSize(QPixmap(128, 128).size())
+
+    if not image_paths:
+        layout.addWidget(QLabel("No images found in the selected directory."))
+    else:
+        for path in image_paths:
+            item = QListWidgetItem(os.path.basename(path))
+            try:
+                pixmap = QPixmap(path)
+                if not pixmap.isNull():
+                    icon = QIcon(pixmap.scaled(128, 128))
+                    item.setIcon(icon)
+            except Exception as e:
+                logging.warning(f"Could not load image {path}: {e}")
+            list_widget.addItem(item)
+        layout.addWidget(list_widget)
+
+    win.setCentralWidget(central_widget)
     win.show()
     sys.exit(app.exec())
 
