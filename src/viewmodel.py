@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Signal, Slot, QThread
-from model import ImageModel
-from cache import ThumbnailCache
+from src.model import ImageModel
+from src.cache import ThumbnailCache
 import subprocess
 import sys
 import logging
