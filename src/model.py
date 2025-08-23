@@ -1,10 +1,12 @@
 import os
 from PIL import Image, ExifTags
+from cache import ThumbnailCache
 
 class ImageModel:
-    def __init__(self, directory, max_images=100):
+    def __init__(self, directory, max_images=100, cache=None):
         self.directory = directory
         self.max_images = max_images
+        self.cache = cache or ThumbnailCache()
 
     def get_image_files(self):
         image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
@@ -30,6 +32,10 @@ class ImageModel:
             return {}
 
     def load_thumbnail(self, path, size=128):
+        # Check cache first
+        thumb = self.cache.get_thumbnail(path)
+        if thumb:
+            return thumb
         try:
             img = Image.open(path)
             w, h = img.size
@@ -40,6 +46,7 @@ class ImageModel:
             bottom = top + min_dim
             img_cropped = img.crop((left, top, right, bottom)).resize((size, size), Image.Resampling.LANCZOS)
             img_cropped = img_cropped.convert("RGBA")
+            self.cache.set_thumbnail(path, img_cropped)
             return img_cropped
         except Exception:
             return None

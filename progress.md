@@ -9,7 +9,7 @@ Plan:
 8. [x] Remember last selected directory
 9. [x] Display EXIF metadata for selected image
 10. [x] Display images as a grid (Lightroom-style UI)
-11. [ ] Add thumbnail/miniature caching for faster preview
+11. [x] Add thumbnail/miniature caching for faster preview
 12. [ ] Add file type filter (e.g., .jpg/.png only)
 13. [ ] Add open-in-system-viewer for selected image
 14. [ ] Add drag-and-drop directory selection
@@ -51,6 +51,7 @@ Steps Executed:
 - 2025-08-23: Made image loading and thumbnail generation fully asynchronous and incremental
 - 2025-08-23: Fixed grid flicker and ensured thumbnails remain visible
 - 2025-08-23: Fixed progress bar to show and update as images load, and hide when done
+- 2025-08-23: Implemented and verified thumbnail/miniature caching for faster preview
 
-Progress: 65%
-Next step: Implement thumbnail/miniature caching for faster preview
+Progress: 69%
+Next step: Add file type filter (e.g., .jpg/.png only)

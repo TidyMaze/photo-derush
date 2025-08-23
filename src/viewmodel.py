@@ -1,5 +1,6 @@
 from PySide6.QtCore import QObject, Signal, Slot, QThread
 from model import ImageModel
+from cache import ThumbnailCache
 
 class ImageLoaderWorker(QObject):
     image_found = Signal(str)
@@ -36,7 +37,8 @@ class PhotoViewModel(QObject):
 
     def __init__(self, directory, max_images=100):
         super().__init__()
-        self.model = ImageModel(directory, max_images)
+        cache = ThumbnailCache()
+        self.model = ImageModel(directory, max_images, cache=cache)
         self.images = []
         self.selected_image = None
         self.exif = {}
