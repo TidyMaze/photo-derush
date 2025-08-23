@@ -3,12 +3,16 @@ name = "photo_app"
 version = "0.1.0"
 description = "Simple photo management app"
 authors = ["Yann Rolland"]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 PySide6 = "^6.6.0"
 Pillow = "^10.0.0"
 piexif = "^1.1.3"
+opencv-python = "^4.9.0.80"
+imagehash = "^4.3.2"
+scikit-learn = "^1.5.0"
 
 [build-system]
 requires = ["poetry-core"]
