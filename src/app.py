@@ -33,13 +33,19 @@ def get_image_files(directory):
             if os.path.splitext(f)[1].lower() in image_exts]
 
 def main():
+    logging.info("Starting QApplication...")
     app = QApplication(sys.argv)
     last_dir = load_last_dir()
+    logging.info(f"Loaded last_dir: {last_dir}")
     dir_path = QFileDialog.getExistingDirectory(None, "Select Directory", last_dir or "")
+    logging.info(f"User selected directory: {dir_path}")
     if not dir_path:
+        logging.info("No directory selected. Exiting.")
         return
     save_last_dir(dir_path)
+    logging.info(f"Saved last_dir: {dir_path}")
     image_files = get_image_files(dir_path)
+    logging.info(f"Found {len(image_files)} image files.")
     image_paths = [os.path.join(dir_path, f) for f in image_files]
 
     win = QMainWindow()
@@ -64,6 +70,7 @@ def main():
             exif_view.setText("")
             return
         path = image_paths[idx]
+        logging.info(f"Loading EXIF for: {path}")
         try:
             img = Image.open(path)
             getexif = getattr(img, "_getexif", None)
@@ -85,9 +92,11 @@ def main():
             exif_view.setText("No EXIF data or not a photo.")
 
     if not image_paths:
+        logging.info("No images found in the selected directory.")
         layout.addWidget(QLabel("No images found in the selected directory."))
     else:
         for path in image_paths:
+            logging.info(f"Adding image to list: {path}")
             item = QListWidgetItem(os.path.basename(path))
             try:
                 pixmap = QPixmap(path)
@@ -102,7 +111,9 @@ def main():
         list_widget.currentItemChanged.connect(show_exif_for_item)
 
     win.setCentralWidget(central_widget)
+    logging.info("Showing main window...")
     win.show()
+    logging.info("Entering app event loop.")
     sys.exit(app.exec())
 
 if __name__ == "__main__":
