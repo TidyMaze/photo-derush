@@ -34,7 +34,7 @@ def get_image_files(directory):
             if os.path.splitext(f)[1].lower() in image_exts]
 
 class ImageLoaderWorker(QObject):
-    image_loaded = Signal(str)
+    image_loaded = Signal(str, QIcon)
     finished = Signal()
     progress = Signal(int, int)  # current, total
 
@@ -46,7 +46,12 @@ class ImageLoaderWorker(QObject):
         total = len(self.image_paths)
         for idx, path in enumerate(self.image_paths, 1):
             logging.info(f"[BG] Loading image: {path}")
-            self.image_loaded.emit(path)
+            pixmap = QPixmap(path)
+            if not pixmap.isNull():
+                icon = QIcon(pixmap.scaled(128, 128))
+            else:
+                icon = QIcon()
+            self.image_loaded.emit(path, icon)
             self.progress.emit(idx, total)
         self.finished.emit()
 
@@ -125,7 +130,7 @@ class GuiUpdater(QObject):
             exif_worker_thread.wait()
 
 class UiUpdater(QObject):
-    add_image = Signal(str)
+    add_image = Signal(str, QIcon)
     update_progress = Signal(int, int)
 
 def main():
@@ -238,7 +243,7 @@ def main():
         loader.moveToThread(loader_thread)
         loader_thread.started.connect(loader.load_images)
         # Connect signals for thread-safe UI updates
-        ui_updater.add_image.connect(lambda path: add_image_to_list(list_widget, path))
+        ui_updater.add_image.connect(lambda path, icon: add_image_to_list(list_widget, path, icon))
         ui_updater.update_progress.connect(lambda current, total: progress_bar.setValue(current) if progress_bar else None)
         loader.image_loaded.connect(ui_updater.add_image.emit)
         loader.progress.connect(ui_updater.update_progress.emit)
@@ -255,16 +260,11 @@ def main():
     logging.info("Entering app event loop.")
     sys.exit(app.exec())
 
-def add_image_to_list(list_widget, path):
+def add_image_to_list(list_widget, path, icon):
     logging.info(f"[UI] Adding image to list: {path}")
     item = QListWidgetItem(os.path.basename(path))
-    try:
-        pixmap = QPixmap(path)
-        if not pixmap.isNull():
-            icon = QIcon(pixmap.scaled(128, 128))
-            item.setIcon(icon)
-    except Exception as e:
-        logging.warning(f"Could not load image {path}: {e}")
+    if icon and not icon.isNull():
+        item.setIcon(icon)
     list_widget.addItem(item)
 
 if __name__ == "__main__":
