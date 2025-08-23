@@ -13,10 +13,14 @@ class PhotoView(QMainWindow):
         self.resize(1000, 700)
 
         self.central_widget = QWidget()
-        self.layout = QVBoxLayout(self.central_widget)
+        self.main_layout = QHBoxLayout(self.central_widget)
         self.setCentralWidget(self.central_widget)
 
-        # File type filter UI
+        # Left: grid and filter
+        self.left_widget = QWidget()
+        self.left_layout = QVBoxLayout(self.left_widget)
+        self.main_layout.addWidget(self.left_widget, stretch=3)
+
         self.filter_layout = QHBoxLayout()
         self.filetype_combo = QComboBox()
         self.filetype_combo.addItem("All", [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff"])
@@ -27,7 +31,7 @@ class PhotoView(QMainWindow):
         self.filetype_combo.addItem("TIFF", [".tiff"])
         self.filetype_combo.currentIndexChanged.connect(self._on_filetype_changed)
         self.filter_layout.addWidget(self.filetype_combo)
-        self.layout.addLayout(self.filter_layout)
+        self.left_layout.addLayout(self.filter_layout)
 
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
@@ -35,23 +39,28 @@ class PhotoView(QMainWindow):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setWidget(self.grid_widget)
-        self.layout.addWidget(self.scroll_area)
+        self.left_layout.addWidget(self.scroll_area)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.left_layout.addWidget(self.progress_bar)
+        self.progress_bar.hide()
+
+        # Right: side panel
+        self.side_panel = QWidget()
+        self.side_layout = QVBoxLayout(self.side_panel)
+        self.main_layout.addWidget(self.side_panel, stretch=2)
 
         self.exif_view = QTextEdit()
         self.exif_view.setReadOnly(True)
         self.exif_view.setMinimumHeight(120)
         self.exif_view.setPlaceholderText("Select an image to view EXIF data.")
-        self.layout.addWidget(self.exif_view)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(True)
-        self.layout.addWidget(self.progress_bar)
-        self.progress_bar.hide()
+        self.side_layout.addWidget(self.exif_view)
 
         self.open_btn = QPushButton("Open in Viewer")
         self.open_btn.setEnabled(False)
         self.open_btn.clicked.connect(self._on_open_in_viewer)
-        self.layout.addWidget(self.open_btn)
+        self.side_layout.addWidget(self.open_btn)
 
         # Rating UI
         self.rating_layout = QHBoxLayout()
@@ -63,7 +72,7 @@ class PhotoView(QMainWindow):
             btn.clicked.connect(lambda _, n=i: self._on_rating_clicked(n))
             self.rating_layout.addWidget(btn)
             self.rating_stars.append(btn)
-        self.layout.addLayout(self.rating_layout)
+        self.side_layout.addLayout(self.rating_layout)
         # Tags UI
         self.tags_layout = QHBoxLayout()
         self.tags_label = QLabel("Tags:")
@@ -72,7 +81,7 @@ class PhotoView(QMainWindow):
         self.tags_edit.editingFinished.connect(self._on_tags_edited)
         self.tags_layout.addWidget(self.tags_label)
         self.tags_layout.addWidget(self.tags_edit)
-        self.layout.addLayout(self.tags_layout)
+        self.side_layout.addLayout(self.tags_layout)
 
         self.label_refs = {}
         self.selected_filename = None
@@ -191,3 +200,23 @@ class PhotoView(QMainWindow):
 
     def _on_tags_changed(self, tags):
         self.tags_edit.setText(", ".join(tags))
+
+    def _on_open_in_viewer(self):
+        self.viewmodel.open_selected_in_viewer()
+
+    def _on_thumbnail_loaded(self, path, thumb):
+        # Find label by filename
+        for (row, col), label in self.label_refs.items():
+            if label.toolTip() == path or label.toolTip() in path:
+                if thumb:
+                    if isinstance(thumb, QImage):
+                        pixmap = QPixmap.fromImage(thumb)
+                    else:
+                        # PIL Image
+                        data = thumb.tobytes()
+                        w, h = thumb.size
+                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_ARGB32)
+                        qimg = QImage(data, w, h, img_format)
+                        pixmap = QPixmap.fromImage(qimg)
+                    label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                break
