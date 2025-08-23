@@ -3,6 +3,7 @@ import logging
 from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QListWidget, QVBoxLayout, QWidget, QLabel
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPixmap
+from PIL import Image, ExifTags
 import os
 import json
 
@@ -39,12 +40,13 @@ class FileScanner(QThread):
         self.files_found.emit(files)
 
 class ImageLoader(QThread):
-    image_loaded = Signal(QPixmap, dict)
+    image_loaded = Signal(QPixmap, dict, dict)
     def __init__(self, path):
         super().__init__()
         self.path = path
     def run(self):
         info = {}
+        exif = {}
         try:
             stat = os.stat(self.path)
             info['size'] = stat.st_size
@@ -61,13 +63,23 @@ class ImageLoader(QThread):
         else:
             info['width'] = None
             info['height'] = None
-        self.image_loaded.emit(pixmap, info)
+        # EXIF extraction
+        try:
+            img = Image.open(self.path)
+            raw_exif = img._getexif()
+            if raw_exif:
+                for tag, value in raw_exif.items():
+                    tag_name = ExifTags.TAGS.get(tag, tag)
+                    exif[tag_name] = value
+        except Exception as e:
+            logging.info(f"No EXIF or failed to read EXIF: {e}")
+        self.image_loaded.emit(pixmap, info, exif)
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Simple Photo App")
-        self.resize(400, 550)
+        self.resize(400, 650)
         self.list_widget = QListWidget()
         self.button = QPushButton("Select Directory")
         self.button.clicked.connect(self.select_directory)
@@ -77,11 +89,15 @@ class MainWindow(QMainWindow):
         self.info_label = QLabel("")
         self.info_label.setAlignment(Qt.AlignLeft)
         self.info_label.setWordWrap(True)
+        self.exif_label = QLabel("")
+        self.exif_label.setAlignment(Qt.AlignLeft)
+        self.exif_label.setWordWrap(True)
         layout = QVBoxLayout()
         layout.addWidget(self.button)
         layout.addWidget(self.list_widget)
         layout.addWidget(self.preview_label)
         layout.addWidget(self.info_label)
+        layout.addWidget(self.exif_label)
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
@@ -112,20 +128,22 @@ class MainWindow(QMainWindow):
             self.preview_label.setText("Select an image to preview")
             self.preview_label.setPixmap(QPixmap())
             self.info_label.setText("")
+            self.exif_label.setText("")
             return
         image_path = os.path.join(self.current_dir, current.text())
         self.preview_label.setText("Loading...")
         self.info_label.setText("")
+        self.exif_label.setText("")
         self.image_loader = ImageLoader(image_path)
         self.image_loader.image_loaded.connect(self.show_image)
         self.image_loader.start()
-    def show_image(self, pixmap, info):
+    def show_image(self, pixmap, info, exif):
         if pixmap and not pixmap.isNull():
             self.preview_label.setPixmap(pixmap)
             self.preview_label.setText("")
         else:
             self.preview_label.setText("Failed to load image")
-        # Format file info
+        # File info
         size = info.get('size')
         mtime = info.get('mtime')
         width = info.get('width')
@@ -135,6 +153,18 @@ class MainWindow(QMainWindow):
         mtime_str = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S') if mtime else "?"
         dim_str = f"{width} x {height}" if width and height else "?"
         self.info_label.setText(f"Size: {size_str}\nModified: {mtime_str}\nDimensions: {dim_str}")
+        # EXIF info
+        if exif:
+            keys = [
+                'DateTimeOriginal', 'Make', 'Model', 'LensModel', 'ExposureTime',
+                'FNumber', 'ISOSpeedRatings', 'FocalLength', 'Software'
+            ]
+            exif_lines = [f"{k}: {exif[k]}" for k in keys if k in exif]
+            if not exif_lines:
+                exif_lines = ["No key EXIF fields found."]
+            self.exif_label.setText("EXIF:\n" + "\n".join(exif_lines))
+        else:
+            self.exif_label.setText("No EXIF data.")
 
 def main():
     app = QApplication(sys.argv)

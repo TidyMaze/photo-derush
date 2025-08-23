@@ -7,6 +7,7 @@ Plan:
 6. [x] Add image preview on selection
 7. [x] Add file info panel for selected image
 8. [x] Remember last selected directory
+9. [x] Display EXIF metadata for selected image
 
 Steps Executed:
 - 2025-08-23: Set up minimal project structure
@@ -20,6 +21,8 @@ Steps Executed:
 - 2025-08-23: Planning and starting file info panel feature
 - 2025-08-23: Implemented and verified file info panel feature
 - 2025-08-23: Implemented and verified last directory persistence
+- 2025-08-23: Planning and starting EXIF display feature
+- 2025-08-23: Implemented and verified EXIF display feature
 
 Progress: 100%
 Next step: Suggest and implement another feature (e.g., file type filter, open in viewer, drag-and-drop)

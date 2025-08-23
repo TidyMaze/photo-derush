@@ -7,8 +7,9 @@ authors = ["Yann Rolland"]
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 PySide6 = "^6.6.0"
+Pillow = "^10.0.0"
+piexif = "^1.1.3"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
