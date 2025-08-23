@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout, QPushButton
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 
@@ -47,6 +47,11 @@ class PhotoView(QMainWindow):
         self.layout.addWidget(self.progress_bar)
         self.progress_bar.hide()
 
+        self.open_btn = QPushButton("Open in Viewer")
+        self.open_btn.setEnabled(False)
+        self.open_btn.clicked.connect(self._on_open_in_viewer)
+        self.layout.addWidget(self.open_btn)
+
         self.label_refs = {}
         self._connect_signals()
 
@@ -63,6 +68,7 @@ class PhotoView(QMainWindow):
             for label in self.label_refs.values():
                 label.deleteLater()
             self.label_refs.clear()
+        self.open_btn.setEnabled(False)
 
     def _on_image_added(self, filename, idx):
         row = idx // self.images_per_row
@@ -71,10 +77,17 @@ class PhotoView(QMainWindow):
         label.setFixedSize(self.thumb_size, self.thumb_size)
         label.setScaledContents(True)
         label.setToolTip(filename)
-        label.mousePressEvent = lambda e, f=filename: self.viewmodel.select_image(f)
+        label.mousePressEvent = lambda e, f=filename: self._on_label_clicked(f)
         self.grid_layout.addWidget(label, row, col)
         self.label_refs[(row, col)] = label
         self.viewmodel.load_thumbnail(filename)
+
+    def _on_label_clicked(self, filename):
+        self.viewmodel.select_image(filename)
+        self.open_btn.setEnabled(True)
+
+    def _on_open_in_viewer(self):
+        self.viewmodel.open_selected_in_viewer()
 
     def _on_thumbnail_loaded(self, path, thumb):
         # Find label by filename

@@ -1,6 +1,9 @@
 from PySide6.QtCore import QObject, Signal, Slot, QThread
 from model import ImageModel
 from cache import ThumbnailCache
+import subprocess
+import sys
+import logging
 
 class ImageLoaderWorker(QObject):
     image_found = Signal(str)
@@ -85,3 +88,18 @@ class PhotoViewModel(QObject):
         self.current_exts = exts
         self.model.set_allowed_exts(exts)
         self.load_images()
+
+    def open_selected_in_viewer(self):
+        if not self.selected_image:
+            logging.warning("No image selected to open in viewer.")
+            return
+        path = self.selected_image
+        try:
+            if sys.platform.startswith("darwin"):
+                subprocess.Popen(["open", path])
+            elif sys.platform.startswith("win"):
+                os.startfile(path)
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception as e:
+            logging.error(f"Failed to open image in viewer: {e}")

@@ -11,7 +11,7 @@ Plan:
 10. [x] Display images as a grid (Lightroom-style UI)
 11. [x] Add thumbnail/miniature caching for faster preview
 12. [x] Add file type filter (e.g., .jpg/.png only)
-13. [ ] Add open-in-system-viewer for selected image
+13. [x] Add open-in-system-viewer for selected image
 14. [ ] Add drag-and-drop directory selection
 15. [ ] Add keyboard navigation (arrow keys, shortcuts)
 16. [ ] Add dark mode toggle
@@ -53,6 +53,7 @@ Steps Executed:
 - 2025-08-23: Fixed progress bar to show and update as images load, and hide when done
 - 2025-08-23: Implemented and verified thumbnail/miniature caching for faster preview
 - 2025-08-23: Implemented and verified file type filter (e.g., .jpg/.png only)
+- 2025-08-23: Implemented and verified open-in-system-viewer for selected image
 
-Progress: 72%
-Next step: Add open-in-system-viewer for selected image
+Progress: 75%
+Next step: Add drag-and-drop directory selection
