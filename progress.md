@@ -12,16 +12,15 @@ Plan:
 11. [x] Add thumbnail/miniature caching for faster preview
 12. [x] Add file type filter (e.g., .jpg/.png only)
 13. [x] Add open-in-system-viewer for selected image
-14. [ ] Add keyboard navigation (arrow keys, shortcuts)
+14. [ ] Add image rating/tagging support
 15. [ ] Add search/filter by filename or EXIF
 16. [ ] Add responsive grid layout with selection highlight (Lightroom-style polish)
 17. [ ] Add info/metadata side panel with editable tags
-18. [ ] Add image rating/tagging support
-19. [ ] Add quick filter bar (by rating/tag/date)
-20. [ ] Add export/copy/move selected images
-21. [ ] Add batch metadata editing
-22. [ ] Add fullscreen/compare mode for selected images
-23. [ ] Add settings/preferences dialog
+18. [ ] Add quick filter bar (by rating/tag/date)
+19. [ ] Add export/copy/move selected images
+20. [ ] Add batch metadata editing
+21. [ ] Add fullscreen/compare mode for selected images
+22. [ ] Add settings/preferences dialog
 
 Steps Executed:
 - 2025-08-23: Set up minimal project structure
@@ -53,4 +52,4 @@ Steps Executed:
 - 2025-08-23: Implemented and verified open-in-system-viewer for selected image
 
 Progress: 75%
-Next step: Add keyboard navigation (arrow keys, shortcuts)
+Next step: Add image rating/tagging support
