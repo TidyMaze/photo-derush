@@ -2,6 +2,7 @@ import sys
 import logging
 from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QListWidget, QListWidgetItem, QLabel, QVBoxLayout, QWidget, QTextEdit
 from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import QObject, Signal, QThread
 from PIL import Image, ExifTags
 import os
 import json
@@ -31,6 +32,20 @@ def get_image_files(directory):
     image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
     return [f for f in os.listdir(directory)
             if os.path.splitext(f)[1].lower() in image_exts]
+
+class ImageLoaderWorker(QObject):
+    image_loaded = Signal(str)
+    finished = Signal()
+
+    def __init__(self, image_paths):
+        super().__init__()
+        self.image_paths = image_paths
+
+    def load_images(self):
+        for path in self.image_paths:
+            logging.info(f"[BG] Loading image: {path}")
+            self.image_loaded.emit(path)
+        self.finished.emit()
 
 def main():
     logging.info("Starting QApplication...")
@@ -66,7 +81,7 @@ def main():
             exif_view.setText("")
             return
         idx = list_widget.row(item)
-        if idx < 0 or idx >= len(image_paths):
+        if idx < 0 or idx >= list_widget.count():
             exif_view.setText("")
             return
         path = image_paths[idx]
@@ -95,26 +110,38 @@ def main():
         logging.info("No images found in the selected directory.")
         layout.addWidget(QLabel("No images found in the selected directory."))
     else:
-        for path in image_paths:
-            logging.info(f"Adding image to list: {path}")
-            item = QListWidgetItem(os.path.basename(path))
-            try:
-                pixmap = QPixmap(path)
-                if not pixmap.isNull():
-                    icon = QIcon(pixmap.scaled(128, 128))
-                    item.setIcon(icon)
-            except Exception as e:
-                logging.warning(f"Could not load image {path}: {e}")
-            list_widget.addItem(item)
         layout.addWidget(list_widget)
         layout.addWidget(exif_view)
         list_widget.currentItemChanged.connect(show_exif_for_item)
+
+        # Background image loader setup
+        loader = ImageLoaderWorker(image_paths)
+        thread = QThread()
+        loader.moveToThread(thread)
+        thread.started.connect(loader.load_images)
+        loader.image_loaded.connect(lambda path: add_image_to_list(list_widget, path))
+        loader.finished.connect(thread.quit)
+        loader.finished.connect(loader.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
 
     win.setCentralWidget(central_widget)
     logging.info("Showing main window...")
     win.show()
     logging.info("Entering app event loop.")
     sys.exit(app.exec())
+
+def add_image_to_list(list_widget, path):
+    logging.info(f"[UI] Adding image to list: {path}")
+    item = QListWidgetItem(os.path.basename(path))
+    try:
+        pixmap = QPixmap(path)
+        if not pixmap.isNull():
+            icon = QIcon(pixmap.scaled(128, 128))
+            item.setIcon(icon)
+    except Exception as e:
+        logging.warning(f"Could not load image {path}: {e}")
+    list_widget.addItem(item)
 
 if __name__ == "__main__":
     main()
