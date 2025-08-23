@@ -145,6 +145,66 @@ class ImageAdder(QObject):
         icon = QIcon(QPixmap.fromImage(qimg))
         self.add_image_to_grid(idx, path, icon)
 
+class ImageLoader(QObject):
+    image_loaded = Signal(object, dict, dict)
+
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+
+    def start(self):
+        # Load image and emit QPixmap, info dict, and exif dict (if any)
+        from PySide6.QtGui import QPixmap, QImage
+        import os
+        from PIL import Image as PILImage
+        import piexif
+        # Load image
+        qimg = QImage(self.path)
+        pixmap = QPixmap.fromImage(qimg)
+        # Scale to 256x256 or less
+        if pixmap.width() > 256 or pixmap.height() > 256:
+            pixmap = pixmap.scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # Info dict
+        stat = os.stat(self.path)
+        info = {
+            'width': qimg.width(),
+            'height': qimg.height(),
+            'size': stat.st_size,
+            'mtime': stat.st_mtime,
+        }
+        # Try to load EXIF
+        exif = {}
+        try:
+            pil_img = PILImage.open(self.path)
+            exif_data = pil_img.info.get('exif')
+            if exif_data:
+                exif_dict = piexif.load(exif_data)
+                for ifd in exif_dict:
+                    for tag, value in exif_dict[ifd].items():
+                        tag_name = piexif.TAGS[ifd][tag]["name"] if tag in piexif.TAGS[ifd] else str(tag)
+                        if isinstance(value, bytes):
+                            try:
+                                value = value.decode(errors='replace')
+                            except Exception:
+                                value = str(value)
+                        exif[tag_name] = value
+        except Exception:
+            pass
+        # Also try PIL EXIF for Make/Model fallback
+        try:
+            pil_img = PILImage.open(self.path)
+            pil_exif = pil_img.getexif()
+            if pil_exif:
+                for tag, value in pil_exif.items():
+                    tag_name = PILImage.ExifTags.TAGS.get(tag, str(tag))
+                    exif[tag_name] = value
+        except Exception:
+            pass
+        self.image_loaded.emit(pixmap, info, exif)
+
+# For test import
+__all__ = ["ImageLoader", "ExifLoaderWorker"]
+
 def main():
     logging.info("[DEBUG] Entered main()")
     try:

@@ -1,5 +1,7 @@
+import sys
 import os
-from app import ImageLoader, ExifLoaderWorker
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.app import ImageLoader, ExifLoaderWorker
 from PySide6.QtCore import QEventLoop, QCoreApplication
 from PySide6.QtGui import QImage, QPixmap
 from PIL import Image as PILImage
