@@ -32,12 +32,14 @@ class ImageLoaderWorker(QObject):
         self.finished.emit()
 
 class PhotoViewModel(QObject):
+    """ViewModel: Exposes all state and actions for the View. No UI code."""
     images_changed = Signal(list)
     image_added = Signal(str, int)  # filename, index
     exif_changed = Signal(dict)
     progress_changed = Signal(int, int)
     thumbnail_loaded = Signal(str, object)  # path, QImage or PIL Image
     selected_image_changed = Signal(str)
+    has_selected_image_changed = Signal(bool)
 
     def __init__(self, directory, max_images=100):
         super().__init__()
@@ -50,6 +52,11 @@ class PhotoViewModel(QObject):
         self._loader_thread = None
         self._loader_worker = None
         self.current_exts = self.model.allowed_exts.copy()
+        self._has_selected_image = False
+
+    @property
+    def has_selected_image(self) -> bool:
+        return self._has_selected_image
 
     def load_images(self):
         self.images = []
@@ -77,6 +84,8 @@ class PhotoViewModel(QObject):
         path = self.model.get_image_path(filename)
         self.selected_image = path
         self.selected_image_changed.emit(path)
+        self._has_selected_image = bool(path)
+        self.has_selected_image_changed.emit(self._has_selected_image)
         exif = self.model.load_exif(path)
         self.exif = exif
         self.exif_changed.emit(exif)

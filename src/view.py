@@ -62,6 +62,7 @@ class PhotoView(QMainWindow):
         self.viewmodel.thumbnail_loaded.connect(self._on_thumbnail_loaded)
         self.viewmodel.progress_changed.connect(self._on_progress_changed)
         self.viewmodel.selected_image_changed.connect(self._on_selected_image_changed)
+        self.viewmodel.has_selected_image_changed.connect(self._on_has_selected_image_changed)
 
     def _on_images_changed(self, images):
         # Only clear grid if images list is empty (full reload)
@@ -102,7 +103,7 @@ class PhotoView(QMainWindow):
                         data = thumb.tobytes()
                         w, h = thumb.size
                         # Use Format_RGBA8888 if available, else fallback
-                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_RGB32)
+                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_ARGB32)
                         qimg = QImage(data, w, h, img_format)
                         pixmap = QPixmap.fromImage(qimg)
                     label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
@@ -130,4 +131,7 @@ class PhotoView(QMainWindow):
         self.viewmodel.set_file_types(exts)
 
     def _on_selected_image_changed(self, path):
-        self.open_btn.setEnabled(bool(path))
+        pass  # No longer needed for button enablement
+
+    def _on_has_selected_image_changed(self, has_selection: bool):
+        self.open_btn.setEnabled(has_selection)
