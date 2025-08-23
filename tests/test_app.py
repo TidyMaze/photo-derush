@@ -34,15 +34,15 @@ def test_image_loader(tmp_path):
     app = QCoreApplication.instance() or QCoreApplication([])
     loop = QEventLoop()
     result = []
-    def on_loaded(pixmap, info):
-        result.append((pixmap, info))
+    def on_loaded(pixmap, info, exif):
+        result.append((pixmap, info, exif))
         loop.quit()
     loader = ImageLoader(str(img_path))
     loader.image_loaded.connect(on_loaded)
     loader.start()
     loop.exec()
     assert result
-    pixmap, info = result[0]
+    pixmap, info, exif = result[0]
     assert isinstance(pixmap, QPixmap)
     assert not pixmap.isNull()
     # Should be scaled to 256x256 or less
