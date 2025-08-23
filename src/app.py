@@ -11,15 +11,12 @@ logging.basicConfig(level=logging.INFO)
 CONFIG_PATH = os.path.expanduser('~/.photo_app_config.json')
 
 def load_last_dir():
-    try:
-        with open(CONFIG_PATH, 'r') as f:
-            data = json.load(f)
-            last_dir = data.get('last_dir')
-            if last_dir and os.path.isdir(last_dir):
-                return last_dir
-    except Exception as e:
-        logging.info(f"No previous config or invalid: {e}")
-    return None
+    with open(CONFIG_PATH, 'r') as f:
+        data = json.load(f)
+        last_dir = data.get('last_dir')
+        if last_dir and os.path.isdir(last_dir):
+            return last_dir
+        raise FileNotFoundError
 
 def save_last_dir(path):
     try:
