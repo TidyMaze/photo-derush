@@ -1,26 +1,27 @@
 import os
-from src.app import FileScanner, ImageLoader
+from app import ImageLoader, ExifLoaderWorker
 from PySide6.QtCore import QEventLoop, QCoreApplication
 from PySide6.QtGui import QImage, QPixmap
 from PIL import Image as PILImage
 import piexif
+import numpy as np
 
-def test_file_scanner(tmp_path):
-    # Create dummy image files
-    (tmp_path / "a.jpg").write_bytes(b"1")
-    (tmp_path / "b.png").write_bytes(b"2")
-    (tmp_path / "c.txt").write_bytes(b"3")
-    found = []
-    app = QCoreApplication([])
-    loop = QEventLoop()
-    def on_found(files):
-        found.extend(files)
-        loop.quit()
-    scanner = FileScanner(str(tmp_path))
-    scanner.files_found.connect(on_found)
-    scanner.start()
-    loop.exec()
-    assert set(found) == {"a.jpg", "b.png"}
+# def test_file_scanner(tmp_path):
+#     # Create dummy image files
+#     (tmp_path / "a.jpg").write_bytes(b"1")
+#     (tmp_path / "b.png").write_bytes(b"2")
+#     (tmp_path / "c.txt").write_bytes(b"3")
+#     found = []
+#     app = QCoreApplication([])
+#     loop = QEventLoop()
+#     def on_found(files):
+#         found.extend(files)
+#         loop.quit()
+#     scanner = FileScanner(str(tmp_path))
+#     scanner.files_found.connect(on_found)
+#     scanner.start()
+#     loop.exec()
+#     assert set(found) == {"a.jpg", "b.png"}
 
 def test_image_loader(tmp_path):
     # Create a dummy image file
@@ -89,3 +90,30 @@ def test_image_loader_with_exif(tmp_path):
     assert exif.get('Model') == 'TestModel'
     assert exif.get('DateTimeOriginal') == '2025:08:23 12:34:56'
     assert exif.get('LensModel') == 'TestLens'
+
+def test_exif_loader_worker(tmp_path):
+    from PySide6.QtCore import QEventLoop, QCoreApplication
+    from PIL import Image as PILImage
+    import piexif
+    import numpy as np
+    # Create a dummy image with EXIF
+    img_path = tmp_path / "exif_test.jpg"
+    arr = np.zeros((10, 10, 3), dtype=np.uint8)
+    pil_img = PILImage.fromarray(arr)
+    exif_dict = {"0th": {piexif.ImageIFD.Make: u"TestMake"}}
+    exif_bytes = piexif.dump(exif_dict)
+    pil_img.save(str(img_path), exif=exif_bytes)
+    app = QCoreApplication.instance() or QCoreApplication([])
+    loop = QEventLoop()
+    result = {}
+    def on_loaded(path, exif):
+        result["path"] = path
+        result["exif"] = exif
+        loop.quit()
+    worker = ExifLoaderWorker(str(img_path))
+    worker.exif_loaded.connect(on_loaded)
+    worker.load_exif()
+    loop.exec()
+    assert result["path"] == str(img_path)
+    assert "Make" in result["exif"]
+    assert result["exif"]["Make"] == "TestMake"

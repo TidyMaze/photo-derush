@@ -31,7 +31,7 @@ def get_image_files(directory):
             if os.path.splitext(f)[1].lower() in image_exts]
 
 class ImageLoaderWorker(QObject):
-    image_loaded = Signal(str, QIcon)
+    image_loaded = Signal(str, bytes)
     finished = Signal()
     progress = Signal(int, int)  # current, total
 
@@ -41,7 +41,6 @@ class ImageLoaderWorker(QObject):
 
     def load_images(self):
         total = len(self.image_paths)
-        qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", QImage.Format_RGB888))
         for idx, path in enumerate(self.image_paths, 1):
             logging.info(f"[BG] Loading image: {path}")
             img = Image.open(path)
@@ -54,10 +53,7 @@ class ImageLoaderWorker(QObject):
             img_cropped = img.crop((left, top, right, bottom)).resize((128, 128), Image.Resampling.LANCZOS)
             img_cropped = img_cropped.convert("RGBA")
             data = img_cropped.tobytes("raw", "RGBA")
-            qimg = QImage(data, 128, 128, qimage_format)
-            pixmap = QPixmap.fromImage(qimg)
-            icon = QIcon(pixmap)
-            self.image_loaded.emit(path, icon)
+            self.image_loaded.emit(path, data)
             self.progress.emit(idx, total)
         self.finished.emit()
 
@@ -241,7 +237,11 @@ def main():
                     super().__init__()
                     self.grid_adder_func = grid_adder_func
                     self.idx = 0
-                def add(self, path, icon):
+                def add(self, path, data):
+                    # Create QImage/QPixmap/QIcon in main thread
+                    qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", QImage.Format_RGB32))
+                    qimg = QImage(data, thumb_size, thumb_size, qimage_format)
+                    icon = QIcon(QPixmap.fromImage(qimg))
                     self.grid_adder_func(self.idx, path, icon)
                     self.idx += 1
 
