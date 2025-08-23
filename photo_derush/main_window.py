@@ -179,6 +179,7 @@ class LightroomMainWindow(QMainWindow):
 
     # --- ViewModel signal handlers (to be implemented) ---
     def _on_images_changed(self, images):
+        self.logger.info(f"[_on_images_changed] Images changed: {images}")
         self.image_grid.image_paths = images
         self.image_grid.populate_grid()
         self._update_status_bar(action='images changed')
@@ -352,6 +353,7 @@ class LightroomMainWindow(QMainWindow):
             pass
 
     def load_images(self, image_paths, image_info):
+        self.logger.info(f"[LoadImages] Loading images: {image_paths}")
         self.logger.debug("[AsyncLoad] Applying prepared images: %d", len(image_paths))
         self.viewmodel.image_info = image_info or {}
         sorted_images, prob_map = self.viewmodel.get_sorted_images(sort_by_group=self.sort_by_group, return_prob_map=True)
@@ -566,10 +568,15 @@ class LightroomMainWindow(QMainWindow):
         return True
 
     def _trigger_feature_extraction_for_missing(self):
-        # Triggers feature extraction for all images missing a feature vector
-        for n in self.viewmodel.sorted_images:
+        images = self.viewmodel.sorted_images
+        self.logger.info(f"[FeatureExtract] Triggering extraction for images: {images}")
+        if not images:
+            self.logger.warning("[FeatureExtract] No images available for feature extraction. Skipping.")
+            return
+        for n in images:
             path = os.path.join(self.directory, n)
             if self._feature_cache.get(path) is None:
+                self.logger.info(f"[FeatureExtract] Scheduling extraction for: {path}")
                 self._schedule_feature_extraction(path)
 
     def _sort_images(self, mode):
