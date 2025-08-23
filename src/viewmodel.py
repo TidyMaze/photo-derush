@@ -158,14 +158,19 @@ class PhotoViewModel(QObject):
             logging.error(f"Failed to open image in viewer: {e}")
 
     def set_quick_filter(self, rating=0, tag='', date=''):
+        import logging
+        logging.info(f"ViewModel.set_quick_filter: rating={rating}, tag='{tag}', date='{date}'")
         self._quick_filter_rating = rating
         self._quick_filter_tag = tag
         self._quick_filter_date = date
         self.apply_quick_filter()
 
     def apply_quick_filter(self):
+        import logging
+        logging.info(f"ViewModel.apply_quick_filter: rating={self._quick_filter_rating}, tag='{self._quick_filter_tag}', date='{self._quick_filter_date}'")
         filtered = self.model.filter_by_rating_tag_date(
             self._quick_filter_rating, self._quick_filter_tag, self._quick_filter_date)
+        logging.info(f"ViewModel.apply_quick_filter: filtered={filtered}")
         self.images = filtered
         self.images_changed.emit(self.images)
         # Re-emit image_added for each image for grid population

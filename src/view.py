@@ -267,16 +267,17 @@ class PhotoView(QMainWindow):
             self.progress_bar.hide()
 
     def _on_filetype_changed(self, idx):
+        import logging
         exts = self.filetype_combo.currentData()
+        logging.info(f"Filetype filter changed: {exts}")
         self.viewmodel.set_file_types(exts)
 
     def _on_quick_filter_changed(self):
-        # Get filter values
+        import logging
         rating_filter = self.rating_filter_combo.currentData()
         tag_filter = self.tag_filter_edit.text().strip()
         date_filter = self.date_filter_edit.text().strip()
-
-        # Update viewmodel filters
+        logging.info(f"Quick filter changed: rating={rating_filter}, tag='{tag_filter}', date='{date_filter}'")
         self.viewmodel.set_quick_filter(rating_filter, tag_filter, date_filter)
 
     def _on_rating_clicked(self, n):

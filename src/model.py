@@ -136,7 +136,9 @@ class ImageModel:
         return result
 
     def filter_by_rating_tag_date(self, rating=0, tag='', date=''):
+        logging.info(f"Filtering: rating={rating}, tag='{tag}', date='{date}'")
         files = self.get_image_files()
+        logging.info(f"Files before filtering: {files}")
         self._load_ratings_tags()
         filtered = []
         tag = tag.lower().strip() if tag else ''
@@ -159,4 +161,5 @@ class ImageModel:
                 if not exif_date.startswith(date):
                     continue
             filtered.append(f)
+        logging.info(f"Files after filtering: {filtered}")
         return filtered
