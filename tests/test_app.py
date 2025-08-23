@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.app import ImageLoader, ExifLoaderWorker
-from PySide6.QtCore import QEventLoop, QCoreApplication
+from PySide6.QtCore import QEventLoop, QCoreApplication, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PIL import Image as PILImage
 import piexif
@@ -39,7 +39,7 @@ def test_image_loader(tmp_path):
         loop.quit()
     loader = ImageLoader(str(img_path))
     loader.image_loaded.connect(on_loaded)
-    loader.start()
+    QTimer.singleShot(0, loader.start)
     loop.exec()
     assert result
     pixmap, info, exif = result[0]
@@ -81,7 +81,7 @@ def test_image_loader_with_exif(tmp_path):
         loop.quit()
     loader = ImageLoader(str(img_path))
     loader.image_loaded.connect(on_loaded)
-    loader.start()
+    QTimer.singleShot(0, loader.start)
     loop.exec()
     assert result
     pixmap, info, exif = result[0]
