@@ -19,7 +19,7 @@ Plan:
 18. [x] Add quick filter bar (by rating/tag/date)
 19. [~] Add export/copy/move selected images (skipped)
 20. [~] Add batch metadata editing (skipped)
-21. [ ] Add fullscreen/compare mode for selected images
+21. [x] Add fullscreen/compare mode for selected images
 22. [ ] Add settings/preferences dialog
 
 Steps Executed:
@@ -63,6 +63,8 @@ Steps Executed:
 - 2025-08-23: Verified in running app; filter bar updates image grid in real time
 - 2025-08-23: Skipped export/copy/move selected images as per user instruction
 - 2025-08-23: Skipped batch metadata editing as per user instruction
+- 2025-08-23: Implemented multi-selection and fullscreen/compare mode for selected images
+- 2025-08-23: Verified in running app; fullscreen/compare mode works as intended
 
-Progress: 85%
-Next step: Add fullscreen/compare mode for selected images
+Progress: 90%
+Next step: Add settings/preferences dialog

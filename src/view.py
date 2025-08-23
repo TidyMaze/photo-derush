@@ -45,6 +45,7 @@ class PhotoView(QMainWindow):
         self.images_per_row = images_per_row
         self.setWindowTitle("Photo App - Image Browser")
         self.resize(1000, 700)
+        self.selected_filenames = set()  # Multi-selection support
 
         self.central_widget = QWidget()
         self.main_layout = QHBoxLayout(self.central_widget)
@@ -145,7 +146,7 @@ class PhotoView(QMainWindow):
         self.side_layout.addWidget(self.fullscreen_btn)
 
         self.label_refs = {}
-        self.selected_filename = None
+        self.selected_filename = None  # Kept for backward compatibility
         self._connect_signals()
 
     def _connect_signals(self):
@@ -177,20 +178,40 @@ class PhotoView(QMainWindow):
         label.setFixedSize(self.thumb_size, self.thumb_size)
         label.setScaledContents(True)
         label.setToolTip(filename)
-        label.mousePressEvent = lambda e, f=filename: self._on_label_clicked(f)
+        label.mousePressEvent = lambda e, f=filename, l=label: self._on_label_clicked(e, f, l)
         self.grid_layout.addWidget(label, row, col)
         self.label_refs[(row, col)] = label
         self.viewmodel.load_thumbnail(filename)
-        # Selection highlight
         self._update_label_highlight(label, filename)
 
-    def _on_label_clicked(self, filename):
-        self.selected_filename = filename
+    def _on_label_clicked(self, event, filename, label):
+        modifiers = event.modifiers()
+        if modifiers & Qt.KeyboardModifier.ControlModifier or modifiers & Qt.KeyboardModifier.MetaModifier:
+            # Ctrl/Cmd+Click: toggle selection
+            if filename in self.selected_filenames:
+                self.selected_filenames.remove(filename)
+            else:
+                self.selected_filenames.add(filename)
+        elif modifiers & Qt.KeyboardModifier.ShiftModifier and self.selected_filenames:
+            # Shift+Click: select range
+            all_files = [label.toolTip() for label in self.label_refs.values()]
+            last = None
+            if self.selected_filenames:
+                last = all_files.index(sorted(self.selected_filenames, key=lambda x: all_files.index(x))[-1])
+            curr = all_files.index(filename)
+            if last is not None:
+                rng = range(min(last, curr), max(last, curr) + 1)
+                for i in rng:
+                    self.selected_filenames.add(all_files[i])
+        else:
+            # Single click: select only this
+            self.selected_filenames = {filename}
+        self.selected_filename = filename  # For backward compatibility
         self._update_all_highlights()
         self.viewmodel.select_image(filename)
 
     def _update_label_highlight(self, label, filename):
-        if hasattr(self, 'selected_filename') and filename == self.selected_filename:
+        if filename in getattr(self, 'selected_filenames', set()):
             label.setStyleSheet("border: 3px solid #0078d7; background: #e6f0fa;")
         else:
             label.setStyleSheet("")
@@ -201,10 +222,11 @@ class PhotoView(QMainWindow):
             self._update_label_highlight(label, filename)
 
     def _on_selected_image_changed(self, path):
-        # Update highlight when selection changes from viewmodel
         if path:
             filename = os.path.basename(path)
             self.selected_filename = filename
+            if filename not in self.selected_filenames:
+                self.selected_filenames = {filename}
             self._update_all_highlights()
 
     def resizeEvent(self, event):
@@ -296,10 +318,7 @@ class PhotoView(QMainWindow):
 
     def _on_fullscreen_clicked(self):
         # Show selected image(s) in fullscreen/compare dialog
-        selected = []
-        if self.selected_filename:
-            selected.append(self.viewmodel.model.get_image_path(self.selected_filename))
-        # For now, only single selection; extend here for multi-selection support
+        selected = [self.viewmodel.model.get_image_path(f) for f in self.selected_filenames]
         if not selected:
             return
         dlg = FullscreenDialog(selected, self)
