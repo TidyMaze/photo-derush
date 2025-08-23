@@ -1,7 +1,7 @@
 import sys
 import logging
 from PySide6.QtWidgets import QApplication, QMainWindow, QListWidget, QListWidgetItem, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon, QPixmap, QImage
 from PySide6.QtCore import QObject, Signal, QThread
 from PIL import Image, ExifTags
 import os
@@ -44,12 +44,25 @@ class ImageLoaderWorker(QObject):
 
     def load_images(self):
         total = len(self.image_paths)
+        qimage_format = getattr(QImage, "Format_RGBA8888", QImage.Format_RGB32)
         for idx, path in enumerate(self.image_paths, 1):
             logging.info(f"[BG] Loading image: {path}")
-            pixmap = QPixmap(path)
-            if not pixmap.isNull():
-                icon = QIcon(pixmap.scaled(128, 128))
-            else:
+            try:
+                img = Image.open(path)
+                w, h = img.size
+                min_dim = min(w, h)
+                left = (w - min_dim) // 2
+                top = (h - min_dim) // 2
+                right = left + min_dim
+                bottom = top + min_dim
+                img_cropped = img.crop((left, top, right, bottom)).resize((128, 128), Image.Resampling.LANCZOS)
+                img_cropped = img_cropped.convert("RGBA")
+                data = img_cropped.tobytes("raw", "RGBA")
+                qimg = QImage(data, 128, 128, qimage_format)
+                pixmap = QPixmap.fromImage(qimg)
+                icon = QIcon(pixmap)
+            except Exception as e:
+                logging.warning(f"Failed to process image {path}: {e}")
                 icon = QIcon()
             self.image_loaded.emit(path, icon)
             self.progress.emit(idx, total)

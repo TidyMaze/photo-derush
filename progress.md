@@ -40,6 +40,7 @@ Steps Executed:
 - 2025-08-23: Planned detailed next steps for project, including caching, filters, batch actions, tagging, search, export, and settings
 - 2025-08-23: Planned Lightroom-style grid UI for image display
 - 2025-08-23: Implemented Lightroom-style grid UI in main app using existing modular components
+- 2025-08-23: Removed try/except from import of Resampling/LANCZOS in app.py, used importlib fallback logic
 
 Progress: 60%
 Next step: Implement thumbnail/miniature caching for faster preview
