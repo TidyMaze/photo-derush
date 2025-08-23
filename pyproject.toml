@@ -1,26 +1,14 @@
 [tool.poetry]
-name = "photo-derush"
+name = "photo_app"
 version = "0.1.0"
-description = "A tool to dereush photography session with IA"
-authors = ["yrolland <rolland_yann@orange.fr>"]
-readme = "README.md"
-package-mode = true
-packages = [{ include = "photo_derush" }]
+description = "Simple photo management app"
+authors = ["Yann Rolland"]
 
 [tool.poetry.dependencies]
-python = ">=3.12,<3.13"
-pillow = "^11.3.0"
-pytest = "^8.4.1"
-imagehash = "^4.3.2"
-faiss-cpu = "^1.11.0"
-opencv-python = "^4.12.0.88"
-PySide6 = "^6.7.0"
-numpy = "^2.0.0"
-scikit-learn = "1.5.1"
-joblib = "1.4.2"
-pandas = "^2.2.2"
-mediapipe = "^0.10.14"
+python = ">=3.10,<3.13"
+PySide6 = "^6.6.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
