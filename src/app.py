@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, Signal, QThread
 from PIL import Image, ExifTags
 import os
 import json
+import qdarktheme
 
 logging.basicConfig(level=logging.INFO)
 CONFIG_PATH = os.path.expanduser('~/.photo_app_config.json')
@@ -125,7 +126,7 @@ def main():
     try:
         logging.info("Starting QApplication...")
         app = QApplication(sys.argv)
-        app.setStyle("Fusion")
+        qdarktheme.setup_theme()
         last_dir = load_last_dir()
         logging.info(f"Loaded last_dir: {last_dir}")
         dir_path = last_dir
