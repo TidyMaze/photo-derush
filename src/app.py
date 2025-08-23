@@ -1,6 +1,6 @@
 import sys
 import logging
-from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QListWidget, QListWidgetItem, QLabel, QVBoxLayout, QWidget, QTextEdit
+from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QListWidget, QListWidgetItem, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import QObject, Signal, QThread
 from PIL import Image, ExifTags
@@ -36,15 +36,18 @@ def get_image_files(directory):
 class ImageLoaderWorker(QObject):
     image_loaded = Signal(str)
     finished = Signal()
+    progress = Signal(int, int)  # current, total
 
     def __init__(self, image_paths):
         super().__init__()
         self.image_paths = image_paths
 
     def load_images(self):
-        for path in self.image_paths:
+        total = len(self.image_paths)
+        for idx, path in enumerate(self.image_paths, 1):
             logging.info(f"[BG] Loading image: {path}")
             self.image_loaded.emit(path)
+            self.progress.emit(idx, total)
         self.finished.emit()
 
 class ExifLoaderWorker(QObject):
@@ -121,6 +124,10 @@ class GuiUpdater(QObject):
             exif_worker_thread.quit()
             exif_worker_thread.wait()
 
+class UiUpdater(QObject):
+    add_image = Signal(str)
+    update_progress = Signal(int, int)
+
 def main():
     logging.info("Starting QApplication...")
     app = QApplication(sys.argv)
@@ -150,6 +157,19 @@ def main():
     exif_view.setMinimumHeight(120)
     exif_view.setPlaceholderText("Select an image to view EXIF data.")
 
+    # Progress bar for image loading
+    progress_bar = None
+    if image_paths:
+        progress_bar = QProgressBar()
+        progress_bar.setMinimum(0)
+        progress_bar.setMaximum(len(image_paths))
+        progress_bar.setValue(0)
+        progress_bar.setTextVisible(True)
+        progress_bar.setFormat("Loading images: %v/%m")
+        layout.insertWidget(0, progress_bar)  # Add at the top
+        progress_bar.show()
+        logging.info("Progress bar shown at the top of the layout.")
+
     # State for EXIF worker/thread and last requested path
     exif_worker_thread = None
     exif_worker = None
@@ -163,6 +183,7 @@ def main():
         lambda: last_exif_path,
         lambda: exif_worker_thread
     )
+    ui_updater = UiUpdater()
 
     def cleanup_threads():
         logging.info("Cleaning up threads before exit...")
@@ -216,7 +237,13 @@ def main():
         loader_thread = QThread()
         loader.moveToThread(loader_thread)
         loader_thread.started.connect(loader.load_images)
-        loader.image_loaded.connect(lambda path: add_image_to_list(list_widget, path))
+        # Connect signals for thread-safe UI updates
+        ui_updater.add_image.connect(lambda path: add_image_to_list(list_widget, path))
+        ui_updater.update_progress.connect(lambda current, total: progress_bar.setValue(current) if progress_bar else None)
+        loader.image_loaded.connect(ui_updater.add_image.emit)
+        loader.progress.connect(ui_updater.update_progress.emit)
+        if progress_bar:
+            loader.finished.connect(lambda: progress_bar.hide())
         loader.finished.connect(loader_thread.quit)
         loader.finished.connect(loader.deleteLater)
         loader_thread.finished.connect(loader_thread.deleteLater)
