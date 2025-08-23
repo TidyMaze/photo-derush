@@ -291,4 +291,7 @@ def main():
     except Exception as e:
         logging.exception(f"[ERROR] Exception in main: {e}")
 
-default_entry = __name__ == "__main__
+default_entry = __name__ == "__main__"
+if default_entry:
+    logging.info("[DEBUG] __main__ entry point reached")
+    main()
