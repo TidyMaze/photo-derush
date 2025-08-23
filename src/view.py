@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout, QPushButton
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout, QPushButton, QLineEdit
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 
@@ -52,6 +52,27 @@ class PhotoView(QMainWindow):
         self.open_btn.clicked.connect(self._on_open_in_viewer)
         self.layout.addWidget(self.open_btn)
 
+        # Rating UI
+        self.rating_layout = QHBoxLayout()
+        self.rating_stars = []
+        for i in range(1, 6):
+            btn = QPushButton("☆")
+            btn.setFixedWidth(28)
+            btn.setFlat(True)
+            btn.clicked.connect(lambda _, n=i: self._on_rating_clicked(n))
+            self.rating_layout.addWidget(btn)
+            self.rating_stars.append(btn)
+        self.layout.addLayout(self.rating_layout)
+        # Tags UI
+        self.tags_layout = QHBoxLayout()
+        self.tags_label = QLabel("Tags:")
+        self.tags_edit = QLineEdit()
+        self.tags_edit.setPlaceholderText("comma-separated tags")
+        self.tags_edit.editingFinished.connect(self._on_tags_edited)
+        self.tags_layout.addWidget(self.tags_label)
+        self.tags_layout.addWidget(self.tags_edit)
+        self.layout.addLayout(self.tags_layout)
+
         self.label_refs = {}
         self._connect_signals()
 
@@ -63,6 +84,8 @@ class PhotoView(QMainWindow):
         self.viewmodel.progress_changed.connect(self._on_progress_changed)
         self.viewmodel.selected_image_changed.connect(self._on_selected_image_changed)
         self.viewmodel.has_selected_image_changed.connect(self._on_has_selected_image_changed)
+        self.viewmodel.rating_changed.connect(self._on_rating_changed)
+        self.viewmodel.tags_changed.connect(self._on_tags_changed)
 
     def _on_images_changed(self, images):
         # Only clear grid if images list is empty (full reload)
@@ -71,6 +94,8 @@ class PhotoView(QMainWindow):
                 label.deleteLater()
             self.label_refs.clear()
         self.open_btn.setEnabled(False)
+        self._on_rating_changed(0)
+        self._on_tags_changed([])
 
     def _on_image_added(self, filename, idx):
         row = idx // self.images_per_row
@@ -135,3 +160,17 @@ class PhotoView(QMainWindow):
 
     def _on_has_selected_image_changed(self, has_selection: bool):
         self.open_btn.setEnabled(has_selection)
+
+    def _on_rating_clicked(self, n):
+        self.viewmodel.set_rating(n)
+
+    def _on_rating_changed(self, rating):
+        for i, btn in enumerate(self.rating_stars, 1):
+            btn.setText("★" if i <= rating else "☆")
+
+    def _on_tags_edited(self):
+        tags = [t.strip() for t in self.tags_edit.text().split(",") if t.strip()]
+        self.viewmodel.set_tags(tags)
+
+    def _on_tags_changed(self, tags):
+        self.tags_edit.setText(", ".join(tags))

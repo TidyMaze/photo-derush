@@ -12,7 +12,7 @@ Plan:
 11. [x] Add thumbnail/miniature caching for faster preview
 12. [x] Add file type filter (e.g., .jpg/.png only)
 13. [x] Add open-in-system-viewer for selected image
-14. [ ] Add image rating/tagging support
+14. [x] Add image rating/tagging support
 15. [ ] Add search/filter by filename or EXIF
 16. [ ] Add responsive grid layout with selection highlight (Lightroom-style polish)
 17. [ ] Add info/metadata side panel with editable tags
@@ -50,6 +50,9 @@ Steps Executed:
 - 2025-08-23: Implemented and verified thumbnail/miniature caching for faster preview
 - 2025-08-23: Implemented and verified file type filter (e.g., .jpg/.png only)
 - 2025-08-23: Implemented and verified open-in-system-viewer for selected image
+- 2025-08-23: Refactored model.py for robust logging and input validation
+- 2025-08-23: Added comprehensive unit tests for ImageModel (input validation, error handling, persistence)
+- 2025-08-23: All tests pass for ImageModel, confirming robust error handling and correct behavior
 
-Progress: 75%
-Next step: Add image rating/tagging support
+Progress: 80%
+Next step: Add search/filter by filename or EXIF

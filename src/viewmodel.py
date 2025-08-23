@@ -40,6 +40,8 @@ class PhotoViewModel(QObject):
     thumbnail_loaded = Signal(str, object)  # path, QImage or PIL Image
     selected_image_changed = Signal(str)
     has_selected_image_changed = Signal(bool)
+    rating_changed = Signal(int)
+    tags_changed = Signal(list)
 
     def __init__(self, directory, max_images=100):
         super().__init__()
@@ -53,10 +55,20 @@ class PhotoViewModel(QObject):
         self._loader_worker = None
         self.current_exts = self.model.allowed_exts.copy()
         self._has_selected_image = False
+        self._rating = 0
+        self._tags = []
 
     @property
     def has_selected_image(self) -> bool:
         return self._has_selected_image
+
+    @property
+    def rating(self):
+        return self._rating
+
+    @property
+    def tags(self):
+        return self._tags
 
     def load_images(self):
         self.images = []
@@ -79,6 +91,16 @@ class PhotoViewModel(QObject):
         self.images_changed.emit(self.images.copy())
         self.image_added.emit(filename, len(self.images) - 1)
 
+    def _update_rating_tags(self):
+        if self.selected_image:
+            self._rating = self.model.get_rating(self.selected_image)
+            self._tags = self.model.get_tags(self.selected_image)
+        else:
+            self._rating = 0
+            self._tags = []
+        self.rating_changed.emit(self._rating)
+        self.tags_changed.emit(self._tags)
+
     @Slot(str)
     def select_image(self, filename):
         path = self.model.get_image_path(filename)
@@ -86,9 +108,24 @@ class PhotoViewModel(QObject):
         self.selected_image_changed.emit(path)
         self._has_selected_image = bool(path)
         self.has_selected_image_changed.emit(self._has_selected_image)
+        self._update_rating_tags()
         exif = self.model.load_exif(path)
         self.exif = exif
         self.exif_changed.emit(exif)
+
+    @Slot(int)
+    def set_rating(self, rating):
+        if self.selected_image:
+            self.model.set_rating(self.selected_image, rating)
+            self._rating = rating
+            self.rating_changed.emit(rating)
+
+    @Slot(list)
+    def set_tags(self, tags):
+        if self.selected_image:
+            self.model.set_tags(self.selected_image, tags)
+            self._tags = tags
+            self.tags_changed.emit(tags)
 
     @Slot(str)
     def load_thumbnail(self, filename):
