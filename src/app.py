@@ -2,7 +2,7 @@ import sys
 import logging
 from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar, QGridLayout, QScrollArea
 from PySide6.QtGui import QIcon, QPixmap, QImage
-from PySide6.QtCore import QObject, Signal, QThread, QTimer, QByteArray, Qt
+from PySide6.QtCore import QObject, Signal, QThread, QTimer, Qt
 from PIL import Image, ExifTags
 import os
 import json
@@ -196,8 +196,6 @@ def main():
             label.mousePressEvent = lambda e, p=path: show_exif_for_path(p)
             grid_layout.addWidget(label, row, col)
             label_refs[(row, col)] = label
-            if buffer is not None:
-                image_buffers[(row, col)] = buffer  # Prevent GC
 
         # State for EXIF worker/thread and last requested path
         exif_worker_thread = None
@@ -272,7 +270,7 @@ def main():
                         self.timer.stop()
 
             image_adder = GridImageAdder()
-            image_adder.image_ready.connect(add_image_to_grid, Qt.QueuedConnection)
+            image_adder.image_ready.connect(add_image_to_grid, Qt.ConnectionType.QueuedConnection)
             image_loader = ImageLoaderWorker(image_paths)
             image_thread = QThread()
             image_loader.moveToThread(image_thread)
@@ -292,6 +290,3 @@ def main():
         logging.exception(f"[ERROR] Exception in main: {e}")
 
 default_entry = __name__ == "__main__"
-if default_entry:
-    logging.info("[DEBUG] __main__ entry point reached")
-    main()
