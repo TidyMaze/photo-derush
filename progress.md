@@ -12,9 +12,7 @@ Plan:
 11. [x] Add thumbnail/miniature caching for faster preview
 12. [x] Add file type filter (e.g., .jpg/.png only)
 13. [x] Add open-in-system-viewer for selected image
-14. [ ] Add drag-and-drop directory selection
 15. [ ] Add keyboard navigation (arrow keys, shortcuts)
-16. [ ] Add dark mode toggle
 17. [ ] Add multi-image selection and batch actions
 18. [ ] Add image rating/tagging support
 19. [ ] Add search/filter by filename or EXIF
@@ -56,4 +54,4 @@ Steps Executed:
 - 2025-08-23: Implemented and verified open-in-system-viewer for selected image
 
 Progress: 75%
-Next step: Add drag-and-drop directory selection
+Next step: Add keyboard navigation (arrow keys, shortcuts)
