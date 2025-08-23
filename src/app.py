@@ -47,6 +47,80 @@ class ImageLoaderWorker(QObject):
             self.image_loaded.emit(path)
         self.finished.emit()
 
+class ExifLoaderWorker(QObject):
+    exif_loaded = Signal(str, dict)
+    exif_error = Signal(str, str)
+
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self._abort = False
+
+    def abort(self):
+        self._abort = True
+
+    def load_exif(self):
+        import time
+        start = time.time()
+        try:
+            img = Image.open(self.path)
+            getexif = getattr(img, "_getexif", None)
+            if not callable(getexif):
+                self.exif_loaded.emit(self.path, {})
+                logging.info(f"No _getexif for {self.path} (took {time.time()-start:.3f}s)")
+                return
+            exif_data = getexif()
+            exif_time = time.time() - start
+            logging.info(f"[BG] _getexif for {self.path} took {exif_time:.3f}s")
+            if not exif_data:
+                self.exif_loaded.emit(self.path, {})
+                return
+            exif = {}
+            if isinstance(exif_data, dict):
+                for tag, value in exif_data.items():
+                    tag_name = ExifTags.TAGS.get(tag, str(tag))
+                    exif[tag_name] = value
+            if self._abort:
+                logging.info(f"EXIF load for {self.path} aborted.")
+                return
+            self.exif_loaded.emit(self.path, exif)
+        except Exception as e:
+            logging.warning(f"Could not read EXIF for {self.path}: {e}")
+            self.exif_error.emit(self.path, str(e))
+
+class GuiUpdater(QObject):
+    def __init__(self, exif_view, get_last_exif_path, get_exif_worker_thread, parent=None):
+        super().__init__(parent)
+        self.exif_view = exif_view
+        self.get_last_exif_path = get_last_exif_path
+        self.get_exif_worker_thread = get_exif_worker_thread
+
+    def update_exif(self, loaded_path, exif):
+        last_exif_path = self.get_last_exif_path()
+        exif_worker_thread = self.get_exif_worker_thread()
+        if last_exif_path != loaded_path:
+            logging.info(f"Stale EXIF result for {loaded_path}, ignoring.")
+            return
+        if not exif:
+            self.exif_view.setText("No EXIF data found.")
+        else:
+            lines = [f"{k}: {v}" for k, v in sorted(exif.items())]
+            self.exif_view.setText("\n".join(lines))
+        if exif_worker_thread is not None:
+            exif_worker_thread.quit()
+            exif_worker_thread.wait()
+
+    def update_exif_error(self, error_path, msg):
+        last_exif_path = self.get_last_exif_path()
+        exif_worker_thread = self.get_exif_worker_thread()
+        if last_exif_path != error_path:
+            logging.info(f"Stale EXIF error for {error_path}, ignoring.")
+            return
+        self.exif_view.setText("No EXIF data or not a photo.")
+        if exif_worker_thread is not None:
+            exif_worker_thread.quit()
+            exif_worker_thread.wait()
+
 def main():
     logging.info("Starting QApplication...")
     app = QApplication(sys.argv)
@@ -76,7 +150,19 @@ def main():
     exif_view.setMinimumHeight(120)
     exif_view.setPlaceholderText("Select an image to view EXIF data.")
 
+    # State for EXIF worker/thread and last requested path
+    exif_worker_thread = None
+    exif_worker = None
+    last_exif_path = None
+
+    gui_updater = GuiUpdater(
+        exif_view,
+        lambda: last_exif_path,
+        lambda: exif_worker_thread
+    )
+
     def show_exif_for_item(item):
+        nonlocal exif_worker_thread, exif_worker, last_exif_path
         if not item:
             exif_view.setText("")
             return
@@ -85,26 +171,21 @@ def main():
             exif_view.setText("")
             return
         path = image_paths[idx]
-        logging.info(f"Loading EXIF for: {path}")
-        try:
-            img = Image.open(path)
-            getexif = getattr(img, "_getexif", None)
-            if not callable(getexif):
-                exif_view.setText("No EXIF data found.")
-                return
-            exif_data = getexif()
-            if not exif_data:
-                exif_view.setText("No EXIF data found.")
-                return
-            exif = {}
-            for tag, value in exif_data.items():
-                tag_name = ExifTags.TAGS.get(tag, str(tag))
-                exif[tag_name] = value
-            lines = [f"{k}: {v}" for k, v in sorted(exif.items())]
-            exif_view.setText("\n".join(lines))
-        except Exception as e:
-            logging.warning(f"Could not read EXIF for {path}: {e}")
-            exif_view.setText("No EXIF data or not a photo.")
+        last_exif_path = path
+        exif_view.setText("Loading EXIF...")
+        # Abort previous worker if running
+        if exif_worker_thread is not None and exif_worker_thread.isRunning():
+            if exif_worker is not None:
+                exif_worker.abort()
+            exif_worker_thread.quit()
+            exif_worker_thread.wait()
+        exif_worker = ExifLoaderWorker(path)
+        exif_worker_thread = QThread()
+        exif_worker.moveToThread(exif_worker_thread)
+        exif_worker_thread.started.connect(exif_worker.load_exif)
+        exif_worker.exif_loaded.connect(gui_updater.update_exif)
+        exif_worker.exif_error.connect(gui_updater.update_exif_error)
+        exif_worker_thread.start()
 
     if not image_paths:
         logging.info("No images found in the selected directory.")
