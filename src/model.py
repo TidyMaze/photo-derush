@@ -3,15 +3,18 @@ from PIL import Image, ExifTags
 from cache import ThumbnailCache
 
 class ImageModel:
-    def __init__(self, directory, max_images=100, cache=None):
+    def __init__(self, directory, max_images=100, cache=None, allowed_exts=None):
         self.directory = directory
         self.max_images = max_images
         self.cache = cache or ThumbnailCache()
+        self.allowed_exts = allowed_exts or ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']
+
+    def set_allowed_exts(self, exts):
+        self.allowed_exts = exts
 
     def get_image_files(self):
-        image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
         files = [f for f in os.listdir(self.directory)
-                 if os.path.splitext(f)[1].lower() in image_exts]
+                 if os.path.splitext(f)[1].lower() in self.allowed_exts]
         return files[:self.max_images]
 
     def get_image_path(self, filename):

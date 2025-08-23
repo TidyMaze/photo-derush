@@ -45,6 +45,7 @@ class PhotoViewModel(QObject):
         self.max_images = max_images
         self._loader_thread = None
         self._loader_worker = None
+        self.current_exts = self.model.allowed_exts.copy()
 
     def load_images(self):
         self.images = []
@@ -79,3 +80,8 @@ class PhotoViewModel(QObject):
     def load_thumbnail(self, filename):
         # No-op: thumbnails are loaded by the worker now
         pass
+
+    def set_file_types(self, exts):
+        self.current_exts = exts
+        self.model.set_allowed_exts(exts)
+        self.load_images()

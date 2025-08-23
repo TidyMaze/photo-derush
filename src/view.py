@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 
@@ -14,6 +14,19 @@ class PhotoView(QMainWindow):
         self.central_widget = QWidget()
         self.layout = QVBoxLayout(self.central_widget)
         self.setCentralWidget(self.central_widget)
+
+        # File type filter UI
+        self.filter_layout = QHBoxLayout()
+        self.filetype_combo = QComboBox()
+        self.filetype_combo.addItem("All", [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff"])
+        self.filetype_combo.addItem("JPG", [".jpg", ".jpeg"])
+        self.filetype_combo.addItem("PNG", [".png"])
+        self.filetype_combo.addItem("GIF", [".gif"])
+        self.filetype_combo.addItem("BMP", [".bmp"])
+        self.filetype_combo.addItem("TIFF", [".tiff"])
+        self.filetype_combo.currentIndexChanged.connect(self._on_filetype_changed)
+        self.filter_layout.addWidget(self.filetype_combo)
+        self.layout.addLayout(self.filter_layout)
 
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
@@ -97,3 +110,7 @@ class PhotoView(QMainWindow):
             self.progress_bar.show()
         if current >= total:
             self.progress_bar.hide()
+
+    def _on_filetype_changed(self, idx):
+        exts = self.filetype_combo.currentData()
+        self.viewmodel.set_file_types(exts)
