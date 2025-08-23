@@ -5,7 +5,8 @@ Plan:
 4. [x] Move long tasks off GUI thread
 5. [x] Add tests
 6. [x] Add image preview on selection
-7. [ ] Add file info panel for selected image
+7. [x] Add file info panel for selected image
+8. [x] Remember last selected directory
 
 Steps Executed:
 - 2025-08-23: Set up minimal project structure
@@ -17,6 +18,8 @@ Steps Executed:
 - 2025-08-23: Planning and starting image preview feature
 - 2025-08-23: Implemented and verified image preview feature
 - 2025-08-23: Planning and starting file info panel feature
+- 2025-08-23: Implemented and verified file info panel feature
+- 2025-08-23: Implemented and verified last directory persistence
 
-Progress: 90%
-Next step: Implement file info panel for selected image
+Progress: 100%
+Next step: Suggest and implement another feature (e.g., file type filter, open in viewer, drag-and-drop)

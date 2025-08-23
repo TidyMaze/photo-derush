@@ -4,8 +4,28 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialo
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPixmap
 import os
+import json
 
 logging.basicConfig(level=logging.INFO)
+CONFIG_PATH = os.path.expanduser('~/.photo_app_config.json')
+
+def load_last_dir():
+    try:
+        with open(CONFIG_PATH, 'r') as f:
+            data = json.load(f)
+            last_dir = data.get('last_dir')
+            if last_dir and os.path.isdir(last_dir):
+                return last_dir
+    except Exception as e:
+        logging.info(f"No previous config or invalid: {e}")
+    return None
+
+def save_last_dir(path):
+    try:
+        with open(CONFIG_PATH, 'w') as f:
+            json.dump({'last_dir': path}, f)
+    except Exception as e:
+        logging.warning(f"Could not save config: {e}")
 
 class FileScanner(QThread):
     files_found = Signal(list)
@@ -68,17 +88,23 @@ class MainWindow(QMainWindow):
         self.scanner = None
         self.current_dir = None
         self.image_loader = None
+        self.last_dir = load_last_dir()
+        if self.last_dir:
+            self.load_directory(self.last_dir)
         self.list_widget.currentItemChanged.connect(self.preview_selected_image)
     def select_directory(self):
-        dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Directory", self.last_dir or "")
         if dir_path:
-            self.list_widget.clear()
-            self.button.setEnabled(False)
-            self.current_dir = dir_path
-            self.scanner = FileScanner(dir_path)
-            self.scanner.files_found.connect(self.display_files)
-            self.scanner.finished.connect(lambda: self.button.setEnabled(True))
-            self.scanner.start()
+            self.load_directory(dir_path)
+            save_last_dir(dir_path)
+    def load_directory(self, dir_path):
+        self.list_widget.clear()
+        self.button.setEnabled(False)
+        self.current_dir = dir_path
+        self.scanner = FileScanner(dir_path)
+        self.scanner.files_found.connect(self.display_files)
+        self.scanner.finished.connect(lambda: self.button.setEnabled(True))
+        self.scanner.start()
     def display_files(self, files):
         self.list_widget.addItems(files)
     def preview_selected_image(self, current, previous):
