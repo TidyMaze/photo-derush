@@ -220,8 +220,10 @@ def main():
         save_last_dir(dir_path)
         logging.info(f"Saved last_dir: {dir_path}")
         image_files = get_image_files(dir_path)
-        logging.info(f"Found {len(image_files)} image files.")
         image_paths = [os.path.join(dir_path, f) for f in image_files]
+        # Enforce MAX_IMAGES limit early
+        image_paths = image_paths[:MAX_IMAGES]
+        logging.info(f"Found {len(image_paths)} image files (limited to MAX_IMAGES={MAX_IMAGES}).")
 
         win = QMainWindow()
         win.setWindowTitle("Photo App - Image Browser")
