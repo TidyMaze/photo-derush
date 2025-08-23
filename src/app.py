@@ -2,11 +2,12 @@ import sys
 import logging
 from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar, QGridLayout, QScrollArea
 from PySide6.QtGui import QIcon, QPixmap, QImage
-from PySide6.QtCore import QObject, Signal, QThread
+from PySide6.QtCore import QObject, Signal, QThread, Qt, QTimer
 from PIL import Image, ExifTags
 import os
 import json
 import qdarktheme
+from collections import deque
 
 logging.basicConfig(level=logging.INFO)
 CONFIG_PATH = os.path.expanduser('~/.photo_app_config.json')
@@ -53,7 +54,8 @@ class ImageLoaderWorker(QObject):
             bottom = top + min_dim
             img_cropped = img.crop((left, top, right, bottom)).resize((128, 128), Image.Resampling.LANCZOS)
             img_cropped = img_cropped.convert("RGBA")
-            data = img_cropped.tobytes("raw", "RGBA")
+            import copy
+            data = copy.deepcopy(img_cropped.tobytes("raw", "RGBA"))
             self.image_loaded.emit(path, data)
             self.progress.emit(idx, total)
         self.finished.emit()
@@ -234,23 +236,35 @@ def main():
 
             # Start image loading in background thread
             class GridImageAdder(QObject):
-                def __init__(self, grid_adder_func):
+                def __init__(self, grid_adder_func, batch_size=10, interval=10):
                     super().__init__()
                     self.grid_adder_func = grid_adder_func
                     self.idx = 0
+                    self.queue = deque()
+                    self.batch_size = batch_size
+                    self.timer = QTimer()
+                    self.timer.setInterval(interval)  # ms
+                    self.timer.timeout.connect(self.process_batch)
                 def add(self, path, data):
-                    # Create QImage/QPixmap/QIcon in main thread
-                    qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", QImage.Format_RGB32))
-                    qimg = QImage(data, thumb_size, thumb_size, qimage_format)
-                    icon = QIcon(QPixmap.fromImage(qimg))
-                    self.grid_adder_func(self.idx, path, icon)
-                    self.idx += 1
+                    self.queue.append((path, data))
+                    if not self.timer.isActive():
+                        self.timer.start()
+                def process_batch(self):
+                    for _ in range(min(self.batch_size, len(self.queue))):
+                        path, data = self.queue.popleft()
+                        qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", QImage.Format_RGB32))
+                        qimg = QImage(data, thumb_size, thumb_size, qimage_format)
+                        icon = QIcon(QPixmap.fromImage(qimg))
+                        self.grid_adder_func(self.idx, path, icon)
+                        self.idx += 1
+                    if not self.queue:
+                        self.timer.stop()
 
             image_adder = GridImageAdder(add_image_to_grid)
             image_loader = ImageLoaderWorker(image_paths)
             image_thread = QThread()
             image_loader.moveToThread(image_thread)
-            image_loader.image_loaded.connect(image_adder.add)
+            image_loader.image_loaded.connect(image_adder.add, Qt.QueuedConnection)
             image_thread.started.connect(image_loader.load_images)
             image_loader.finished.connect(image_thread.quit)
             image_loader.finished.connect(image_loader.deleteLater)
