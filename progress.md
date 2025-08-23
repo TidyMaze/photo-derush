@@ -14,7 +14,7 @@ Plan:
 13. [x] Add open-in-system-viewer for selected image
 14. [x] Add image rating/tagging support
 15. [x] Add search/filter by filename or EXIF
-16. [ ] Add responsive grid layout with selection highlight (Lightroom-style polish)
+16. [x] Add responsive grid layout with selection highlight (Lightroom-style polish)
 17. [ ] Add info/metadata side panel with editable tags
 18. [ ] Add quick filter bar (by rating/tag/date)
 19. [ ] Add export/copy/move selected images
@@ -55,6 +55,8 @@ Steps Executed:
 - 2025-08-23: All tests pass for ImageModel, confirming robust error handling and correct behavior
 - 2025-08-23: Implemented and tested search/filter by filename and EXIF in ImageModel
 - 2025-08-23: All tests pass for search/filter features, including edge cases
+- 2025-08-23: Implemented responsive grid layout and selection highlight in PhotoView
+- 2025-08-23: Verified in running app; grid and highlight work as intended
 
 Progress: 85%
-Next step: Add responsive grid layout with selection highlight (Lightroom-style polish)
+Next step: Add info/metadata side panel with editable tags

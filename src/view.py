@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout, QPushButton, QLineEdit
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
+import os
 
 class PhotoView(QMainWindow):
     def __init__(self, viewmodel, thumb_size=128, images_per_row=10):
@@ -74,6 +75,7 @@ class PhotoView(QMainWindow):
         self.layout.addLayout(self.tags_layout)
 
         self.label_refs = {}
+        self.selected_filename = None
         self._connect_signals()
 
     def _connect_signals(self):
@@ -93,6 +95,7 @@ class PhotoView(QMainWindow):
             for label in self.label_refs.values():
                 label.deleteLater()
             self.label_refs.clear()
+        self.selected_filename = None
         self.open_btn.setEnabled(False)
         self._on_rating_changed(0)
         self._on_tags_changed([])
@@ -108,31 +111,51 @@ class PhotoView(QMainWindow):
         self.grid_layout.addWidget(label, row, col)
         self.label_refs[(row, col)] = label
         self.viewmodel.load_thumbnail(filename)
+        # Selection highlight
+        self._update_label_highlight(label, filename)
 
     def _on_label_clicked(self, filename):
+        self.selected_filename = filename
+        self._update_all_highlights()
         self.viewmodel.select_image(filename)
-        # self.open_btn.setEnabled(True)  # Remove direct state management
 
-    def _on_open_in_viewer(self):
-        self.viewmodel.open_selected_in_viewer()
+    def _update_label_highlight(self, label, filename):
+        if hasattr(self, 'selected_filename') and filename == self.selected_filename:
+            label.setStyleSheet("border: 3px solid #0078d7; background: #e6f0fa;")
+        else:
+            label.setStyleSheet("")
 
-    def _on_thumbnail_loaded(self, path, thumb):
-        # Find label by filename
+    def _update_all_highlights(self):
         for (row, col), label in self.label_refs.items():
-            if label.toolTip() == path or label.toolTip() in path:
-                if thumb:
-                    if isinstance(thumb, QImage):
-                        pixmap = QPixmap.fromImage(thumb)
-                    else:
-                        # PIL Image
-                        data = thumb.tobytes()
-                        w, h = thumb.size
-                        # Use Format_RGBA8888 if available, else fallback
-                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_ARGB32)
-                        qimg = QImage(data, w, h, img_format)
-                        pixmap = QPixmap.fromImage(qimg)
-                    label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                break
+            filename = label.toolTip()
+            self._update_label_highlight(label, filename)
+
+    def _on_selected_image_changed(self, path):
+        # Update highlight when selection changes from viewmodel
+        if path:
+            filename = os.path.basename(path)
+            self.selected_filename = filename
+            self._update_all_highlights()
+
+    def resizeEvent(self, event):
+        # Responsive grid: recalculate columns
+        width = self.scroll_area.viewport().width()
+        new_cols = max(1, width // (self.thumb_size + 16))
+        if new_cols != self.images_per_row:
+            self.images_per_row = new_cols
+            self._relayout_grid()
+        super().resizeEvent(event)
+
+    def _relayout_grid(self):
+        # Remove all widgets from grid
+        for label in self.label_refs.values():
+            self.grid_layout.removeWidget(label)
+        # Re-add in new layout
+        images = list(self.label_refs.values())
+        for idx, label in enumerate(images):
+            row = idx // self.images_per_row
+            col = idx % self.images_per_row
+            self.grid_layout.addWidget(label, row, col)
 
     def _on_exif_changed(self, exif):
         if not exif:
@@ -154,12 +177,6 @@ class PhotoView(QMainWindow):
     def _on_filetype_changed(self, idx):
         exts = self.filetype_combo.currentData()
         self.viewmodel.set_file_types(exts)
-
-    def _on_selected_image_changed(self, path):
-        pass  # No longer needed for button enablement
-
-    def _on_has_selected_image_changed(self, has_selection: bool):
-        self.open_btn.setEnabled(has_selection)
 
     def _on_rating_clicked(self, n):
         self.viewmodel.set_rating(n)
