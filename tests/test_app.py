@@ -1,6 +1,7 @@
 import os
-from src.app import FileScanner
+from src.app import FileScanner, ImageLoader
 from PySide6.QtCore import QEventLoop, QCoreApplication
+from PySide6.QtGui import QImage, QPixmap
 
 def test_file_scanner(tmp_path):
     # Create dummy image files
@@ -18,21 +19,26 @@ def test_file_scanner(tmp_path):
     scanner.start()
     loop.exec()
     assert set(found) == {"a.jpg", "b.png"}
-# Simple Photo App
 
-A minimal photo management app. Start simple, add one feature at a time.
-
-## Features
-- Select directory
-- List image files
-- All long tasks off GUI thread
-
-## Setup
-- Python 3.10+
-- PySide6
-
-## Run
-```
-python -m src.app
-```
-
+def test_image_loader(tmp_path):
+    # Create a dummy image file
+    img_path = tmp_path / "test.jpg"
+    image = QImage(800, 600, QImage.Format_RGB32)
+    image.fill(0xFF0000)  # Red
+    image.save(str(img_path))
+    app = QCoreApplication.instance() or QCoreApplication([])
+    loop = QEventLoop()
+    result = []
+    def on_loaded(pixmap):
+        result.append(pixmap)
+        loop.quit()
+    loader = ImageLoader(str(img_path))
+    loader.image_loaded.connect(on_loaded)
+    loader.start()
+    loop.exec()
+    assert result
+    pixmap = result[0]
+    assert isinstance(pixmap, QPixmap)
+    assert not pixmap.isNull()
+    # Should be scaled to 256x256 or less
+    assert pixmap.width() <= 256 and pixmap.height() <= 256
