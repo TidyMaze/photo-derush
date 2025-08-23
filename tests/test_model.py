@@ -2,7 +2,11 @@ import os
 import tempfile
 import shutil
 import pytest
-from src.model import ImageModel
+import sys
+
+sys.path = [p for p in sys.path if 'src' not in p]
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+from model import ImageModel
 
 class DummyCache:
     def __init__(self):
@@ -69,3 +73,40 @@ def test_ratings_tags_persistence(tmp_path):
     model.set_tags(path, ['foo', 'bar'])
     assert model.get_tags(path) == ['foo', 'bar']
 
+def test_filter_by_filename():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, 'foo.jpg'), 'a').close()
+        open(os.path.join(tmpdir, 'bar.JPG'), 'a').close()
+        open(os.path.join(tmpdir, 'baz.png'), 'a').close()
+        model = ImageModel(tmpdir)
+        assert set(model.filter_by_filename('foo')) == {'foo.jpg'}
+        assert set(model.filter_by_filename('BAZ')) == {'baz.png'}
+        assert set(model.filter_by_filename('jpg')) == {'foo.jpg', 'bar.JPG'}
+        assert set(model.filter_by_filename('nope')) == set()
+        # Empty/None returns all
+        all_files = set(model.get_image_files())
+        assert set(model.filter_by_filename('')) == all_files
+        assert set(model.filter_by_filename(None)) == all_files
+
+def test_filter_by_exif(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, 'a.jpg'), 'a').close()
+        open(os.path.join(tmpdir, 'b.jpg'), 'a').close()
+        model = ImageModel(tmpdir)
+        # Patch load_exif to return fake data
+        def fake_load_exif(path):
+            if path.endswith('a.jpg'):
+                return {'Model': 'Canon', 'DateTime': '2020:01:01'}
+            if path.endswith('b.jpg'):
+                return {'Model': 'Nikon', 'DateTime': '2021:01:01'}
+            return {}
+        monkeypatch.setattr(model, 'load_exif', fake_load_exif)
+        assert set(model.filter_by_exif('Model', 'Canon')) == {'a.jpg'}
+        assert set(model.filter_by_exif('model', 'nikon')) == {'b.jpg'}
+        assert set(model.filter_by_exif('DateTime', '2020')) == {'a.jpg'}
+        assert set(model.filter_by_exif('DateTime', '2022')) == set()
+        # Empty/None returns all
+        all_files = set(model.get_image_files())
+        assert set(model.filter_by_exif('', 'Canon')) == all_files
+        assert set(model.filter_by_exif('Model', '')) == all_files
+        assert set(model.filter_by_exif(None, None)) == all_files

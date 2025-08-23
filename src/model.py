@@ -113,3 +113,24 @@ class ImageModel:
             self._ratings_tags[path] = {}
         self._ratings_tags[path]['tags'] = tags
         self._save_ratings_tags()
+
+    def filter_by_filename(self, substring):
+        if not isinstance(substring, str) or not substring:
+            return self.get_image_files()
+        substring = substring.lower()
+        return [f for f in self.get_image_files() if substring in f.lower()]
+
+    def filter_by_exif(self, field, value):
+        if not isinstance(field, str) or not field or not isinstance(value, str) or not value:
+            return self.get_image_files()
+        field = field.lower()
+        value = value.lower()
+        result = []
+        for f in self.get_image_files():
+            path = self.get_image_path(f)
+            exif = self.load_exif(path)
+            for k, v in exif.items():
+                if k.lower() == field and value in str(v).lower():
+                    result.append(f)
+                    break
+        return result
