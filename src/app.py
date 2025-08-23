@@ -1,6 +1,6 @@
 import sys
 import logging
-from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QListWidget, QListWidgetItem, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar
+from PySide6.QtWidgets import QApplication, QMainWindow, QListWidget, QListWidgetItem, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import QObject, Signal, QThread
 from PIL import Image, ExifTags
@@ -138,10 +138,10 @@ def main():
     app = QApplication(sys.argv)
     last_dir = load_last_dir()
     logging.info(f"Loaded last_dir: {last_dir}")
-    dir_path = QFileDialog.getExistingDirectory(None, "Select Directory", last_dir or "")
-    logging.info(f"User selected directory: {dir_path}")
+    # Always reopen the last directory, do not prompt
+    dir_path = last_dir
     if not dir_path:
-        logging.info("No directory selected. Exiting.")
+        logging.info("No previous directory found. Exiting.")
         return
     save_last_dir(dir_path)
     logging.info(f"Saved last_dir: {dir_path}")
