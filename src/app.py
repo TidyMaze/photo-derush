@@ -129,6 +129,7 @@ def main():
     try:
         logging.info("Starting QApplication...")
         app = QApplication(sys.argv)
+        app.setStyle("Fusion")
         last_dir = load_last_dir()
         logging.info(f"Loaded last_dir: {last_dir}")
         dir_path = last_dir
