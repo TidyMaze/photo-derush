@@ -1,5 +1,31 @@
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot, QThread
 from model import ImageModel
+
+class ImageLoaderWorker(QObject):
+    image_found = Signal(str)
+    thumbnail_loaded = Signal(str, object)
+    progress = Signal(int, int)
+    finished = Signal()
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+        self._abort = False
+
+    def abort(self):
+        self._abort = True
+
+    def run(self):
+        files = self.model.get_image_files()
+        total = len(files)
+        for idx, filename in enumerate(files):
+            if self._abort:
+                break
+            self.image_found.emit(filename)
+            thumb = self.model.load_thumbnail(self.model.get_image_path(filename))
+            self.thumbnail_loaded.emit(filename, thumb)
+            self.progress.emit(idx + 1, total)
+        self.finished.emit()
 
 class PhotoViewModel(QObject):
     images_changed = Signal(list)
@@ -14,10 +40,28 @@ class PhotoViewModel(QObject):
         self.selected_image = None
         self.exif = {}
         self.max_images = max_images
+        self._loader_thread = None
+        self._loader_worker = None
 
     def load_images(self):
-        self.images = self.model.get_image_files()
+        self.images = []
         self.images_changed.emit(self.images)
+        self._loader_worker = ImageLoaderWorker(self.model)
+        self._loader_thread = QThread()
+        self._loader_worker.moveToThread(self._loader_thread)
+        self._loader_thread.started.connect(self._loader_worker.run)
+        self._loader_worker.image_found.connect(self._on_image_found)
+        self._loader_worker.thumbnail_loaded.connect(self.thumbnail_loaded)
+        self._loader_worker.progress.connect(self.progress_changed)
+        self._loader_worker.finished.connect(self._loader_thread.quit)
+        self._loader_worker.finished.connect(self._loader_worker.deleteLater)
+        self._loader_thread.finished.connect(self._loader_thread.deleteLater)
+        self._loader_thread.start()
+
+    @Slot(str)
+    def _on_image_found(self, filename):
+        self.images.append(filename)
+        self.images_changed.emit(self.images.copy())
 
     @Slot(str)
     def select_image(self, filename):
@@ -29,7 +73,5 @@ class PhotoViewModel(QObject):
 
     @Slot(str)
     def load_thumbnail(self, filename):
-        path = self.model.get_image_path(filename)
-        thumb = self.model.load_thumbnail(path)
-        self.thumbnail_loaded.emit(path, thumb)
-
+        # No-op: thumbnails are loaded by the worker now
+        pass
