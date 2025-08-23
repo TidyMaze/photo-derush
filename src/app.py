@@ -41,7 +41,7 @@ class ImageLoaderWorker(QObject):
 
     def load_images(self):
         total = len(self.image_paths)
-        qimage_format = getattr(QImage, "Format_RGBA8888", QImage.Format_RGB32)
+        qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", QImage.Format_RGB888))
         for idx, path in enumerate(self.image_paths, 1):
             logging.info(f"[BG] Loading image: {path}")
             img = Image.open(path)
@@ -232,32 +232,37 @@ def main():
         else:
             layout.addWidget(scroll)
             layout.addWidget(exif_view)
-            # Load images in main thread for simplicity (can be threaded if needed)
-            for idx, path in enumerate(image_paths):
-                img = Image.open(path)
-                w, h = img.size
-                min_dim = min(w, h)
-                left = (w - min_dim) // 2
-                top = (h - min_dim) // 2
-                right = left + min_dim
-                bottom = top + min_dim
-                img_cropped = img.crop((left, top, right, bottom)).resize((thumb_size, thumb_size), Image.Resampling.LANCZOS)
-                img_cropped = img_cropped.convert("RGBA")
-                # Use a safe fallback for QImage format
-                qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_RGB888", QImage.Format_ARGB32))
-                data = img_cropped.tobytes("raw", "RGBA")
-                qimg = QImage(data, thumb_size, thumb_size, qimage_format)
-                icon = QIcon(QPixmap.fromImage(qimg))
-                add_image_to_grid(idx, path, icon)
-                if progress_bar:
-                    progress_bar.setValue(idx + 1)
-            if progress_bar:
-                progress_bar.hide()
 
-        win.setCentralWidget(central_widget)
-        logging.info("Showing main window...")
-        win.show()
-        logging.info("[DEBUG] Before QApplication exec")
+            win.setCentralWidget(central_widget)
+            logging.info("Showing main window...")
+            win.show()
+            logging.info("[DEBUG] Before QApplication exec")
+            logging.info("Entering app event loop.")
+
+            # Start image loading in background thread
+            class GridImageAdder(QObject):
+                def __init__(self, grid_adder_func):
+                    super().__init__()
+                    self.grid_adder_func = grid_adder_func
+                    self.idx = 0
+                def add(self, path, icon):
+                    self.grid_adder_func(self.idx, path, icon)
+                    self.idx += 1
+
+            image_adder = GridImageAdder(add_image_to_grid)
+            image_loader = ImageLoaderWorker(image_paths)
+            image_thread = QThread()
+            image_loader.moveToThread(image_thread)
+            image_loader.image_loaded.connect(image_adder.add)
+            image_thread.started.connect(image_loader.load_images)
+            image_loader.finished.connect(image_thread.quit)
+            image_loader.finished.connect(image_loader.deleteLater)
+            image_thread.finished.connect(image_thread.deleteLater)
+            if progress_bar:
+                image_loader.progress.connect(lambda idx, total: progress_bar.setValue(idx))
+                image_loader.finished.connect(progress_bar.hide)
+            image_thread.start()
+
         logging.info("Entering app event loop.")
         sys.exit(app.exec())
     except Exception as e:
