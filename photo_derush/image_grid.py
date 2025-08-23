@@ -433,6 +433,36 @@ class ImageGrid(QWidget):
         stack.addWidget(overlay)
         vbox.addWidget(img_container, alignment=Qt.AlignmentFlag.AlignCenter)
         vbox.addWidget(bottom_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        # Add status indicators for hash, group, feature vector, and proba score
+        info = self.image_info.get(img_name, {})
+        status_row = QWidget()
+        status_layout = QHBoxLayout(status_row)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(6)
+        def make_status_dot(color, tooltip):
+            dot = QLabel()
+            dot.setFixedSize(14, 14)
+            dot.setStyleSheet(f"background: {color}; border-radius: 7px; border: 1px solid #222;")
+            dot.setToolTip(tooltip)
+            return dot
+        # Hash status
+        hash_present = info.get('hash') not in (None, '', '...')
+        status_layout.addWidget(make_status_dot('#4caf50' if hash_present else '#bdbdbd',
+                                               'Hash computed' if hash_present else 'Hash not computed'))
+        # Group status
+        group_present = info.get('group') not in (None, '', '...')
+        status_layout.addWidget(make_status_dot('#2196f3' if group_present else '#bdbdbd',
+                                               'Group computed' if group_present else 'Group not computed'))
+        # Feature vector status
+        fv_present = self._get_cached_feature_vector(img_path) is not None
+        status_layout.addWidget(make_status_dot('#ff9800' if fv_present else '#bdbdbd',
+                                               'Feature vector computed' if fv_present else 'Feature vector not computed'))
+        # Proba score status
+        proba_present = getattr(self, '_last_prob_map', {}).get(img_name) is not None
+        status_layout.addWidget(make_status_dot('#9c27b0' if proba_present else '#bdbdbd',
+                                               'Proba score computed' if proba_present else 'Proba score not computed'))
+        status_layout.addStretch(1)
+        vbox.addWidget(status_row, alignment=Qt.AlignmentFlag.AlignCenter)
         container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.image_labels.append(lbl)
         self.top_labels.append(overlay.group_label)

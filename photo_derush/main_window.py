@@ -57,6 +57,7 @@ class LightroomMainWindow(QMainWindow):
         self._feature_cache = {}  # Initialize feature cache
         self._pending_feature_tasks = set()
         self._feature_emitter = _FeatureResultEmitter()
+        self._feature_emitter.finished.connect(self._on_async_feature_extracted)
         from PySide6.QtCore import QThreadPool
         self._thread_pool = QThreadPool()
         try:
