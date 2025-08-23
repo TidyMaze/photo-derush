@@ -185,7 +185,7 @@ def persist_feature_cache_entry(path: str, mtime: float, fv, keys):
             except Exception:
                 fv_ser = fv if isinstance(fv, list) else []
             existing[path] = {'mtime': mtime, 'fv': fv_ser, 'keys': keys}
-            logger.info('[FeatureCache] Added/updated cache entry for %s (len=%d, keys=%s)', path, len(fv_ser) if hasattr(fv_ser, '__len__') else -1, keys)
+            logger.info('[FeatureCache] Added/updated cache entry for %s (len=%d, keys=%s)', path, len(fv_ser) if hasattr(fv_ser, '__len__') else -1, keys[:5] if keys else None)
             tmp = FEATURE_CACHE_PATH + '.tmp'
             with open(tmp, 'w') as f:
                 json.dump(existing, f)
