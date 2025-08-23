@@ -2,7 +2,7 @@ import sys
 import logging
 from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar, QGridLayout, QScrollArea
 from PySide6.QtGui import QIcon, QPixmap, QImage
-from PySide6.QtCore import QObject, Signal, QThread, QTimer, QByteArray
+from PySide6.QtCore import QObject, Signal, QThread, QTimer, QByteArray, Qt
 from PIL import Image, ExifTags
 import os
 import json
@@ -182,7 +182,7 @@ def main():
         label_refs = {}  # Keep references to labels for event handling
         image_buffers = {}  # Keep references to QByteArray buffers to prevent GC
 
-        def add_image_to_grid(idx, path, icon, buffer=None):
+        def add_image_to_grid(idx, path, icon):
             if idx >= max_images:
                 return
             row = idx // images_per_row
@@ -247,9 +247,9 @@ def main():
 
             # Start image loading in background thread
             class GridImageAdder(QObject):
-                def __init__(self, grid_adder_func, batch_size=1, interval=100):
+                image_ready = Signal(int, str, QIcon)
+                def __init__(self, batch_size=1, interval=100):
                     super().__init__()
-                    self.grid_adder_func = grid_adder_func
                     self.idx = 0
                     self.queue = deque()
                     self.batch_size = batch_size
@@ -258,7 +258,6 @@ def main():
                     self.timer.timeout.connect(self.process_batch)
                 def add(self, path, data):
                     if self.idx < max_images:
-                        # Pass the current idx with the image data
                         self.queue.append((self.idx, path, data))
                         self.idx += 1
                         if not self.timer.isActive():
@@ -266,13 +265,14 @@ def main():
                 def process_batch(self):
                     for _ in range(min(self.batch_size, len(self.queue))):
                         idx, path, data = self.queue.popleft()
-                        qimg = QImage.fromData(data, "PNG")
+                        qimg = QImage.fromData(data)
                         icon = QIcon(QPixmap.fromImage(qimg))
-                        self.grid_adder_func(idx, path, icon)
+                        self.image_ready.emit(idx, path, icon)
                     if not self.queue:
                         self.timer.stop()
 
-            image_adder = GridImageAdder(add_image_to_grid)
+            image_adder = GridImageAdder()
+            image_adder.image_ready.connect(add_image_to_grid, Qt.QueuedConnection)
             image_loader = ImageLoaderWorker(image_paths)
             image_thread = QThread()
             image_loader.moveToThread(image_thread)
