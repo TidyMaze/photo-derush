@@ -38,14 +38,15 @@ class ImageLoaderWorker(QObject):
     finished = Signal()
     progress = Signal(int, int)  # current, total
 
-    def __init__(self, image_paths):
+    def __init__(self, image_paths, max_images):
         super().__init__()
         self.image_paths = image_paths
+        self.max_images = max_images
 
     def load_images(self):
         import io
-        total = len(self.image_paths)
-        for idx, path in enumerate(self.image_paths, 1):
+        total = min(len(self.image_paths), self.max_images)
+        for idx, path in enumerate(self.image_paths[:self.max_images], 1):
             logging.info(f"[BG] Loading image: {path}")
             img = Image.open(path)
             w, h = img.size
@@ -177,7 +178,7 @@ def main():
         scroll_area.setWidget(grid_widget)
         layout.addWidget(scroll_area)
 
-        max_images = 100  # Show up to 100 images in the grid
+        max_images = 10  # Show up to 10 images in the grid for testing
         images_per_row = 10
         label_refs = {}  # Keep references to labels for event handling
         image_buffers = {}  # Keep references to QByteArray buffers to prevent GC
@@ -271,7 +272,7 @@ def main():
 
             image_adder = GridImageAdder()
             image_adder.image_ready.connect(add_image_to_grid, Qt.ConnectionType.QueuedConnection)
-            image_loader = ImageLoaderWorker(image_paths)
+            image_loader = ImageLoaderWorker(image_paths, max_images)
             image_thread = QThread()
             image_loader.moveToThread(image_thread)
             image_loader.image_loaded.connect(image_adder.add)
