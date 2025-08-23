@@ -42,6 +42,7 @@ class PhotoView(QMainWindow):
         self.viewmodel.image_added.connect(self._on_image_added)
         self.viewmodel.exif_changed.connect(self._on_exif_changed)
         self.viewmodel.thumbnail_loaded.connect(self._on_thumbnail_loaded)
+        self.viewmodel.progress_changed.connect(self._on_progress_changed)
 
     def _on_images_changed(self, images):
         # Only clear grid if images list is empty (full reload)
@@ -74,7 +75,7 @@ class PhotoView(QMainWindow):
                         data = thumb.tobytes()
                         w, h = thumb.size
                         # Use Format_RGBA8888 if available, else fallback
-                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_RGB32)
+                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_ARGB32)
                         qimg = QImage(data, w, h, img_format)
                         pixmap = QPixmap.fromImage(qimg)
                     label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
@@ -86,3 +87,13 @@ class PhotoView(QMainWindow):
         else:
             lines = [f"{k}: {v}" for k, v in sorted(exif.items())]
             self.exif_view.setText("\n".join(lines))
+
+    def _on_progress_changed(self, current, total):
+        if total > 0:
+            self.progress_bar.setMinimum(0)
+            self.progress_bar.setMaximum(total)
+            self.progress_bar.setValue(current)
+            self.progress_bar.setFormat(f"Loading images: {current}/{total}")
+            self.progress_bar.show()
+        if current >= total:
+            self.progress_bar.hide()
