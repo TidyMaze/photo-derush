@@ -4,6 +4,7 @@ from src.cache import ThumbnailCache
 import subprocess
 import sys
 import logging
+import os
 
 class ImageLoaderWorker(QObject):
     image_found = Signal(str)

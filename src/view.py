@@ -1,7 +1,41 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout, QPushButton, QLineEdit
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout, QPushButton, QLineEdit, QDialog
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 import os
+
+class FullscreenDialog(QDialog):
+    def __init__(self, image_paths, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
+        self.setWindowState(Qt.WindowState.WindowFullScreen)
+        layout = QHBoxLayout(self)
+        for path in image_paths:
+            label = QLabel()
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setScaledContents(True)
+            if os.path.exists(path):
+                from PIL import Image
+                from PySide6.QtGui import QImage, QPixmap
+                try:
+                    img = Image.open(path)
+                    img = img.convert("RGBA")
+                    data = img.tobytes()
+                    w, h = img.size
+                    img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format.Format_ARGB32)
+                    qimg = QImage(data, w, h, img_format)
+                    pixmap = QPixmap.fromImage(qimg)
+                    label.setPixmap(pixmap.scaledToHeight(self.screen().size().height() - 100, Qt.TransformationMode.SmoothTransformation))
+                except Exception:
+                    label.setText("Failed to load image")
+            else:
+                label.setText("File not found")
+            layout.addWidget(label)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Escape, Qt.Key.Key_F, Qt.Key.Key_Space):
+            self.close()
+        else:
+            super().keyPressEvent(event)
 
 class PhotoView(QMainWindow):
     def __init__(self, viewmodel, thumb_size=128, images_per_row=10):
@@ -103,6 +137,12 @@ class PhotoView(QMainWindow):
         self.tags_layout.addWidget(self.tags_label)
         self.tags_layout.addWidget(self.tags_edit)
         self.side_layout.addLayout(self.tags_layout)
+
+        # Fullscreen/Compare button
+        self.fullscreen_btn = QPushButton("Fullscreen/Compare")
+        self.fullscreen_btn.setEnabled(True)
+        self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
+        self.side_layout.addWidget(self.fullscreen_btn)
 
         self.label_refs = {}
         self.selected_filename = None
@@ -245,7 +285,7 @@ class PhotoView(QMainWindow):
                         # PIL Image
                         data = thumb.tobytes()
                         w, h = thumb.size
-                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_ARGB32)
+                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format.Format_ARGB32)
                         qimg = QImage(data, w, h, img_format)
                         pixmap = QPixmap.fromImage(qimg)
                     label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
@@ -253,3 +293,14 @@ class PhotoView(QMainWindow):
 
     def _on_has_selected_image_changed(self, has_selection: bool):
         self.open_btn.setEnabled(has_selection)
+
+    def _on_fullscreen_clicked(self):
+        # Show selected image(s) in fullscreen/compare dialog
+        selected = []
+        if self.selected_filename:
+            selected.append(self.viewmodel.model.get_image_path(self.selected_filename))
+        # For now, only single selection; extend here for multi-selection support
+        if not selected:
+            return
+        dlg = FullscreenDialog(selected, self)
+        dlg.exec()
