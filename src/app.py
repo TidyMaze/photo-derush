@@ -194,6 +194,19 @@ def main():
         exif_worker = None
         last_exif_path = None
 
+        def update_exif_in_main_thread(loaded_path, exif):
+            if last_exif_path != loaded_path:
+                logging.info(f"Stale EXIF result for {loaded_path}, ignoring.")
+                return
+            if not exif:
+                exif_view.setText("No EXIF data found.")
+            else:
+                lines = [f"{k}: {v}" for k, v in sorted(exif.items())]
+                exif_view.setText("\n".join(lines))
+            if exif_worker_thread is not None:
+                exif_worker_thread.quit()
+                exif_worker_thread.wait()
+
         def show_exif_for_path(path):
             nonlocal exif_worker_thread, exif_worker, last_exif_path
             if not path:
@@ -211,19 +224,9 @@ def main():
             exif_worker_thread = QThread()
             exif_worker.moveToThread(exif_worker_thread)
             exif_worker_thread.started.connect(exif_worker.load_exif)
-            def update_exif(loaded_path, exif):
-                if last_exif_path != loaded_path:
-                    logging.info(f"Stale EXIF result for {loaded_path}, ignoring.")
-                    return
-                if not exif:
-                    exif_view.setText("No EXIF data found.")
-                else:
-                    lines = [f"{k}: {v}" for k, v in sorted(exif.items())]
-                    exif_view.setText("\n".join(lines))
-                if exif_worker_thread is not None and hasattr(exif_worker_thread, 'quit'):
-                    exif_worker_thread.quit()
-                    exif_worker_thread.wait()
-            exif_worker.exif_loaded.connect(update_exif)
+            # Connect using QueuedConnection to ensure slot runs in main thread
+            from PySide6.QtCore import Qt
+            exif_worker.exif_loaded.connect(update_exif_in_main_thread, Qt.QueuedConnection)
             exif_worker_thread.start()
 
         if not image_paths:
