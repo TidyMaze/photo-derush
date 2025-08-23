@@ -1,8 +1,8 @@
 import sys
 import logging
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar
+from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QTextEdit, QProgressBar, QGridLayout, QScrollArea
 from PySide6.QtGui import QIcon, QPixmap, QImage
-from PySide6.QtCore import QObject, Signal, QThread, QTimer
+from PySide6.QtCore import QObject, Signal, QThread, QTimer, QByteArray
 from PIL import Image, ExifTags
 import os
 import json
@@ -166,21 +166,36 @@ def main():
             progress_bar.show()
             logging.info("Progress bar shown at the top of the layout.")
 
-        # Single QLabel for diagnostic
-        single_label = QLabel()
-        single_label.setFixedSize(thumb_size, thumb_size)
-        single_label.setScaledContents(True)
-        layout.addWidget(single_label)
+        # Grid for thumbnails with scroll area
+        grid_widget = QWidget()
+        grid_layout = QGridLayout(grid_widget)
+        grid_layout.setSpacing(8)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(grid_widget)
+        layout.addWidget(scroll_area)
 
-        # Only process the first 10 images for diagnostic
-        max_images = 10
-        def add_image_to_grid(idx, path, icon):
+        max_images = 100  # Show up to 100 images in the grid
+        images_per_row = 10
+        label_refs = {}  # Keep references to labels for event handling
+        image_buffers = {}  # Keep references to QByteArray buffers to prevent GC
+
+        def add_image_to_grid(idx, path, icon, buffer=None):
             if idx >= max_images:
                 return
+            row = idx // images_per_row
+            col = idx % images_per_row
+            label = QLabel()
+            label.setFixedSize(thumb_size, thumb_size)
+            label.setScaledContents(True)
             if icon and not icon.isNull():
-                single_label.setPixmap(icon.pixmap(thumb_size, thumb_size))
-            single_label.setToolTip(os.path.basename(path))
-            single_label.mousePressEvent = lambda e, p=path: show_exif_for_path(p)
+                label.setPixmap(icon.pixmap(thumb_size, thumb_size))
+            label.setToolTip(os.path.basename(path))
+            label.mousePressEvent = lambda e, p=path: show_exif_for_path(p)
+            grid_layout.addWidget(label, row, col)
+            label_refs[(row, col)] = label
+            if buffer is not None:
+                image_buffers[(row, col)] = buffer  # Prevent GC
 
         # State for EXIF worker/thread and last requested path
         exif_worker_thread = None
@@ -241,20 +256,21 @@ def main():
                     self.timer.timeout.connect(self.process_batch)
                 def add(self, path, data):
                     if self.idx < max_images:
-                        self.queue.append((path, data))
+                        # Pass the current idx with the image data
+                        self.queue.append((self.idx, path, data))
+                        self.idx += 1
                         if not self.timer.isActive():
                             self.timer.start()
                 def process_batch(self):
                     for _ in range(min(self.batch_size, len(self.queue))):
-                        path, data = self.queue.popleft()
-                        # Use only formats that are guaranteed to exist
+                        idx, path, data = self.queue.popleft()
                         qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", None))
                         if qimage_format is None:
                             raise RuntimeError("No suitable QImage format found.")
-                        qimg = QImage(data, thumb_size, thumb_size, qimage_format).copy()
+                        buffer = QByteArray(data)
+                        qimg = QImage(buffer, thumb_size, thumb_size, qimage_format).copy()
                         icon = QIcon(QPixmap.fromImage(qimg))
-                        self.grid_adder_func(self.idx, path, icon)
-                        self.idx += 1
+                        self.grid_adder_func(idx, path, icon, buffer)
                     if not self.queue:
                         self.timer.stop()
 
