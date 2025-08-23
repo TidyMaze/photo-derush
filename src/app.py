@@ -289,4 +289,5 @@ def main():
     except Exception as e:
         logging.exception(f"[ERROR] Exception in main: {e}")
 
-default_entry = __name__ == "__main__"
+if __name__ == "__main__":
+    main()
