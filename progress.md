@@ -47,6 +47,10 @@ Steps Executed:
 - 2025-08-23: Implemented Lightroom-style grid UI in main app using existing modular components
 - 2025-08-23: Removed try/except from import of Resampling/LANCZOS in app.py, used importlib fallback logic
 - 2025-08-23: Updated plan for Lightroom-style UI, added more Lightroom-inspired features
+- 2025-08-23: Refactored app to idiomatic MVVM (model, view, viewmodel separation)
+- 2025-08-23: Made image loading and thumbnail generation fully asynchronous and incremental
+- 2025-08-23: Fixed grid flicker and ensured thumbnails remain visible
+- 2025-08-23: Fixed progress bar to show and update as images load, and hide when done
 
-Progress: 60%
+Progress: 65%
 Next step: Implement thumbnail/miniature caching for faster preview
