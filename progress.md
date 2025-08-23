@@ -13,7 +13,7 @@ Plan:
 12. [x] Add file type filter (e.g., .jpg/.png only)
 13. [x] Add open-in-system-viewer for selected image
 14. [x] Add image rating/tagging support
-15. [ ] Add search/filter by filename or EXIF
+15. [x] Add search/filter by filename or EXIF
 16. [ ] Add responsive grid layout with selection highlight (Lightroom-style polish)
 17. [ ] Add info/metadata side panel with editable tags
 18. [ ] Add quick filter bar (by rating/tag/date)
@@ -53,6 +53,8 @@ Steps Executed:
 - 2025-08-23: Refactored model.py for robust logging and input validation
 - 2025-08-23: Added comprehensive unit tests for ImageModel (input validation, error handling, persistence)
 - 2025-08-23: All tests pass for ImageModel, confirming robust error handling and correct behavior
+- 2025-08-23: Implemented and tested search/filter by filename and EXIF in ImageModel
+- 2025-08-23: All tests pass for search/filter features, including edge cases
 
-Progress: 80%
-Next step: Add search/filter by filename or EXIF
+Progress: 85%
+Next step: Add responsive grid layout with selection highlight (Lightroom-style polish)
