@@ -30,12 +30,11 @@ def save_last_dir(path):
         logging.warning(f"Could not save config: {e}")
 
 def main():
-    logging.info("Starting QApplication...")
+    logging.info("App main() starting...")
     app = QApplication(sys.argv)
     qdarktheme.setup_theme()
-    last_dir = load_last_dir()
-    logging.info(f"Loaded last_dir: {last_dir}")
-    save_last_dir(last_dir)
+    last_dir = load_last_dir()  # Use config, not forced cwd
+    logging.info(f"Loaded last_dir from config: {last_dir}")
     viewmodel = PhotoViewModel(last_dir, max_images=MAX_IMAGES)
     view = PhotoView(viewmodel)
     view.show()

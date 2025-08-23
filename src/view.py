@@ -185,9 +185,13 @@ class PhotoView(QMainWindow):
         label.setToolTip(filename)
         label.mousePressEvent = lambda e, f=filename, l=label: self._on_label_clicked(e, f, l)
         self.grid_layout.addWidget(label, row, col)
+        logging.info(f"Added QLabel for {filename} at row={row}, col={col}")
         self.label_refs[(row, col)] = label
         self.viewmodel.load_thumbnail(filename)
         self._update_label_highlight(label, filename)
+        self.grid_widget.update()
+        self.grid_layout.update()
+        logging.info(f"grid_widget size: {self.grid_widget.size()}, grid_layout count: {self.grid_layout.count()}")
 
     def _on_label_clicked(self, event, filename, label):
         modifiers = event.modifiers()
@@ -304,13 +308,13 @@ class PhotoView(QMainWindow):
 
     def _on_thumbnail_loaded(self, path, thumb):
         import logging
-        logging.info(f"PhotoView._on_thumbnail_loaded: path={path}, thumb={'yes' if thumb else 'no'}")
-        # Find label by filename (exact match)
+        logging.info(f"PhotoView._on_thumbnail_loaded: path={path}, thumb={'yes' if thumb else 'no'} type={type(thumb)}")
         for (row, col), label in self.label_refs.items():
             if label.toolTip() == path:
                 if thumb:
                     if isinstance(thumb, QImage):
                         pixmap = QPixmap.fromImage(thumb)
+                        logging.info(f"QImage thumbnail for {path} is valid: {not pixmap.isNull()}")
                     else:
                         # PIL Image
                         data = thumb.tobytes()
@@ -318,7 +322,11 @@ class PhotoView(QMainWindow):
                         img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format.Format_ARGB32)
                         qimg = QImage(data, w, h, img_format)
                         pixmap = QPixmap.fromImage(qimg)
+                        logging.info(f"PIL Image thumbnail for {path} is valid: {not pixmap.isNull()}")
                     label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                    logging.info(f"Set pixmap for label {path}")
+                else:
+                    logging.warning(f"No thumbnail for {path}")
                 break
 
     def _on_has_selected_image_changed(self, has_selection: bool):
