@@ -20,6 +20,11 @@ Plan:
 19. [ ] Add search/filter by filename or EXIF
 20. [ ] Add export/copy/move selected images
 21. [ ] Add settings/preferences dialog
+22. [ ] Add responsive grid layout with selection highlight (Lightroom-style polish)
+23. [ ] Add info/metadata side panel with editable tags
+24. [ ] Add quick filter bar (by rating/tag/date)
+25. [ ] Add batch metadata editing
+26. [ ] Add fullscreen/compare mode for selected images
 
 Steps Executed:
 - 2025-08-23: Set up minimal project structure
@@ -41,6 +46,7 @@ Steps Executed:
 - 2025-08-23: Planned Lightroom-style grid UI for image display
 - 2025-08-23: Implemented Lightroom-style grid UI in main app using existing modular components
 - 2025-08-23: Removed try/except from import of Resampling/LANCZOS in app.py, used importlib fallback logic
+- 2025-08-23: Updated plan for Lightroom-style UI, added more Lightroom-inspired features
 
 Progress: 60%
 Next step: Implement thumbnail/miniature caching for faster preview
