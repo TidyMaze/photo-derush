@@ -11,6 +11,7 @@ from collections import deque
 
 logging.basicConfig(level=logging.INFO)
 CONFIG_PATH = os.path.expanduser('~/.photo_app_config.json')
+thumb_size = 128
 
 def load_last_dir():
     with open(CONFIG_PATH, 'r') as f:
@@ -165,29 +166,21 @@ def main():
             progress_bar.show()
             logging.info("Progress bar shown at the top of the layout.")
 
-        # 2D grid for images
-        grid_widget = QWidget()
-        grid_layout = QGridLayout(grid_widget)
-        grid_layout.setSpacing(8)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(grid_widget)
-        thumb_size = 128
-        cols = 5
-        image_labels = []
+        # Single QLabel for diagnostic
+        single_label = QLabel()
+        single_label.setFixedSize(thumb_size, thumb_size)
+        single_label.setScaledContents(True)
+        layout.addWidget(single_label)
 
+        # Only process the first 10 images for diagnostic
+        max_images = 10
         def add_image_to_grid(idx, path, icon):
-            row = idx // cols
-            col = idx % cols
-            label = QLabel()
-            label.setFixedSize(thumb_size, thumb_size)
-            label.setScaledContents(True)
+            if idx >= max_images:
+                return
             if icon and not icon.isNull():
-                label.setPixmap(icon.pixmap(thumb_size, thumb_size))
-            label.setToolTip(os.path.basename(path))
-            label.mousePressEvent = lambda e, p=path: show_exif_for_path(p)
-            grid_layout.addWidget(label, row, col)
-            image_labels.append(label)
+                single_label.setPixmap(icon.pixmap(thumb_size, thumb_size))
+            single_label.setToolTip(os.path.basename(path))
+            single_label.mousePressEvent = lambda e, p=path: show_exif_for_path(p)
 
         # State for EXIF worker/thread and last requested path
         exif_worker_thread = None
@@ -225,7 +218,6 @@ def main():
             logging.info("No images found in the selected directory.")
             layout.addWidget(QLabel("No images found in the selected directory."))
         else:
-            layout.addWidget(scroll)
             layout.addWidget(exif_view)
 
             win.setCentralWidget(central_widget)
@@ -236,7 +228,7 @@ def main():
 
             # Start image loading in background thread
             class GridImageAdder(QObject):
-                def __init__(self, grid_adder_func, batch_size=10, interval=10):
+                def __init__(self, grid_adder_func, batch_size=1, interval=100):
                     super().__init__()
                     self.grid_adder_func = grid_adder_func
                     self.idx = 0
@@ -246,9 +238,10 @@ def main():
                     self.timer.setInterval(interval)  # ms
                     self.timer.timeout.connect(self.process_batch)
                 def add(self, path, data):
-                    self.queue.append((path, data))
-                    if not self.timer.isActive():
-                        self.timer.start()
+                    if self.idx < max_images:
+                        self.queue.append((path, data))
+                        if not self.timer.isActive():
+                            self.timer.start()
                 def process_batch(self):
                     for _ in range(min(self.batch_size, len(self.queue))):
                         path, data = self.queue.popleft()
@@ -257,7 +250,7 @@ def main():
                         icon = QIcon(QPixmap.fromImage(qimg))
                         self.grid_adder_func(self.idx, path, icon)
                         self.idx += 1
-                    if not self.queue:
+                    if not self.queue or self.idx >= max_images:
                         self.timer.stop()
 
             image_adder = GridImageAdder(add_image_to_grid)
