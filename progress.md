@@ -16,7 +16,7 @@ Plan:
 15. [x] Add search/filter by filename or EXIF
 16. [x] Add responsive grid layout with selection highlight (Lightroom-style polish)
 17. [x] Add info/metadata side panel with editable tags
-18. [ ] Add quick filter bar (by rating/tag/date)
+18. [x] Add quick filter bar (by rating/tag/date)
 19. [ ] Add export/copy/move selected images
 20. [ ] Add batch metadata editing
 21. [ ] Add fullscreen/compare mode for selected images
@@ -59,6 +59,8 @@ Steps Executed:
 - 2025-08-23: Verified in running app; grid and highlight work as intended
 - 2025-08-23: Implemented info/metadata side panel with editable tags, EXIF, and rating in PhotoView
 - 2025-08-23: Verified in running app; side panel and all features work as intended
+- 2025-08-23: Implemented quick filter bar (by rating, tag, date) in PhotoView and viewmodel
+- 2025-08-23: Verified in running app; filter bar updates image grid in real time
 
 Progress: 90%
-Next step: Add quick filter bar (by rating/tag/date)
+Next step: Add export/copy/move selected images

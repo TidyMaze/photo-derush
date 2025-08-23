@@ -134,3 +134,30 @@ class ImageModel:
                     result.append(f)
                     break
         return result
+
+    def filter_by_rating_tag_date(self, rating=0, tag='', date=''):
+        files = self.get_image_files()
+        # Filter by rating and tag using ratings/tags JSON
+        self._load_ratings_tags()
+        filtered = []
+        tag = tag.lower().strip() if tag else ''
+        date = date.strip() if date else ''
+        for f in files:
+            info = self._ratings_tags.get(f, {})
+            # Rating filter
+            if rating and info.get('rating', 0) < rating:
+                continue
+            # Tag filter
+            if tag:
+                tags = [t.lower() for t in info.get('tags', [])]
+                if tag not in tags:
+                    continue
+            # Date filter (EXIF)
+            if date:
+                path = self.get_image_path(f)
+                exif = self.load_exif(path)
+                exif_date = exif.get('DateTimeOriginal') or exif.get('DateTime') or ''
+                if not exif_date.startswith(date):
+                    continue
+            filtered.append(f)
+        return filtered

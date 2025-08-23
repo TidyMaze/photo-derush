@@ -33,6 +33,27 @@ class PhotoView(QMainWindow):
         self.filter_layout.addWidget(self.filetype_combo)
         self.left_layout.addLayout(self.filter_layout)
 
+        # Quick filter bar (by rating/tag/date)
+        self.quick_filter_layout = QHBoxLayout()
+        # Rating filter
+        self.rating_filter_combo = QComboBox()
+        self.rating_filter_combo.addItem("All", 0)
+        for i in range(1, 6):
+            self.rating_filter_combo.addItem(f"≥{i}★", i)
+        self.rating_filter_combo.currentIndexChanged.connect(self._on_quick_filter_changed)
+        self.quick_filter_layout.addWidget(self.rating_filter_combo)
+        # Tag filter
+        self.tag_filter_edit = QLineEdit()
+        self.tag_filter_edit.setPlaceholderText("Filter by tag")
+        self.tag_filter_edit.textChanged.connect(self._on_quick_filter_changed)
+        self.quick_filter_layout.addWidget(self.tag_filter_edit)
+        # Date filter
+        self.date_filter_edit = QLineEdit()
+        self.date_filter_edit.setPlaceholderText("YYYY-MM-DD")
+        self.date_filter_edit.textChanged.connect(self._on_quick_filter_changed)
+        self.quick_filter_layout.addWidget(self.date_filter_edit)
+        self.left_layout.addLayout(self.quick_filter_layout)
+
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
         self.grid_layout.setSpacing(8)
@@ -186,6 +207,15 @@ class PhotoView(QMainWindow):
     def _on_filetype_changed(self, idx):
         exts = self.filetype_combo.currentData()
         self.viewmodel.set_file_types(exts)
+
+    def _on_quick_filter_changed(self):
+        # Get filter values
+        rating_filter = self.rating_filter_combo.currentData()
+        tag_filter = self.tag_filter_edit.text().strip()
+        date_filter = self.date_filter_edit.text().strip()
+
+        # Update viewmodel filters
+        self.viewmodel.set_quick_filter(rating_filter, tag_filter, date_filter)
 
     def _on_rating_clicked(self, n):
         self.viewmodel.set_rating(n)
