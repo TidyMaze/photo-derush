@@ -151,7 +151,7 @@ class PhotoView(QMainWindow):
 
     def _connect_signals(self):
         self.viewmodel.images_changed.connect(self._on_images_changed)
-        # self.viewmodel.image_added.connect(self._on_image_added)  # Remove this to avoid double addition
+        self.viewmodel.image_added.connect(self._on_image_added)  # Re-enable this for incremental grid population
         self.viewmodel.exif_changed.connect(self._on_exif_changed)
         self.viewmodel.thumbnail_loaded.connect(self._on_thumbnail_loaded)
         self.viewmodel.progress_changed.connect(self._on_progress_changed)
@@ -161,18 +161,22 @@ class PhotoView(QMainWindow):
         self.viewmodel.tags_changed.connect(self._on_tags_changed)
 
     def _on_images_changed(self, images):
-        # Always clear grid and repopulate with new images
+        import logging
+        logging.info(f"PhotoView._on_images_changed: images={images}")
+        # Only clear grid and reset state; do not repopulate here
         for label in self.label_refs.values():
             label.deleteLater()
         self.label_refs.clear()
         self.selected_filename = None
+        self.selected_filenames = set()
         self.open_btn.setEnabled(False)
         self._on_rating_changed(0)
         self._on_tags_changed([])
-        for idx, filename in enumerate(images):
-            self._on_image_added(filename, idx)
+        # Do not repopulate grid here; images will be added incrementally via _on_image_added
 
     def _on_image_added(self, filename, idx):
+        import logging
+        logging.info(f"PhotoView._on_image_added: filename={filename}, idx={idx}")
         row = idx // self.images_per_row
         col = idx % self.images_per_row
         label = QLabel()
@@ -299,9 +303,11 @@ class PhotoView(QMainWindow):
         self.viewmodel.open_selected_in_viewer()
 
     def _on_thumbnail_loaded(self, path, thumb):
-        # Find label by filename
+        import logging
+        logging.info(f"PhotoView._on_thumbnail_loaded: path={path}, thumb={'yes' if thumb else 'no'}")
+        # Find label by filename (exact match)
         for (row, col), label in self.label_refs.items():
-            if label.toolTip() == path or label.toolTip() in path:
+            if label.toolTip() == path:
                 if thumb:
                     if isinstance(thumb, QImage):
                         pixmap = QPixmap.fromImage(thumb)
