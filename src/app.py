@@ -155,11 +155,27 @@ def main():
     exif_worker = None
     last_exif_path = None
 
+    # Track threads for cleanup
+    loader_thread = None
+
     gui_updater = GuiUpdater(
         exif_view,
         lambda: last_exif_path,
         lambda: exif_worker_thread
     )
+
+    def cleanup_threads():
+        logging.info("Cleaning up threads before exit...")
+        # Clean up image loader thread
+        if loader_thread is not None and loader_thread.isRunning():
+            loader_thread.quit()
+            loader_thread.wait()
+        # Clean up exif worker thread
+        if exif_worker_thread is not None and exif_worker_thread.isRunning():
+            exif_worker_thread.quit()
+            exif_worker_thread.wait()
+
+    app.aboutToQuit.connect(cleanup_threads)
 
     def show_exif_for_item(item):
         nonlocal exif_worker_thread, exif_worker, last_exif_path
@@ -197,14 +213,14 @@ def main():
 
         # Background image loader setup
         loader = ImageLoaderWorker(image_paths)
-        thread = QThread()
-        loader.moveToThread(thread)
-        thread.started.connect(loader.load_images)
+        loader_thread = QThread()
+        loader.moveToThread(loader_thread)
+        loader_thread.started.connect(loader.load_images)
         loader.image_loaded.connect(lambda path: add_image_to_list(list_widget, path))
-        loader.finished.connect(thread.quit)
+        loader.finished.connect(loader_thread.quit)
         loader.finished.connect(loader.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.start()
+        loader_thread.finished.connect(loader_thread.deleteLater)
+        loader_thread.start()
 
     win.setCentralWidget(central_widget)
     logging.info("Showing main window...")
