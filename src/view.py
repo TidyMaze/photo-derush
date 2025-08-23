@@ -220,3 +220,6 @@ class PhotoView(QMainWindow):
                         pixmap = QPixmap.fromImage(qimg)
                     label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
                 break
+
+    def _on_has_selected_image_changed(self, has_selection: bool):
+        self.open_btn.setEnabled(has_selection)
