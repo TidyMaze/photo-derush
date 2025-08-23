@@ -43,6 +43,7 @@ class ImageLoaderWorker(QObject):
         self.image_paths = image_paths
 
     def load_images(self):
+        import io
         total = len(self.image_paths)
         for idx, path in enumerate(self.image_paths, 1):
             logging.info(f"[BG] Loading image: {path}")
@@ -55,8 +56,9 @@ class ImageLoaderWorker(QObject):
             bottom = top + min_dim
             img_cropped = img.crop((left, top, right, bottom)).resize((128, 128), Image.Resampling.LANCZOS)
             img_cropped = img_cropped.convert("RGBA")
-            import copy
-            data = copy.deepcopy(img_cropped.tobytes("raw", "RGBA"))
+            buf = io.BytesIO()
+            img_cropped.save(buf, format="PNG")
+            data = buf.getvalue()
             self.image_loaded.emit(path, data)
             self.progress.emit(idx, total)
         self.finished.emit()
@@ -264,13 +266,9 @@ def main():
                 def process_batch(self):
                     for _ in range(min(self.batch_size, len(self.queue))):
                         idx, path, data = self.queue.popleft()
-                        qimage_format = getattr(QImage, "Format_RGBA8888", getattr(QImage, "Format_ARGB32", None))
-                        if qimage_format is None:
-                            raise RuntimeError("No suitable QImage format found.")
-                        buffer = QByteArray(data)
-                        qimg = QImage(buffer, thumb_size, thumb_size, qimage_format).copy()
+                        qimg = QImage.fromData(data, "PNG")
                         icon = QIcon(QPixmap.fromImage(qimg))
-                        self.grid_adder_func(idx, path, icon, buffer)
+                        self.grid_adder_func(idx, path, icon)
                     if not self.queue:
                         self.timer.stop()
 
@@ -293,7 +291,4 @@ def main():
     except Exception as e:
         logging.exception(f"[ERROR] Exception in main: {e}")
 
-default_entry = __name__ == "__main__"
-if default_entry:
-    logging.info("[DEBUG] __main__ entry point reached")
-    main()
+default_entry = __name__ == "__main__
