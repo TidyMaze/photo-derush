@@ -23,12 +23,13 @@ class ImageLoaderWorker(QObject):
                 break
             self.image_found.emit(filename)
             thumb = self.model.load_thumbnail(self.model.get_image_path(filename))
-            self.thumbnail_loaded.emit(filename, thumb)
+            self.thumbnail_loaded.emit(filename, thumb)  # Emit filename, not path
             self.progress.emit(idx + 1, total)
         self.finished.emit()
 
 class PhotoViewModel(QObject):
     images_changed = Signal(list)
+    image_added = Signal(str, int)  # filename, index
     exif_changed = Signal(dict)
     progress_changed = Signal(int, int)
     thumbnail_loaded = Signal(str, object)  # path, QImage or PIL Image
@@ -62,6 +63,7 @@ class PhotoViewModel(QObject):
     def _on_image_found(self, filename):
         self.images.append(filename)
         self.images_changed.emit(self.images.copy())
+        self.image_added.emit(filename, len(self.images) - 1)
 
     @Slot(str)
     def select_image(self, filename):

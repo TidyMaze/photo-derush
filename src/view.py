@@ -39,25 +39,28 @@ class PhotoView(QMainWindow):
 
     def _connect_signals(self):
         self.viewmodel.images_changed.connect(self._on_images_changed)
+        self.viewmodel.image_added.connect(self._on_image_added)
         self.viewmodel.exif_changed.connect(self._on_exif_changed)
         self.viewmodel.thumbnail_loaded.connect(self._on_thumbnail_loaded)
 
     def _on_images_changed(self, images):
-        # Clear grid
-        for label in self.label_refs.values():
-            label.deleteLater()
-        self.label_refs.clear()
-        for idx, filename in enumerate(images):
-            row = idx // self.images_per_row
-            col = idx % self.images_per_row
-            label = QLabel()
-            label.setFixedSize(self.thumb_size, self.thumb_size)
-            label.setScaledContents(True)
-            label.setToolTip(filename)
-            label.mousePressEvent = lambda e, f=filename: self.viewmodel.select_image(f)
-            self.grid_layout.addWidget(label, row, col)
-            self.label_refs[(row, col)] = label
-            self.viewmodel.load_thumbnail(filename)
+        # Only clear grid if images list is empty (full reload)
+        if not images:
+            for label in self.label_refs.values():
+                label.deleteLater()
+            self.label_refs.clear()
+
+    def _on_image_added(self, filename, idx):
+        row = idx // self.images_per_row
+        col = idx % self.images_per_row
+        label = QLabel()
+        label.setFixedSize(self.thumb_size, self.thumb_size)
+        label.setScaledContents(True)
+        label.setToolTip(filename)
+        label.mousePressEvent = lambda e, f=filename: self.viewmodel.select_image(f)
+        self.grid_layout.addWidget(label, row, col)
+        self.label_refs[(row, col)] = label
+        self.viewmodel.load_thumbnail(filename)
 
     def _on_thumbnail_loaded(self, path, thumb):
         # Find label by filename
@@ -71,7 +74,7 @@ class PhotoView(QMainWindow):
                         data = thumb.tobytes()
                         w, h = thumb.size
                         # Use Format_RGBA8888 if available, else fallback
-                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_ARGB32)
+                        img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format_RGB32)
                         qimg = QImage(data, w, h, img_format)
                         pixmap = QPixmap.fromImage(qimg)
                     label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
