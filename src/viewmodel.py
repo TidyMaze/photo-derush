@@ -173,6 +173,6 @@ class PhotoViewModel(QObject):
         logging.info(f"ViewModel.apply_quick_filter: filtered={filtered}")
         self.images = filtered
         self.images_changed.emit(self.images)
-        # Re-emit image_added for each image for grid population
-        for idx, filename in enumerate(self.images):
-            self.image_added.emit(filename, idx)
+        # Remove image_added emission to avoid double addition
+        # for idx, filename in enumerate(self.images):
+        #     self.image_added.emit(filename, idx)

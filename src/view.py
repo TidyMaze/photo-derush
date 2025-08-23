@@ -151,7 +151,7 @@ class PhotoView(QMainWindow):
 
     def _connect_signals(self):
         self.viewmodel.images_changed.connect(self._on_images_changed)
-        self.viewmodel.image_added.connect(self._on_image_added)
+        # self.viewmodel.image_added.connect(self._on_image_added)  # Remove this to avoid double addition
         self.viewmodel.exif_changed.connect(self._on_exif_changed)
         self.viewmodel.thumbnail_loaded.connect(self._on_thumbnail_loaded)
         self.viewmodel.progress_changed.connect(self._on_progress_changed)
@@ -161,15 +161,16 @@ class PhotoView(QMainWindow):
         self.viewmodel.tags_changed.connect(self._on_tags_changed)
 
     def _on_images_changed(self, images):
-        # Only clear grid if images list is empty (full reload)
-        if not images:
-            for label in self.label_refs.values():
-                label.deleteLater()
-            self.label_refs.clear()
+        # Always clear grid and repopulate with new images
+        for label in self.label_refs.values():
+            label.deleteLater()
+        self.label_refs.clear()
         self.selected_filename = None
         self.open_btn.setEnabled(False)
         self._on_rating_changed(0)
         self._on_tags_changed([])
+        for idx, filename in enumerate(images):
+            self._on_image_added(filename, idx)
 
     def _on_image_added(self, filename, idx):
         row = idx // self.images_per_row
