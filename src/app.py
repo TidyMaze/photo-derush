@@ -193,13 +193,19 @@ def main():
     def cleanup_threads():
         logging.info("Cleaning up threads before exit...")
         # Clean up image loader thread
-        if loader_thread is not None and loader_thread.isRunning():
-            loader_thread.quit()
-            loader_thread.wait()
+        try:
+            if isinstance(loader_thread, QThread) and loader_thread.isRunning():
+                loader_thread.quit()
+                loader_thread.wait()
+        except RuntimeError:
+            logging.warning("loader_thread already deleted or invalid.")
         # Clean up exif worker thread
-        if exif_worker_thread is not None and exif_worker_thread.isRunning():
-            exif_worker_thread.quit()
-            exif_worker_thread.wait()
+        try:
+            if isinstance(exif_worker_thread, QThread) and exif_worker_thread.isRunning():
+                exif_worker_thread.quit()
+                exif_worker_thread.wait()
+        except RuntimeError:
+            logging.warning("exif_worker_thread already deleted or invalid.")
 
     app.aboutToQuit.connect(cleanup_threads)
 
@@ -216,8 +222,8 @@ def main():
         last_exif_path = path
         exif_view.setText("Loading EXIF...")
         # Abort previous worker if running
-        if exif_worker_thread is not None and exif_worker_thread.isRunning():
-            if exif_worker is not None:
+        if isinstance(exif_worker_thread, QThread) and exif_worker_thread.isRunning():
+            if isinstance(exif_worker, ExifLoaderWorker):
                 exif_worker.abort()
             exif_worker_thread.quit()
             exif_worker_thread.wait()
