@@ -128,6 +128,23 @@ class UiUpdater(QObject):
     add_image = Signal(str, QIcon)
     update_progress = Signal(int, int)
 
+class ImageAdder(QObject):
+    def __init__(self, add_image_to_grid, label_refs, max_images):
+        super().__init__()
+        self.add_image_to_grid = add_image_to_grid
+        self.label_refs = label_refs
+        self.max_images = max_images
+
+    def add(self, path, data):
+        import threading
+        logging.info(f"[UI] ImageAdder.add running in thread: {threading.current_thread().name}")
+        idx = len(self.label_refs)
+        if idx >= self.max_images:
+            return
+        qimg = QImage.fromData(data)
+        icon = QIcon(QPixmap.fromImage(qimg))
+        self.add_image_to_grid(idx, path, icon)
+
 def main():
     logging.info("[DEBUG] Entered main()")
     try:
@@ -243,6 +260,8 @@ def main():
             icon = QIcon(QPixmap.fromImage(qimg))
             add_image_to_grid(idx, path, icon)
 
+        image_adder = ImageAdder(add_image_to_grid, label_refs, max_images)
+
         if not image_paths:
             logging.info("No images found in the selected directory.")
             layout.addWidget(QLabel("No images found in the selected directory."))
@@ -258,7 +277,7 @@ def main():
             image_loader = ImageLoaderWorker(image_paths, max_images)
             image_thread = QThread()
             image_loader.moveToThread(image_thread)
-            image_loader.image_loaded.connect(handle_image_loaded, Qt.ConnectionType.QueuedConnection)
+            image_loader.image_loaded.connect(image_adder.add, Qt.QueuedConnection)
             image_thread.started.connect(image_loader.load_images)
             image_loader.finished.connect(image_thread.quit)
             image_loader.finished.connect(image_loader.deleteLater)
