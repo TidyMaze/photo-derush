@@ -184,9 +184,9 @@ class ImageModel:
             key = self._get_rating_key(path)
             info = self._ratings_tags.get(key, {})
             file_rating = info.get('rating', 0)
-            logging.info(f"Filter check: file={f}, key={key}, rating={file_rating}, filter_rating={rating}")
+            logging.info(f"Filter check: file={f}, key={key}, rating={file_rating} (type={type(file_rating)}), filter_rating={rating} (type={type(rating)})")
             # Rating filter
-            if rating and file_rating < rating:
+            if rating and int(file_rating) < int(rating):
                 logging.info(f"  Skipping {f}: rating {file_rating} < {rating}")
                 continue
             # Tag filter
