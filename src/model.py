@@ -76,6 +76,7 @@ class ImageModel:
             try:
                 with open(RATINGS_TAGS_PATH, 'r') as f:
                     self._ratings_tags = json.load(f)
+                logging.info(f"Loaded ratings/tags: {self._ratings_tags}")
             except Exception as e:
                 logging.info(f"No ratings/tags file found or failed to load: {e}")
                 self._ratings_tags = {}
@@ -85,6 +86,7 @@ class ImageModel:
         try:
             with open(RATINGS_TAGS_PATH, 'w') as f:
                 json.dump(self._ratings_tags, f)
+            logging.info(f"Saved ratings/tags: {self._ratings_tags}")
         except Exception as e:
             logging.warning(f"Failed to save ratings/tags: {e}")
 
@@ -95,7 +97,9 @@ class ImageModel:
     def get_rating(self, path):
         self._load_ratings_tags()
         key = self._get_rating_key(path)
-        return self._ratings_tags.get(key, {}).get('rating', 0)
+        rating = self._ratings_tags.get(key, {}).get('rating', 0)
+        logging.info(f"get_rating: path={path}, key={key}, rating={rating}")
+        return rating
 
     def set_rating(self, path, rating):
         if not isinstance(rating, int) or not (0 <= rating <= 5):
@@ -106,6 +110,7 @@ class ImageModel:
         if key not in self._ratings_tags:
             self._ratings_tags[key] = {}
         self._ratings_tags[key]['rating'] = rating
+        logging.info(f"set_rating: path={path}, key={key}, rating={rating}")
         self._save_ratings_tags()
 
     def get_tags(self, path):
@@ -148,7 +153,7 @@ class ImageModel:
     def filter_by_rating_tag_date(self, rating=0, tag='', date=''):
         logging.info(f"Filtering: rating={rating}, tag='{tag}', date='{date}'")
         files = self.get_image_files()
-        logging.info(f"Files before filtering: {files}")
+        logging.info(f"Files before filtering: {files[:5]}... (total {len(files)})")
         self._load_ratings_tags()
         filtered = []
         tag = tag.lower().strip() if tag else ''
