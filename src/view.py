@@ -162,7 +162,7 @@ class PhotoView(QMainWindow):
 
     def _on_images_changed(self, images):
         import logging
-        logging.info(f"PhotoView._on_images_changed: images={images}")
+        logging.info(f"PhotoView._on_images_changed: images={images[:5]}... total={len(images)}")
         # Only clear grid and reset state; do not repopulate here
         for label in self.label_refs.values():
             label.deleteLater()

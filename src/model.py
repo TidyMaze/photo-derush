@@ -26,7 +26,7 @@ class ImageModel:
             return []
         files = [f for f in os.listdir(self.directory)
                  if os.path.splitext(f)[1].lower() in self.allowed_exts]
-        logging.info(f"Found files: {files}")
+        logging.info(f"Found files: {files[:5]}... (total {len(files)})")
         return files[:self.max_images]
 
     def get_image_path(self, filename):
