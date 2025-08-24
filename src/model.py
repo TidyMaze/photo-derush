@@ -88,32 +88,40 @@ class ImageModel:
         except Exception as e:
             logging.warning(f"Failed to save ratings/tags: {e}")
 
+    def _get_rating_key(self, path):
+        # Use only the filename as the key for ratings/tags
+        return os.path.basename(path)
+
     def get_rating(self, path):
         self._load_ratings_tags()
-        return self._ratings_tags.get(path, {}).get('rating', 0)
+        key = self._get_rating_key(path)
+        return self._ratings_tags.get(key, {}).get('rating', 0)
 
     def set_rating(self, path, rating):
         if not isinstance(rating, int) or not (0 <= rating <= 5):
             logging.error("Rating must be an integer between 0 and 5.")
             return
         self._load_ratings_tags()
-        if path not in self._ratings_tags:
-            self._ratings_tags[path] = {}
-        self._ratings_tags[path]['rating'] = rating
+        key = self._get_rating_key(path)
+        if key not in self._ratings_tags:
+            self._ratings_tags[key] = {}
+        self._ratings_tags[key]['rating'] = rating
         self._save_ratings_tags()
 
     def get_tags(self, path):
         self._load_ratings_tags()
-        return self._ratings_tags.get(path, {}).get('tags', [])
+        key = self._get_rating_key(path)
+        return self._ratings_tags.get(key, {}).get('tags', [])
 
     def set_tags(self, path, tags):
         if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
             logging.error("Tags must be a list of strings.")
             return
         self._load_ratings_tags()
-        if path not in self._ratings_tags:
-            self._ratings_tags[path] = {}
-        self._ratings_tags[path]['tags'] = tags
+        key = self._get_rating_key(path)
+        if key not in self._ratings_tags:
+            self._ratings_tags[key] = {}
+        self._ratings_tags[key]['tags'] = tags
         self._save_ratings_tags()
 
     def filter_by_filename(self, substring):
@@ -147,20 +155,26 @@ class ImageModel:
         date = date.strip() if date else ''
         for f in files:
             path = self.get_image_path(f)
-            info = self._ratings_tags.get(path, {})
+            key = self._get_rating_key(path)
+            info = self._ratings_tags.get(key, {})
+            file_rating = info.get('rating', 0)
+            logging.info(f"Filter check: file={f}, key={key}, rating={file_rating}, filter_rating={rating}")
             # Rating filter
-            if rating and info.get('rating', 0) < rating:
+            if rating and file_rating < rating:
+                logging.info(f"  Skipping {f}: rating {file_rating} < {rating}")
                 continue
             # Tag filter
             if tag:
                 tags = [t.lower() for t in info.get('tags', [])]
                 if tag not in tags:
+                    logging.info(f"  Skipping {f}: tag '{tag}' not in {tags}")
                     continue
             # Date filter (EXIF)
             if date:
                 exif = self.load_exif(path)
                 exif_date = exif.get('DateTimeOriginal') or exif.get('DateTime') or ''
                 if not exif_date.startswith(date):
+                    logging.info(f"  Skipping {f}: date '{date}' not in '{exif_date}'")
                     continue
             filtered.append(f)
         logging.info(f"Files after filtering: {filtered}")
