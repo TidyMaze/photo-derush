@@ -177,7 +177,16 @@ class PhotoViewModel(QObject):
 
     def apply_quick_filter(self):
         import logging
-        # Clear and repopulate images incrementally for quick filter
+        # If all filters are at default, reload all images from disk
+        if (
+            (self._quick_filter_rating == 0 or self._quick_filter_rating is None)
+            and not self._quick_filter_tag
+            and not self._quick_filter_date
+        ):
+            logging.info("apply_quick_filter: all filters default, reloading all images from disk")
+            self.load_images()
+            return
+        # Otherwise, filter as usual
         filtered = self.model.filter_by_rating_tag_date(
             self._quick_filter_rating, self._quick_filter_tag, self._quick_filter_date)
         logging.info(f"apply_quick_filter: filtered images = {filtered}")
