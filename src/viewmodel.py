@@ -176,9 +176,11 @@ class PhotoViewModel(QObject):
         self.apply_quick_filter()
 
     def apply_quick_filter(self):
-        # Re-enable clearing and repopulating images for quick filter
-        self.images = self.model.get_image_files()
-        self.images_changed.emit(self.images)
-        # Remove image_added emission to avoid double addition
-        # for idx, filename in enumerate(self.images):
-        #     self.image_added.emit(filename, idx)
+        # Clear and repopulate images incrementally for quick filter
+        filtered = self.model.filter_by_rating_tag_date(
+            self._quick_filter_rating, self._quick_filter_tag, self._quick_filter_date)
+        self.images = []
+        self.images_changed.emit(self.images)  # Clear grid
+        for idx, filename in enumerate(filtered):
+            self.images.append(filename)
+            self.image_added.emit(filename, idx)
