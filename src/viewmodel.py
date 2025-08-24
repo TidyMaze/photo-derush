@@ -28,6 +28,7 @@ class ImageLoaderWorker(QObject):
                 break
             self.image_found.emit(filename)
             thumb = self.model.load_thumbnail(self.model.get_image_path(filename))
+            logging.info(f"ImageLoaderWorker: loaded thumbnail for {filename}: {'yes' if thumb else 'no'}")
             self.thumbnail_loaded.emit(filename, thumb)  # Emit filename, not path
             self.progress.emit(idx + 1, total)
         self.finished.emit()
@@ -76,6 +77,8 @@ class PhotoViewModel(QObject):
         return self._tags
 
     def load_images(self):
+        import logging
+        logging.info(f"PhotoViewModel.load_images called. Directory: {self.model.directory}")
         self.images = []
         self.images_changed.emit(self.images)  # Clear grid at start
         self._loader_worker = ImageLoaderWorker(self.model)
@@ -169,12 +172,8 @@ class PhotoViewModel(QObject):
         self.apply_quick_filter()
 
     def apply_quick_filter(self):
-        import logging
-        logging.info(f"ViewModel.apply_quick_filter: rating={self._quick_filter_rating}, tag='{self._quick_filter_tag}', date='{self._quick_filter_date}'")
-        filtered = self.model.filter_by_rating_tag_date(
-            self._quick_filter_rating, self._quick_filter_tag, self._quick_filter_date)
-        logging.info(f"ViewModel.apply_quick_filter: filtered={filtered}")
-        self.images = filtered
+        # Temporarily disable all filters: always show all images
+        self.images = self.model.get_image_files()
         self.images_changed.emit(self.images)
         # Remove image_added emission to avoid double addition
         # for idx, filename in enumerate(self.images):

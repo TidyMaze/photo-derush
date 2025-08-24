@@ -36,6 +36,7 @@ def main():
     last_dir = load_last_dir()  # Use config, not forced cwd
     logging.info(f"Loaded last_dir from config: {last_dir}")
     viewmodel = PhotoViewModel(last_dir, max_images=MAX_IMAGES)
+    logging.info("PhotoViewModel created, about to create PhotoView and call load_images()")
     view = PhotoView(viewmodel)
     view.show()
     viewmodel.load_images()
