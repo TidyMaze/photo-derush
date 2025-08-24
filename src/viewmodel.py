@@ -98,7 +98,8 @@ class PhotoViewModel(QObject):
     def _on_loader_finished(self):
         import logging
         logging.info(f"PhotoViewModel._on_loader_finished: images count={len(self.images)}")
-        self.images_changed.emit(self.images.copy())
+        # Do not emit images_changed here; grid is already populated incrementally
+        # self.images_changed.emit(self.images.copy())
 
     @Slot(str)
     def _on_image_found(self, filename):
