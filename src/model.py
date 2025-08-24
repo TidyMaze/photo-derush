@@ -73,9 +73,30 @@ class ImageModel:
 
     def _load_ratings_tags(self):
         if not hasattr(self, '_ratings_tags'):
+            changed = False
             try:
                 with open(RATINGS_TAGS_PATH, 'r') as f:
-                    self._ratings_tags = json.load(f)
+                    raw = json.load(f)
+                # Migrate all keys to filename-only
+                cleaned = {}
+                for k, v in raw.items():
+                    filename = os.path.basename(k)
+                    if filename in cleaned:
+                        # Merge ratings/tags if duplicate
+                        merged = cleaned[filename].copy()
+                        if 'rating' in v:
+                            merged['rating'] = v['rating']
+                        if 'tags' in v:
+                            merged['tags'] = v['tags']
+                        cleaned[filename] = merged
+                    else:
+                        cleaned[filename] = v
+                    if k != filename:
+                        changed = True
+                self._ratings_tags = cleaned
+                if changed:
+                    with open(RATINGS_TAGS_PATH, 'w') as f:
+                        json.dump(self._ratings_tags, f)
                 logging.info(f"Loaded ratings/tags: {self._ratings_tags}")
             except Exception as e:
                 logging.info(f"No ratings/tags file found or failed to load: {e}")
