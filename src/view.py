@@ -182,60 +182,58 @@ class PhotoView(QMainWindow):
         label = QLabel()
         label.setFixedSize(self.thumb_size, self.thumb_size)
         label.setScaledContents(True)
-        label.setToolTip(filename)
+        full_path = self.viewmodel.model.get_image_path(filename)
+        label.setToolTip(full_path)  # Use full path for tooltip
         label.mousePressEvent = lambda e, f=filename, l=label: self._on_label_clicked(e, f, l)
         self.grid_layout.addWidget(label, row, col)
         logging.info(f"Added QLabel for {filename} at row={row}, col={col}")
         self.label_refs[(row, col)] = label
         self.viewmodel.load_thumbnail(filename)
-        self._update_label_highlight(label, filename)
+        self._update_label_highlight(label, full_path)
         self.grid_widget.update()
         self.grid_layout.update()
         logging.info(f"grid_widget size: {self.grid_widget.size()}, grid_layout count: {self.grid_layout.count()}")
 
     def _on_label_clicked(self, event, filename, label):
+        full_path = self.viewmodel.model.get_image_path(filename)
         modifiers = event.modifiers()
         if modifiers & Qt.KeyboardModifier.ControlModifier or modifiers & Qt.KeyboardModifier.MetaModifier:
-            # Ctrl/Cmd+Click: toggle selection
-            if filename in self.selected_filenames:
-                self.selected_filenames.remove(filename)
+            if full_path in self.selected_filenames:
+                self.selected_filenames.remove(full_path)
             else:
-                self.selected_filenames.add(filename)
+                self.selected_filenames.add(full_path)
         elif modifiers & Qt.KeyboardModifier.ShiftModifier and self.selected_filenames:
-            # Shift+Click: select range
             all_files = [label.toolTip() for label in self.label_refs.values()]
             last = None
             if self.selected_filenames:
                 last = all_files.index(sorted(self.selected_filenames, key=lambda x: all_files.index(x))[-1])
-            curr = all_files.index(filename)
+            curr = all_files.index(full_path)
             if last is not None:
                 rng = range(min(last, curr), max(last, curr) + 1)
                 for i in rng:
                     self.selected_filenames.add(all_files[i])
         else:
-            # Single click: select only this
-            self.selected_filenames = {filename}
-        self.selected_filename = filename  # For backward compatibility
+            self.selected_filenames = {full_path}
+        self.selected_filename = full_path
         self._update_all_highlights()
         self.viewmodel.select_image(filename)
 
-    def _update_label_highlight(self, label, filename):
-        if filename in getattr(self, 'selected_filenames', set()):
+    def _update_label_highlight(self, label, full_path):
+        if full_path in getattr(self, 'selected_filenames', set()):
             label.setStyleSheet("border: 3px solid #0078d7; background: #e6f0fa;")
         else:
             label.setStyleSheet("")
 
     def _update_all_highlights(self):
         for (row, col), label in self.label_refs.items():
-            filename = label.toolTip()
-            self._update_label_highlight(label, filename)
+            full_path = label.toolTip()
+            self._update_label_highlight(label, full_path)
 
     def _on_selected_image_changed(self, path):
         if path:
-            filename = os.path.basename(path)
-            self.selected_filename = filename
-            if filename not in self.selected_filenames:
-                self.selected_filenames = {filename}
+            self.selected_filename = path
+            if path not in self.selected_filenames:
+                self.selected_filenames = {path}
             self._update_all_highlights()
 
     def resizeEvent(self, event):
@@ -316,7 +314,6 @@ class PhotoView(QMainWindow):
                         pixmap = QPixmap.fromImage(thumb)
                         logging.info(f"QImage thumbnail for {path} is valid: {not pixmap.isNull()}")
                     else:
-                        # PIL Image
                         data = thumb.tobytes()
                         w, h = thumb.size
                         img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format.Format_ARGB32)
@@ -334,7 +331,7 @@ class PhotoView(QMainWindow):
 
     def _on_fullscreen_clicked(self):
         # Show selected image(s) in fullscreen/compare dialog
-        selected = [self.viewmodel.model.get_image_path(f) for f in self.selected_filenames]
+        selected = [f for f in self.selected_filenames]
         if not selected:
             return
         dlg = FullscreenDialog(selected, self)

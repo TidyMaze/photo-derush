@@ -27,9 +27,10 @@ class ImageLoaderWorker(QObject):
             if self._abort:
                 break
             self.image_found.emit(filename)
-            thumb = self.model.load_thumbnail(self.model.get_image_path(filename))
+            full_path = self.model.get_image_path(filename)
+            thumb = self.model.load_thumbnail(full_path)
             logging.info(f"ImageLoaderWorker: loaded thumbnail for {filename}: {'yes' if thumb else 'no'}")
-            self.thumbnail_loaded.emit(filename, thumb)  # Emit filename, not path
+            self.thumbnail_loaded.emit(full_path, thumb)  # Emit full path
             self.progress.emit(idx + 1, total)
         self.finished.emit()
 
@@ -79,8 +80,8 @@ class PhotoViewModel(QObject):
     def load_images(self):
         import logging
         logging.info(f"PhotoViewModel.load_images called. Directory: {self.model.directory}")
-        self.images = []
-        self.images_changed.emit(self.images)  # Clear grid at start
+        self.images = []  # Re-enabled: clear images list
+        self.images_changed.emit(self.images)  # Re-enabled: clear grid at start
         self._loader_worker = ImageLoaderWorker(self.model)
         self._loader_thread = QThread()
         self._loader_worker.moveToThread(self._loader_thread)
@@ -95,6 +96,8 @@ class PhotoViewModel(QObject):
         self._loader_thread.start()
 
     def _on_loader_finished(self):
+        import logging
+        logging.info(f"PhotoViewModel._on_loader_finished: images count={len(self.images)}")
         self.images_changed.emit(self.images.copy())
 
     @Slot(str)
@@ -172,7 +175,7 @@ class PhotoViewModel(QObject):
         self.apply_quick_filter()
 
     def apply_quick_filter(self):
-        # Temporarily disable all filters: always show all images
+        # Re-enable clearing and repopulating images for quick filter
         self.images = self.model.get_image_files()
         self.images_changed.emit(self.images)
         # Remove image_added emission to avoid double addition
