@@ -4,8 +4,9 @@ from PySide6.QtWidgets import QApplication
 import qdarktheme
 import os
 import json
-from .viewmodel import PhotoViewModel
-from .view import PhotoView
+
+from src.view import PhotoView
+from src.viewmodel import PhotoViewModel
 
 logging.basicConfig(level=logging.INFO)
 CONFIG_PATH = os.path.expanduser('~/.photo_app_config.json')
