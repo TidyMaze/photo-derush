@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QComboBox, QHBoxLayout, QPushButton, QLineEdit, QDialog
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QHBoxLayout, QPushButton, QDialog
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 import os
