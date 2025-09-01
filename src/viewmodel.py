@@ -45,6 +45,7 @@ class PhotoViewModel(QObject):
     has_selected_image_changed = Signal(bool)
     rating_changed = Signal(int)
     tags_changed = Signal(list)
+    state_changed = Signal(str)
 
     def __init__(self, directory, max_images=100):
         super().__init__()
@@ -60,11 +61,16 @@ class PhotoViewModel(QObject):
         self._has_selected_image = False
         self._rating = 0
         self._tags = []
+        self._state = ''
         # Quick filter state removed
 
     @property
     def has_selected_image(self) -> bool:
         return self._has_selected_image
+
+    @property
+    def state(self):
+        return self._state
 
     @property
     def rating(self):
@@ -107,11 +113,14 @@ class PhotoViewModel(QObject):
         if self.selected_image:
             self._rating = self.model.get_rating(self.selected_image)
             self._tags = self.model.get_tags(self.selected_image)
+            self._state = self.model.get_state(self.selected_image)
         else:
             self._rating = 0
             self._tags = []
+            self._state = ''
         self.rating_changed.emit(self._rating)
         self.tags_changed.emit(self._tags)
+        self.state_changed.emit(self._state)
 
     @Slot(str)
     def select_image(self, filename):
@@ -138,6 +147,16 @@ class PhotoViewModel(QObject):
             self.model.set_tags(self.selected_image, tags)
             self._tags = tags
             self.tags_changed.emit(tags)
+
+    @Slot(str)
+    def set_state(self, state):
+        """Set labeling state for the currently selected image: 'keep', 'trash', or '' to clear."""
+        if not self.selected_image:
+            logging.warning("No selected image to set state on.")
+            return
+        self.model.set_state(self.selected_image, state)
+        self._state = state or ''
+        self.state_changed.emit(self._state)
 
     @Slot(str)
     def load_thumbnail(self, filename):

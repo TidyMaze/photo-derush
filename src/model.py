@@ -150,6 +150,33 @@ class ImageModel:
         self._ratings_tags[key]['tags'] = tags
         self._save_ratings_tags()
 
+    # Keep/trash labeling support (stored alongside ratings/tags)
+    def get_state(self, path):
+        """Return the label state for a file: 'keep', 'trash', or '' when unset."""
+        self._load_ratings_tags()
+        key = self._get_rating_key(path)
+        return self._ratings_tags.get(key, {}).get('state', '')
+
+    def set_state(self, path, state):
+        """Set the label state for a file. state must be 'keep', 'trash', or '' to clear."""
+        if state not in ('keep', 'trash', ''):
+            logging.error("Invalid state. Expected 'keep', 'trash' or ''.")
+            return
+        self._load_ratings_tags()
+        key = self._get_rating_key(path)
+        if key not in self._ratings_tags:
+            self._ratings_tags[key] = {}
+        # Store empty string to indicate no explicit state
+        if state:
+            self._ratings_tags[key]['state'] = state
+        else:
+            # remove the key if no other metadata present
+            if 'state' in self._ratings_tags[key]:
+                del self._ratings_tags[key]['state']
+            if not self._ratings_tags[key]:
+                del self._ratings_tags[key]
+        self._save_ratings_tags()
+
     def filter_by_filename(self, substring):
         if not isinstance(substring, str) or not substring:
             return self.get_image_files()

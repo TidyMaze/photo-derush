@@ -97,6 +97,7 @@ class PhotoView(QMainWindow):
             self.rating_layout.addWidget(btn)
             self.rating_stars.append(btn)
         self.side_layout.addLayout(self.rating_layout)
+
         # Tags UI
         self.tags_layout = QHBoxLayout()
         self.tags_label = QLabel("Tags:")
