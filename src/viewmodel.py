@@ -56,14 +56,11 @@ class PhotoViewModel(QObject):
         self.max_images = max_images
         self._loader_thread = None
         self._loader_worker = None
-        self.current_exts = self.model.allowed_exts.copy()
+        # Filtering removed
         self._has_selected_image = False
         self._rating = 0
         self._tags = []
-        # Quick filter state
-        self._quick_filter_rating = 0
-        self._quick_filter_tag = ''
-        self._quick_filter_date = ''
+        # Quick filter state removed
 
     @property
     def has_selected_image(self) -> bool:
@@ -147,11 +144,6 @@ class PhotoViewModel(QObject):
         # No-op: thumbnails are loaded by the worker now
         pass
 
-    def set_file_types(self, exts):
-        self.current_exts = exts
-        self.model.set_allowed_exts(exts)
-        self.load_images()
-
     def open_selected_in_viewer(self):
         if not self.selected_image:
             logging.warning("No image selected to open in viewer.")
@@ -166,32 +158,3 @@ class PhotoViewModel(QObject):
                 subprocess.Popen(["xdg-open", path])
         except Exception as e:
             logging.error(f"Failed to open image in viewer: {e}")
-
-    def set_quick_filter(self, rating=0, tag='', date=''):
-        import logging
-        logging.info(f"ViewModel.set_quick_filter: rating={rating}, tag='{tag}', date='{date}'")
-        self._quick_filter_rating = rating
-        self._quick_filter_tag = tag
-        self._quick_filter_date = date
-        self.apply_quick_filter()
-
-    def apply_quick_filter(self):
-        import logging
-        # If all filters are at default, reload all images from disk
-        if (
-            (self._quick_filter_rating == 0 or self._quick_filter_rating is None)
-            and not self._quick_filter_tag
-            and not self._quick_filter_date
-        ):
-            logging.info("apply_quick_filter: all filters default, reloading all images from disk")
-            self.load_images()
-            return
-        # Otherwise, filter as usual
-        filtered = self.model.filter_by_rating_tag_date(
-            self._quick_filter_rating, self._quick_filter_tag, self._quick_filter_date)
-        logging.info(f"apply_quick_filter: filtered images = {filtered}")
-        self.images = []
-        self.images_changed.emit(self.images)  # Clear grid
-        for idx, filename in enumerate(filtered):
-            self.images.append(filename)
-            self.image_added.emit(filename, idx)
