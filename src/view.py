@@ -401,10 +401,32 @@ class PhotoView(QMainWindow):
 
     def _on_fullscreen_clicked(self):
         # Show selected image(s) in fullscreen/compare dialog
-        selected = [f for f in self.selected_filenames]
-        if not selected:
+        import logging
+        logging.info(f"Fullscreen clicked with selected_filenames: {list(self.selected_filenames)}")
+
+        # Ensure all selected filenames are strings before passing to dialog
+        validated_paths = []
+        for item in self.selected_filenames:
+            if isinstance(item, list):
+                logging.error(f"Found list in selected_filenames: {item}, taking first element")
+                path = item[0] if item else ""
+            elif isinstance(item, (str, os.PathLike)):
+                path = str(item)
+            else:
+                logging.error(f"Unknown type in selected_filenames: {type(item)} = {item}")
+                path = str(item)
+
+            if path and os.path.exists(path):
+                validated_paths.append(path)
+            else:
+                logging.warning(f"Skipping invalid/missing path: {path}")
+
+        if not validated_paths:
+            logging.warning("No valid paths found for fullscreen viewer")
             return
-        dlg = FullscreenDialog(selected, self)
+
+        logging.info(f"Opening fullscreen with validated paths: {validated_paths}")
+        dlg = FullscreenDialog(validated_paths, self)
         dlg.exec()
 
     def closeEvent(self, event):
