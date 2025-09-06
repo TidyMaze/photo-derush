@@ -41,6 +41,12 @@ def main():
     view = PhotoView(viewmodel)
     view.show()
     viewmodel.load_images()
+
+    # Ensure proper cleanup on app shutdown
+    def cleanup_handler():
+        viewmodel.cleanup()
+
+    app.aboutToQuit.connect(cleanup_handler)
     sys.exit(app.exec())
 
 if __name__ == "__main__":
