@@ -45,6 +45,7 @@ class PhotoViewModel(QObject):
     has_selected_image_changed = Signal(bool)
     rating_changed = Signal(int)
     tags_changed = Signal(list)
+    label_changed = Signal(str, str) # filename, label
     state_changed = Signal(str)
 
     def __init__(self, directory, max_images=100):
@@ -61,6 +62,7 @@ class PhotoViewModel(QObject):
         self._has_selected_image = False
         self._rating = 0
         self._tags = []
+        self._label = None
         self._state = ''
         # Quick filter state removed
 
@@ -80,6 +82,10 @@ class PhotoViewModel(QObject):
     def tags(self):
         return self._tags
 
+    @property
+    def label(self):
+        return self._label
+
     def load_images(self):
         import logging
         logging.info(f"PhotoViewModel.load_images called. Directory: {self.model.directory}")
@@ -98,11 +104,17 @@ class PhotoViewModel(QObject):
         self._loader_thread.finished.connect(self._loader_thread.deleteLater)
         self._loader_thread.start()
 
+    def set_label(self, label: str):
+        if self.selected_image:
+            filenames = [os.path.basename(p) for p in self.selected_image]
+            for filename in filenames:
+                self.model.set_label(filename, label)
+                self.label_changed.emit(filename, label)
+            self._label = label
+
     def _on_loader_finished(self):
-        import logging
-        logging.info(f"PhotoViewModel._on_loader_finished: images count={len(self.images)}")
-        # Do not emit images_changed here; grid is already populated incrementally
-        # self.images_changed.emit(self.images.copy())
+        self._loader_thread = None
+        self._loader_worker = None
 
     @Slot(str)
     def _on_image_found(self, filename):
@@ -123,45 +135,54 @@ class PhotoViewModel(QObject):
         self.state_changed.emit(self._state)
 
     @Slot(str)
-    def select_image(self, filename):
-        path = self.model.get_image_path(filename)
-        self.selected_image = path
-        self.selected_image_changed.emit(path)
-        self._has_selected_image = bool(path)
-        self.has_selected_image_changed.emit(self._has_selected_image)
-        self._update_rating_tags()
-        exif = self.model.load_exif(path)
-        self.exif = exif
-        self.exif_changed.emit(exif)
+    def select_image(self, filename: str):
+        full_path = self.model.get_image_path(filename)
+        self.selected_image = [full_path]
+
+        details = self.model.get_image_details(filename)
+        if details:
+            self.exif = details.get('exif', {})
+            self._rating = details.get('rating', 0)
+            self._tags = details.get('tags', [])
+            self._label = details.get('label', None)
+        else:
+            self.exif = {}
+            self._rating = 0
+            self._tags = []
+            self._label = None
+
+        self.exif_changed.emit(self.exif)
+        self.rating_changed.emit(self.rating)
+        self.tags_changed.emit(self.tags)
+        if self._label:
+            self.label_changed.emit(filename, self._label)
+
+        if not self._has_selected_image:
+            self._has_selected_image = True
+            self.has_selected_image_changed.emit(True)
+
+        self.selected_image_changed.emit(full_path)
 
     @Slot(int)
-    def set_rating(self, rating):
+    def set_rating(self, rating: int):
         if self.selected_image:
             self.model.set_rating(self.selected_image, rating)
             self._rating = rating
-            self.rating_changed.emit(rating)
+            self.rating_changed.emit(self.rating)
 
     @Slot(list)
-    def set_tags(self, tags):
+    def set_tags(self, tags: list):
         if self.selected_image:
-            self.model.set_tags(self.selected_image, tags)
+            filenames = [os.path.basename(p) for p in self.selected_image]
+            for filename in filenames:
+                self.model.set_tags(filename, tags)
             self._tags = tags
-            self.tags_changed.emit(tags)
+            self.tags_changed.emit(self.tags)
 
-    @Slot(str)
-    def set_state(self, state):
-        """Set labeling state for the currently selected image: 'keep', 'trash', or '' to clear."""
-        if not self.selected_image:
-            logging.warning("No selected image to set state on.")
-            return
-        self.model.set_state(self.selected_image, state)
-        self._state = state or ''
-        self.state_changed.emit(self._state)
-
-    @Slot(str)
-    def load_thumbnail(self, filename):
-        # No-op: thumbnails are loaded by the worker now
-        pass
+    def load_thumbnail(self, filename: str):
+        """Load thumbnail for a specific image file."""
+        full_path = self.model.get_image_path(filename)
+        return self.model.load_thumbnail(full_path)
 
     def open_selected_in_viewer(self):
         if not self.selected_image:

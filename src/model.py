@@ -232,3 +232,17 @@ class ImageModel:
             filtered.append(f)
         logging.info(f"Files after filtering: {filtered}")
         return filtered
+
+    def get_image_details(self, filename):
+        """Get comprehensive details for an image including EXIF, rating, tags, and label."""
+        path = self.get_image_path(filename)
+        if not path:
+            return None
+
+        details = {
+            'exif': self.load_exif(path),
+            'rating': self.get_rating(path),
+            'tags': self.get_tags(path),
+            'label': self.get_state(path)
+        }
+        return details

@@ -1,5 +1,5 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QHBoxLayout, QPushButton, QDialog
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QHBoxLayout, QPushButton, QDialog, QLineEdit
+from PySide6.QtGui import QPixmap, QImage, QPainter, QColor
 from PySide6.QtCore import Qt
 import os
 
@@ -108,6 +108,14 @@ class PhotoView(QMainWindow):
         self.tags_layout.addWidget(self.tags_edit)
         self.side_layout.addLayout(self.tags_layout)
 
+        # Keep/Trash buttons
+        self.label_layout = QHBoxLayout()
+        self.keep_btn = QPushButton("Keep")
+        self.trash_btn = QPushButton("Trash")
+        self.label_layout.addWidget(self.keep_btn)
+        self.label_layout.addWidget(self.trash_btn)
+        self.side_layout.addLayout(self.label_layout)
+
         # Fullscreen/Compare button
         self.fullscreen_btn = QPushButton("Fullscreen/Compare")
         self.fullscreen_btn.setEnabled(True)
@@ -117,6 +125,9 @@ class PhotoView(QMainWindow):
         self.label_refs = {}
         self.selected_filename = None  # Kept for backward compatibility
         self._connect_signals()
+
+        self.keep_btn.clicked.connect(lambda: self.viewmodel.set_label("keep"))
+        self.trash_btn.clicked.connect(lambda: self.viewmodel.set_label("trash"))
 
     def _connect_signals(self):
         self.viewmodel.images_changed.connect(self._on_images_changed)
@@ -128,6 +139,7 @@ class PhotoView(QMainWindow):
         self.viewmodel.has_selected_image_changed.connect(self._on_has_selected_image_changed)
         self.viewmodel.rating_changed.connect(self._on_rating_changed)
         self.viewmodel.tags_changed.connect(self._on_tags_changed)
+        self.viewmodel.label_changed.connect(self._on_label_changed)
 
     def _on_images_changed(self, images):
         import logging
@@ -141,6 +153,7 @@ class PhotoView(QMainWindow):
         self.open_btn.setEnabled(False)
         self._on_rating_changed(0)
         self._on_tags_changed([])
+        self._on_label_changed(None, None)
         # Do not repopulate grid here; images will be added incrementally via _on_image_added
 
     def _on_image_added(self, filename, idx):
@@ -197,6 +210,55 @@ class PhotoView(QMainWindow):
         for (row, col), label in self.label_refs.items():
             full_path = label.toolTip()
             self._update_label_highlight(label, full_path)
+
+    def _on_label_changed(self, filename, label):
+        if not self.selected_filenames:
+            return
+
+        files_to_update = [os.path.basename(f) for f in self.selected_filenames]
+
+        for (row, col), thumb_label in self.label_refs.items():
+            f_path = thumb_label.toolTip()
+            f_name = os.path.basename(f_path)
+            if f_name in files_to_update:
+                details = self.viewmodel.model.get_image_details(f_name)
+                current_label = details.get('label') if details else None
+                self._update_label_icon(thumb_label, current_label)
+
+    def _update_label_icon(self, thumb_label, label):
+        if not hasattr(thumb_label, 'original_pixmap') or thumb_label.original_pixmap.isNull():
+            return
+
+        pixmap = thumb_label.original_pixmap.copy()
+        painter = QPainter(pixmap)
+
+        icon_char = ""
+        color = QColor()
+
+        if label == "keep":
+            icon_char = "✓"
+            color = QColor("green")
+        elif label == "trash":
+            icon_char = "✗"
+            color = QColor("red")
+
+        if icon_char:
+            painter.setPen(color)
+            font = painter.font()
+            font.setPointSize(32)
+            font.setBold(True)
+            painter.setFont(font)
+
+            rect = pixmap.rect()
+            flags = Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
+
+            # Add a small margin
+            rect.adjust(-10, 10, -10, 10)
+
+            painter.drawText(rect, flags, icon_char)
+
+        painter.end()
+        thumb_label.setPixmap(pixmap)
 
     def _on_selected_image_changed(self, path):
         if path:
@@ -275,7 +337,16 @@ class PhotoView(QMainWindow):
                         qimg = QImage(data, w, h, img_format)
                         pixmap = QPixmap.fromImage(qimg)
                         logging.info(f"PIL Image thumbnail for {path} is valid: {not pixmap.isNull()}")
-                    label.setPixmap(pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+
+                    scaled_pixmap = pixmap.scaled(self.thumb_size, self.thumb_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    label.original_pixmap = scaled_pixmap
+                    label.setPixmap(scaled_pixmap)
+
+                    filename = os.path.basename(path)
+                    details = self.viewmodel.model.get_image_details(filename)
+                    if details and 'label' in details:
+                        self._update_label_icon(label, details['label'])
+
                     logging.info(f"Set pixmap for label {path}")
                 else:
                     logging.warning(f"No thumbnail for {path}")
