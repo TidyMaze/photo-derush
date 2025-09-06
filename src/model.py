@@ -1,7 +1,7 @@
 import os
 import json
 from PIL import Image, ExifTags
-from src.cache import ThumbnailCache
+from .cache import ThumbnailCache
 import logging
 
 RATINGS_TAGS_PATH = os.path.expanduser('~/.photo-derush-ratings-tags.json')
