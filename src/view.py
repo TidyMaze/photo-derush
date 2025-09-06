@@ -362,3 +362,18 @@ class PhotoView(QMainWindow):
             return
         dlg = FullscreenDialog(selected, self)
         dlg.exec()
+
+    def closeEvent(self, event):
+        """Handle the window close event to ensure threads are cleaned up."""
+        import logging
+        if self.viewmodel._loader_thread and self.viewmodel._loader_thread.isRunning():
+            logging.info("Close event: Loader thread is running. Initiating graceful shutdown.")
+            # Connect the thread's finished signal to the window's close method
+            self.viewmodel._loader_thread.finished.connect(self.close)
+            # Ask the thread to stop
+            self.viewmodel.cleanup()
+            # Ignore the current close event, the window will be closed by the finished signal
+            event.ignore()
+        else:
+            logging.info("Close event: Loader thread not running. Accepting close event.")
+            event.accept()

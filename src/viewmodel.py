@@ -30,22 +30,22 @@ class ImageLoaderWorker(QObject):
             full_path = self.model.get_image_path(filename)
             thumb = self.model.load_thumbnail(full_path)
             logging.info(f"ImageLoaderWorker: loaded thumbnail for {filename}: {'yes' if thumb else 'no'}")
-            self.thumbnail_loaded.emit(full_path, thumb)  # Emit full path
+            self.thumbnail_loaded.emit(full_path, thumb)
             self.progress.emit(idx + 1, total)
         self.finished.emit()
 
 class PhotoViewModel(QObject):
     """ViewModel: Exposes all state and actions for the View. No UI code."""
     images_changed = Signal(list)
-    image_added = Signal(str, int)  # filename, index
+    image_added = Signal(str, int)
     exif_changed = Signal(dict)
     progress_changed = Signal(int, int)
-    thumbnail_loaded = Signal(str, object)  # path, QImage or PIL Image
+    thumbnail_loaded = Signal(str, object)
     selected_image_changed = Signal(str)
     has_selected_image_changed = Signal(bool)
     rating_changed = Signal(int)
     tags_changed = Signal(list)
-    label_changed = Signal(str, str) # filename, label
+    label_changed = Signal(str, str)
     state_changed = Signal(str)
 
     def __init__(self, directory, max_images=100):
@@ -58,13 +58,11 @@ class PhotoViewModel(QObject):
         self.max_images = max_images
         self._loader_thread = None
         self._loader_worker = None
-        # Filtering removed
         self._has_selected_image = False
         self._rating = 0
         self._tags = []
         self._label = None
         self._state = ''
-        # Quick filter state removed
 
     @property
     def has_selected_image(self) -> bool:
@@ -87,34 +85,64 @@ class PhotoViewModel(QObject):
         return self._label
 
     def load_images(self):
-        import logging
         logging.info(f"PhotoViewModel.load_images called. Directory: {self.model.directory}")
-        self.images = []  # Re-enabled: clear images list
-        self.images_changed.emit(self.images)  # Re-enabled: clear grid at start
+        self.images = []
+        self.images_changed.emit(self.images)
+
+        # Create and store strong references
         self._loader_worker = ImageLoaderWorker(self.model)
-        self._loader_thread = QThread()
+        self._loader_thread = QThread(self)
+
+        # Move worker to thread
         self._loader_worker.moveToThread(self._loader_thread)
+
+        # Connect signals properly
         self._loader_thread.started.connect(self._loader_worker.run)
         self._loader_worker.image_found.connect(self._on_image_found)
         self._loader_worker.thumbnail_loaded.connect(self.thumbnail_loaded)
         self._loader_worker.progress.connect(self.progress_changed)
-        self._loader_worker.finished.connect(self._on_loader_finished)
+
+        # Proper cleanup sequence
         self._loader_worker.finished.connect(self._loader_thread.quit)
         self._loader_worker.finished.connect(self._loader_worker.deleteLater)
-        self._loader_thread.finished.connect(self._loader_thread.deleteLater)
+        self._loader_thread.finished.connect(self._on_thread_finished)
+
+        logging.info("Starting image loader thread")
         self._loader_thread.start()
 
     def set_label(self, label: str):
         if self.selected_image:
             filenames = [os.path.basename(p) for p in self.selected_image]
             for filename in filenames:
-                self.model.set_label(filename, label)
+                self.model.set_state(filename, label)
                 self.label_changed.emit(filename, label)
             self._label = label
 
-    def _on_loader_finished(self):
-        self._loader_thread = None
+    def _on_thread_finished(self):
+        """Called when the loader thread has completely finished"""
+        logging.info("Loader thread finished")
+        if self._loader_thread:
+            self._loader_thread.deleteLater()
+            self._loader_thread = None
         self._loader_worker = None
+
+    def cleanup(self):
+        """Properly stop and wait for the loader thread"""
+        if self._loader_thread and self._loader_thread.isRunning():
+            logging.info("Stopping loader thread...")
+            if self._loader_worker:
+                self._loader_worker.abort()
+            self._loader_thread.quit()
+            if not self._loader_thread.wait(5000):
+                logging.warning("Thread did not stop gracefully, forcing termination")
+                self._loader_thread.terminate()
+                self._loader_thread.wait(1000)
+            logging.info("Loader thread stopped")
+        else:
+            logging.info("Loader thread not running, no cleanup needed")
+
+        if self._loader_thread:
+            assert not self._loader_thread.isRunning(), "Thread should not be running after cleanup"
 
     @Slot(str)
     def _on_image_found(self, filename):
@@ -135,8 +163,8 @@ class PhotoViewModel(QObject):
         self.state_changed.emit(self._state)
 
     @Slot(str)
+    @Slot(str)
     def select_image(self, filename: str):
-        full_path = self.model.get_image_path(filename)
         self.selected_image = [full_path]
 
         details = self.model.get_image_details(filename)
@@ -157,12 +185,13 @@ class PhotoViewModel(QObject):
         if self._label:
             self.label_changed.emit(filename, self._label)
 
+
         if not self._has_selected_image:
             self._has_selected_image = True
             self.has_selected_image_changed.emit(True)
-
         self.selected_image_changed.emit(full_path)
 
+    @Slot(int)
     @Slot(int)
     def set_rating(self, rating: int):
         if self.selected_image:

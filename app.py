@@ -34,19 +34,21 @@ def main():
     logging.info("App main() starting...")
     app = QApplication(sys.argv)
     qdarktheme.setup_theme()
-    last_dir = load_last_dir()  # Use config, not forced cwd
+    last_dir = load_last_dir()
     logging.info(f"Loaded last_dir from config: {last_dir}")
     viewmodel = PhotoViewModel(last_dir, max_images=MAX_IMAGES)
     logging.info("PhotoViewModel created, about to create PhotoView and call load_images()")
     view = PhotoView(viewmodel)
+
+    # Keep strong references to prevent premature garbage collection
+    app.view = view
+    app.viewmodel = viewmodel
+
+    # Connect cleanup to app exit signal
+    app.aboutToQuit.connect(viewmodel.cleanup)
+
     view.show()
     viewmodel.load_images()
-
-    # Ensure proper cleanup on app shutdown
-    def cleanup_handler():
-        viewmodel.cleanup()
-
-    app.aboutToQuit.connect(cleanup_handler)
     sys.exit(app.exec())
 
 if __name__ == "__main__":
