@@ -163,8 +163,8 @@ class PhotoViewModel(QObject):
         self.state_changed.emit(self._state)
 
     @Slot(str)
-    @Slot(str)
     def select_image(self, filename: str):
+        full_path = self.model.get_image_path(filename)
         self.selected_image = [full_path]
 
         details = self.model.get_image_details(filename)
@@ -185,10 +185,10 @@ class PhotoViewModel(QObject):
         if self._label:
             self.label_changed.emit(filename, self._label)
 
-
         if not self._has_selected_image:
             self._has_selected_image = True
             self.has_selected_image_changed.emit(True)
+
         self.selected_image_changed.emit(full_path)
 
     @Slot(int)
