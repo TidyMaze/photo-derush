@@ -10,6 +10,15 @@ class FullscreenDialog(QDialog):
         self.setWindowState(Qt.WindowState.WindowFullScreen)
         layout = QHBoxLayout(self)
         for path in image_paths:
+            # Ensure path is a string and log the type for debugging
+            import logging
+            if isinstance(path, list):
+                logging.error(f"Path is a list instead of string: {path}, taking first element")
+                path = path[0] if path else ""
+            elif not isinstance(path, (str, os.PathLike)):
+                logging.error(f"Path is not a string or PathLike: {type(path)} = {path}")
+                path = str(path)
+
             label = QLabel()
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setScaledContents(True)
@@ -25,7 +34,8 @@ class FullscreenDialog(QDialog):
                     qimg = QImage(data, w, h, img_format)
                     pixmap = QPixmap.fromImage(qimg)
                     label.setPixmap(pixmap.scaledToHeight(self.screen().size().height() - 100, Qt.TransformationMode.SmoothTransformation))
-                except Exception:
+                except Exception as e:
+                    logging.error(f"Failed to open image in viewer: {e}")
                     label.setText("Failed to load image")
             else:
                 label.setText("File not found")
@@ -165,6 +175,15 @@ class PhotoView(QMainWindow):
         label.setFixedSize(self.thumb_size, self.thumb_size)
         label.setScaledContents(True)
         full_path = self.viewmodel.model.get_image_path(filename)
+
+        # Ensure full_path is always a string
+        if isinstance(full_path, list):
+            logging.error(f"get_image_path returned list instead of string: {full_path}, taking first element")
+            full_path = full_path[0] if full_path else ""
+        elif not isinstance(full_path, (str, os.PathLike)):
+            logging.error(f"get_image_path returned unexpected type: {type(full_path)} = {full_path}")
+            full_path = str(full_path)
+
         label.setToolTip(full_path)  # Use full path for tooltip
         label.mousePressEvent = lambda e, f=filename, l=label: self._on_label_clicked(e, f, l)
         self.grid_layout.addWidget(label, row, col)
@@ -178,6 +197,17 @@ class PhotoView(QMainWindow):
 
     def _on_label_clicked(self, event, filename, label):
         full_path = self.viewmodel.model.get_image_path(filename)
+
+        # Ensure full_path is always a string
+        if isinstance(full_path, list):
+            import logging
+            logging.error(f"get_image_path returned list in click handler: {full_path}, taking first element")
+            full_path = full_path[0] if full_path else ""
+        elif not isinstance(full_path, (str, os.PathLike)):
+            import logging
+            logging.error(f"get_image_path returned unexpected type in click handler: {type(full_path)} = {full_path}")
+            full_path = str(full_path)
+
         modifiers = event.modifiers()
         if modifiers & Qt.KeyboardModifier.ControlModifier or modifiers & Qt.KeyboardModifier.MetaModifier:
             if full_path in self.selected_filenames:
@@ -186,6 +216,17 @@ class PhotoView(QMainWindow):
                 self.selected_filenames.add(full_path)
         elif modifiers & Qt.KeyboardModifier.ShiftModifier and self.selected_filenames:
             all_files = [label.toolTip() for label in self.label_refs.values()]
+
+            # Validate that all tooltips are strings
+            import logging
+            for i, tooltip in enumerate(all_files):
+                if isinstance(tooltip, list):
+                    logging.error(f"Tooltip at index {i} is a list: {tooltip}, converting to string")
+                    all_files[i] = tooltip[0] if tooltip else ""
+                elif not isinstance(tooltip, (str, os.PathLike)):
+                    logging.error(f"Tooltip at index {i} is unexpected type: {type(tooltip)} = {tooltip}")
+                    all_files[i] = str(tooltip)
+
             last = None
             if self.selected_filenames:
                 last = all_files.index(sorted(self.selected_filenames, key=lambda x: all_files.index(x))[-1])
@@ -193,7 +234,10 @@ class PhotoView(QMainWindow):
             if last is not None:
                 rng = range(min(last, curr), max(last, curr) + 1)
                 for i in rng:
-                    self.selected_filenames.add(all_files[i])
+                    file_path = all_files[i]
+                    # Double-check the file_path before adding
+                    if isinstance(file_path, (str, os.PathLike)) and file_path:
+                        self.selected_filenames.add(file_path)
         else:
             self.selected_filenames = {full_path}
         self.selected_filename = full_path
