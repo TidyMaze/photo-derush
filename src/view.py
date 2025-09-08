@@ -1,49 +1,106 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTextEdit, QProgressBar, QGridLayout, QScrollArea, QLabel, QHBoxLayout, QPushButton, QDialog, QLineEdit
-from PySide6.QtGui import QPixmap, QImage, QPainter, QColor
-from PySide6.QtCore import Qt
+import logging
 import os
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
+from PySide6.QtWidgets import (QDialog, QGraphicsScene, QGraphicsView, QGridLayout,
+                               QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+                               QProgressBar, QPushButton, QScrollArea, QTextEdit,
+                               QVBoxLayout, QWidget)
+
+class ZoomableView(QGraphicsView):
+    """A QGraphicsView that supports zooming and panning."""
+    def __init__(self, scene, parent=None):
+        super().__init__(scene, parent)
+        self.setRenderHint(QPainter.Antialiasing)
+        self.setRenderHint(QPainter.SmoothPixmapTransform)
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+        self._zoom_level = 0
+
+    def wheelEvent(self, event):
+        """Zoom in or out."""
+        # Calculate the zoom factor
+        if event.angleDelta().y() > 0:
+            factor = 1.25
+            self._zoom_level += 1
+        else:
+            factor = 0.8
+            self._zoom_level -= 1
+
+        # Apply the zoom
+        if self._zoom_level > 0:
+            self.scale(factor, factor)
+        elif self._zoom_level == 0:
+            self.fit_in_view()
+        else:
+            # Don't zoom out further than fit_in_view
+            self._zoom_level = 0
+
+    def fit_in_view(self):
+        """Fit the entire scene into the view."""
+        if not self.scene() or self.scene().sceneRect().isEmpty():
+            return
+        self.fitInView(self.scene().sceneRect(), Qt.KeepAspectRatio)
+        self._zoom_level = 0
+
 
 class FullscreenDialog(QDialog):
     def __init__(self, image_paths, parent=None):
         super().__init__(parent)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
         self.setWindowState(Qt.WindowState.WindowFullScreen)
-        layout = QHBoxLayout(self)
-        for path in image_paths:
-            # Ensure path is a string and log the type for debugging
-            import logging
-            if isinstance(path, list):
-                logging.error(f"Path is a list instead of string: {path}, taking first element")
-                path = path[0] if path else ""
-            elif not isinstance(path, (str, os.PathLike)):
-                logging.error(f"Path is not a string or PathLike: {type(path)} = {path}")
-                path = str(path)
 
-            label = QLabel()
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setScaledContents(True)
-            if os.path.exists(path):
-                from PIL import Image
-                from PySide6.QtGui import QImage, QPixmap
-                try:
-                    img = Image.open(path)
-                    img = img.convert("RGBA")
-                    data = img.tobytes()
-                    w, h = img.size
-                    img_format = getattr(QImage, 'Format_RGBA8888', QImage.Format.Format_ARGB32)
-                    qimg = QImage(data, w, h, img_format)
-                    pixmap = QPixmap.fromImage(qimg)
-                    label.setPixmap(pixmap.scaledToHeight(self.screen().size().height() - 100, Qt.TransformationMode.SmoothTransformation))
-                except Exception as e:
-                    logging.error(f"Failed to open image in viewer: {e}")
-                    label.setText("Failed to load image")
-            else:
-                label.setText("File not found")
-            layout.addWidget(label)
+        self.image_paths = image_paths
+        self.current_index = 0
+
+        self.scene = QGraphicsScene(self)
+        self.view = ZoomableView(self.scene, self)
+
+        # Main layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.view)
+
+        if self.image_paths:
+            self.load_image()
+
+    def load_image(self):
+        """Load the image at the current index into the scene."""
+        if not (0 <= self.current_index < len(self.image_paths)):
+            return
+
+        path = self.image_paths[self.current_index]
+        self.scene.clear()
+
+        try:
+            # QPixmap can handle loading directly, which is often more efficient
+            pixmap = QPixmap(path)
+            if pixmap.isNull():
+                raise IOError(f"Failed to load image from path: {path}")
+
+            self.scene.addPixmap(pixmap)
+            self.view.setSceneRect(pixmap.rect())
+            self.view.fit_in_view()
+
+        except Exception as e:
+            logging.error(f"Failed to open image in viewer: {e}")
+            # Optionally, display an error message in the scene
+            error_text = self.scene.addText(f"Failed to load image:\n{os.path.basename(path)}")
+            error_text.setDefaultTextColor(QColor("red"))
+
 
     def keyPressEvent(self, event):
-        if event.key() in (Qt.Key.Key_Escape, Qt.Key.Key_F, Qt.Key.Key_Space):
+        key = event.key()
+        if key in (Qt.Key.Key_Escape, Qt.Key.Key_F, Qt.Key.Key_Space):
             self.close()
+        elif key == Qt.Key.Key_Left and len(self.image_paths) > 1:
+            self.current_index = (self.current_index - 1) % len(self.image_paths)
+            self.load_image()
+        elif key == Qt.Key.Key_Right and len(self.image_paths) > 1:
+            self.current_index = (self.current_index + 1) % len(self.image_paths)
+            self.load_image()
         else:
             super().keyPressEvent(event)
 
