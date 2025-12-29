@@ -237,11 +237,12 @@ def _build_pipeline(
             # - patience=200 (allows model to reach full potential)
             # Best model: 75.31% ± 2.51% CV accuracy, 1.03% keep-loss rate (honest evaluation, no leakage)
             if early_stopping_rounds is not None:
-                # In fast mode, use optimized settings: doubled iterations/patience, halved LR
-                # Tested: LR=0.05, iterations=1000, patience=100 gives +8.3% ROC-AUC improvement
+                # In fast mode, use iteratively optimized settings (coordinate descent)
+                # Optimized via iterative hyperparameter search with CV:
+                # - LR=0.0430, iterations=932, patience=10 → CV-Acc=77.66%±3.29%, Keep-Loss=2.85%
                 if fast_mode:
-                    max_iterations = 1000  # Doubled from 500
-                    effective_patience = max(early_stopping_rounds, 100)  # Doubled from 50
+                    max_iterations = 932  # Optimized via iterative search
+                    effective_patience = max(early_stopping_rounds, 10)  # Optimized: low patience sufficient
                 else:
                     max_iterations = 2000
                     effective_patience = max(early_stopping_rounds, 200)
@@ -251,7 +252,7 @@ def _build_pipeline(
             
             cb_params = {
                 "iterations": max_iterations,
-                "learning_rate": 0.05 if fast_mode else 0.1,  # Halved LR in fast mode (tested: +8.3% ROC-AUC improvement)
+                "learning_rate": 0.0430 if fast_mode else 0.1,  # Optimized via iterative search: LR=0.0430 for fast mode
                 "depth": 6,  # Optimal value from evaluation
                 "l2_leaf_reg": 1.0,  # Default regularization
                 "scale_pos_weight": scale_pos_weight,
