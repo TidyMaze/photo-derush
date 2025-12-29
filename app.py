@@ -27,10 +27,21 @@ from src.features import safe_initialize_feature_cache
 from src.view import PhotoView
 from src.viewmodel import PhotoViewModel
 
-# Prevent multiprocessing from using 'spawn' on macOS by forcing 'fork'
+# Set multiprocessing start method based on platform
+# Windows requires 'spawn', Linux/Mac can use 'fork' (faster) or 'spawn' (safer)
 try:
     import multiprocessing as _mp
-    _mp.set_start_method('fork', force=True)
+    import platform
+    if platform.system() == "Windows":
+        # Windows only supports 'spawn'
+        _mp.set_start_method('spawn', force=True)
+    else:
+        # Linux/Mac: prefer 'fork' for performance, but allow 'spawn' if fork fails
+        try:
+            _mp.set_start_method('fork', force=True)
+        except (RuntimeError, ValueError):
+            # Fallback to spawn if fork is not available
+            _mp.set_start_method('spawn', force=True)
 except (RuntimeError, ValueError):
     # Already set or not available on this platform
     pass
