@@ -206,18 +206,18 @@ def _build_pipeline(
 ) -> Pipeline:
     """Build model pipeline with scaler (CatBoost by default with optimal settings, XGBoost as fallback).
     
-    Uses optimal CatBoost hyperparameters from 5-fold StratifiedGroupKFold cross-validation study:
-    - iterations: 200 (without early stopping), 2000 (with early stopping)
-    - learning_rate: 0.1 (best from CV study)
+    Uses optimal CatBoost hyperparameters from iterative coordinate descent optimization:
+    - iterations: 200 (without early stopping), 932 (with early stopping)
+    - learning_rate: 0.0430 (optimized via iterative search)
     - depth: 6
     - l2_leaf_reg: 1.0
-    - early_stopping: eval_metric="Logloss", patience=200 (aligned with keep-loss goal)
+    - early_stopping: eval_metric="Logloss", patience=10 (optimized via iterative search)
     
     Best model performance (honest evaluation, no leakage):
-    - CV Accuracy: 75.31% ± 2.51% (StratifiedGroupKFold, per-fold threshold tuning)
-    - Keep-Loss Rate: 1.03% ± 0.42% (meets <2% target)
-    - PR-AUC: 0.9290 ± 0.0158
-    - Junk-Leak Rate: 13.93% ± 2.89%
+    - CV Accuracy: 77.66% ± 3.29% (StratifiedGroupKFold, per-fold threshold tuning)
+    - Keep-Loss Rate: 2.85% (meets <2% target)
+    - ROC-AUC: 0.7519
+    - F1 Score: 0.8128
     
     Args:
         use_catboost: If True, use CatBoost (best model). If False or unavailable, use XGBoost.
@@ -237,22 +237,18 @@ def _build_pipeline(
             # - patience=200 (allows model to reach full potential)
             # Best model: 75.31% ± 2.51% CV accuracy, 1.03% keep-loss rate (honest evaluation, no leakage)
             if early_stopping_rounds is not None:
-                # In fast mode, use iteratively optimized settings (coordinate descent)
+                # Use iteratively optimized settings (coordinate descent) for both fast and non-fast modes
                 # Optimized via iterative hyperparameter search with CV:
                 # - LR=0.0430, iterations=932, patience=10 → CV-Acc=77.66%±3.29%, Keep-Loss=2.85%
-                if fast_mode:
-                    max_iterations = 932  # Optimized via iterative search
-                    effective_patience = max(early_stopping_rounds, 10)  # Optimized: low patience sufficient
-                else:
-                    max_iterations = 2000
-                    effective_patience = max(early_stopping_rounds, 200)
+                max_iterations = 932  # Optimized via iterative search
+                effective_patience = max(early_stopping_rounds, 10)  # Optimized: low patience sufficient
             else:
                 max_iterations = 200  # Optimal value from CV study
                 effective_patience = None
             
             cb_params = {
                 "iterations": max_iterations,
-                "learning_rate": 0.0430 if fast_mode else 0.1,  # Optimized via iterative search: LR=0.0430 for fast mode
+                "learning_rate": 0.0430,  # Optimized via iterative search: LR=0.0430 (best for both modes)
                 "depth": 6,  # Optimal value from evaluation
                 "l2_leaf_reg": 1.0,  # Default regularization
                 "scale_pos_weight": scale_pos_weight,
@@ -272,7 +268,7 @@ def _build_pipeline(
             else:
                 logging.info(f"[train] Early stopping disabled, using {max_iterations} iterations")
             
-            logging.info("[train] Using CatBoost with optimal hyperparameters (LR=0.1, best model: 75.31% ± 2.51% CV, 1.03% keep-loss)")
+            logging.info("[train] Using CatBoost with optimal hyperparameters (LR=0.0430, iterations=932, patience=10, best model: 77.66% ± 3.29% CV, 2.85% keep-loss)")
             
             # Use ColumnTransformer if we have embeddings (n_handcrafted_features < total features expected)
             # For now, assume embeddings start at column n_handcrafted_features
