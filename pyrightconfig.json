@@ -1,0 +1,25 @@
+{
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.git",
+    "**/venv",
+    "**/.venv",
+    "**/ENV",
+    "**/dist",
+    "**/build",
+    "**/*.egg-info",
+    "**/.cache",
+    "**/logs",
+    "**/catboost_info",
+    "**/models",
+    "**/test_images",
+    "**/screenshots",
+    "**/.idea"
+  ],
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": false,
+  "typeCheckingMode": "basic"
+}
+
+

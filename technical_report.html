@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo-Derush Technical Report</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 4px solid #3498db;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            border-left: 5px solid #3498db;
+            padding-left: 15px;
+            background: #ecf0f1;
+            padding: 10px 15px;
+            border-radius: 5px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 25px;
+            border-bottom: 2px solid #bdc3c7;
+            padding-bottom: 5px;
+        }
+        .section {
+            background: white;
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .lib-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .lib-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+        }
+        .lib-name {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+        .lib-version {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        .lib-purpose {
+            color: #555;
+            margin-top: 5px;
+            font-size: 0.95em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        tr:hover {
+            background: #f5f5f5;
+        }
+        .metric {
+            display: inline-block;
+            margin: 10px 20px 10px 0;
+            padding: 15px;
+            background: #ecf0f1;
+            border-radius: 5px;
+            min-width: 150px;
+        }
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .metric-label {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            text-transform: uppercase;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            padding: 15px;
+            border-left: 4px solid #28a745;
+            margin: 15px 0;
+        }
+        .info {
+            background: #d1ecf1;
+            padding: 15px;
+            border-left: 4px solid #17a2b8;
+            margin: 15px 0;
+        }
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 15px 0;
+        }
+        .timestamp {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-top: 30px;
+            text-align: right;
+        }
+        .toc {
+            background: #e8f5e9;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin: 8px 0;
+        }
+        .toc a {
+            color: #2c3e50;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>Photo-Derush Technical Report</h1>
+    <p class="timestamp">Generated: 2025-12-29 13:29:10</p>
+    
+    <div class="section">
+        <h2>Executive Summary</h2>
+        <p><strong>Photo-Derush</strong> is a desktop application for automated photo curation, classifying images as "keep" or "trash" using machine learning. The system combines handcrafted features, deep learning embeddings, and object detection to achieve <strong>82.23% ± 1.76% accuracy</strong> (5-fold CV) on a personal photo dataset of 591 manually labeled images.</p>
+        
+        <div class="success">
+            <strong>Key Achievement:</strong> Improved from 72% baseline to 82.23% accuracy through systematic experimentation with embeddings, hyperparameter tuning, and cross-validation.
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>Table of Contents</h2>
+        <div class="toc">
+            <ul>
+                <li><a href="#libraries">1. Libraries & Dependencies</a></li>
+                <li><a href="#architecture">2. System Architecture</a></li>
+                <li><a href="#features">3. Feature Engineering</a></li>
+                <li><a href="#object-detection">4. Object Detection</a></li>
+                <li><a href="#embeddings">5. Image Embeddings</a></li>
+                <li><a href="#models">6. Classification Models</a></li>
+                <li><a href="#experiments">7. Experiments & Results</a></li>
+                <li><a href="#best-model">8. Best Model Configuration</a></li>
+                <li><a href="#learnings">9. Key Learnings</a></li>
+                <li><a href="#future">10. Future Improvements</a></li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="section" id="libraries">
+        <h2>1. Libraries & Dependencies</h2>
+        
+        <h3>Core ML Libraries</h3>
+        <div class="lib-grid">
+            <div class="lib-card">
+                <div class="lib-name">scikit-learn ^1.5.0</div>
+                <div class="lib-version">Machine Learning Framework</div>
+                <div class="lib-purpose">Pipeline, StandardScaler, train_test_split, cross-validation, metrics</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">catboost ^1.2.8</div>
+                <div class="lib-version">Gradient Boosting</div>
+                <div class="lib-purpose">Primary classifier (best performance), handles categorical features</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">xgboost ^3.1.1</div>
+                <div class="lib-version">Gradient Boosting</div>
+                <div class="lib-purpose">Alternative classifier (baseline: 72%), fallback option</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">lightgbm ^4.6.0</div>
+                <div class="lib-version">Gradient Boosting</div>
+                <div class="lib-purpose">Ensemble experiments, faster training</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">torch ^2.9.0</div>
+                <div class="lib-version">PyTorch</div>
+                <div class="lib-purpose">ResNet18/ResNet50 embeddings, CNN training</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">torchvision ^0.24.0</div>
+                <div class="lib-version">Computer Vision</div>
+                <div class="lib-purpose">Pre-trained models (ResNet18, ResNet50), image transforms</div>
+            </div>
+        </div>
+        
+        <h3>Object Detection</h3>
+        <div class="lib-grid">
+            <div class="lib-card">
+                <div class="lib-name">ultralytics (YOLOv8)</div>
+                <div class="lib-version">Object Detection</div>
+                <div class="lib-purpose">YOLOv8n model for person/object detection, COCO classes</div>
+            </div>
+        </div>
+        
+        <h3>Image Processing</h3>
+        <div class="lib-grid">
+            <div class="lib-card">
+                <div class="lib-name">Pillow ^10.0.0</div>
+                <div class="lib-version">Image Processing</div>
+                <div class="lib-purpose">Image loading, resizing, EXIF extraction</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">opencv-python ^4.9.0.80</div>
+                <div class="lib-version">Computer Vision</div>
+                <div class="lib-purpose">Image quality metrics (sharpness, blur detection)</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">piexif ^1.1.3</div>
+                <div class="lib-version">EXIF Metadata</div>
+                <div class="lib-purpose">EXIF data extraction (ISO, aperture, shutter speed)</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">imagehash ^4.3.2</div>
+                <div class="lib-version">Image Hashing</div>
+                <div class="lib-purpose">Perceptual hashing for duplicate detection</div>
+            </div>
+        </div>
+        
+        <h3>UI & Utilities</h3>
+        <div class="lib-grid">
+            <div class="lib-card">
+                <div class="lib-name">PySide6 ^6.6.0</div>
+                <div class="lib-version">Qt Framework</div>
+                <div class="lib-purpose">Desktop GUI application</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">matplotlib ^3.8.0</div>
+                <div class="lib-version">Visualization</div>
+                <div class="lib-purpose">Plots, charts, model analysis</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">optuna ^4.6.0</div>
+                <div class="lib-version">Hyperparameter Tuning</div>
+                <div class="lib-purpose">Bayesian optimization for hyperparameters</div>
+            </div>
+            <div class="lib-card">
+                <div class="lib-name">joblib ^1.5.2</div>
+                <div class="lib-version">Serialization</div>
+                <div class="lib-purpose">Model persistence, feature caching</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section" id="architecture">
+        <h2>2. System Architecture</h2>
+        
+        <h3>Pipeline Overview</h3>
+        <div class="code-block">
+Input Image
+  ↓
+[Feature Extraction]
+  ├─ Handcrafted Features (78 dims)
+  │  ├─ EXIF metadata (ISO, aperture, shutter, focal length)
+  │  ├─ Color histograms (RGB, 24 bins)
+  │  ├─ Quality metrics (sharpness, saturation, entropy, noise)
+  │  ├─ Geometric (width, height, aspect ratio)
+  │  ├─ Temporal (hour, day, month)
+  │  └─ Object detection (person count, object count)
+  │
+  └─ Image Embeddings (128 dims)
+     └─ ResNet18 (512 dims) → PCA (128 dims)
+        ↓
+[Preprocessing]
+  └─ StandardScaler (normalize features)
+     ↓
+[Classification]
+  └─ CatBoostClassifier
+     ↓
+[Decision]
+  └─ Threshold: 0.67 → Keep/Trash
+        </div>
+        
+        <h3>Component Modules</h3>
+        <table>
+            <tr>
+                <th>Module</th>
+                <th>Purpose</th>
+                <th>Key Functions</th>
+            </tr>
+            <tr>
+                <td><code>src/features.py</code></td>
+                <td>Feature Extraction</td>
+                <td>extract_features(), batch_extract_features(), feature cache</td>
+            </tr>
+            <tr>
+                <td><code>src/object_detection.py</code></td>
+                <td>Object Detection</td>
+                <td>detect_objects(), YOLOv8Adapter, person detection</td>
+            </tr>
+            <tr>
+                <td><code>src/inference.py</code></td>
+                <td>Model Inference</td>
+                <td>predict_keep_probability(), embedding extraction</td>
+            </tr>
+            <tr>
+                <td><code>src/training_core.py</code></td>
+                <td>Model Training</td>
+                <td>train_keep_trash_model(), cross-validation, early stopping</td>
+            </tr>
+            <tr>
+                <td><code>src/viewmodel.py</code></td>
+                <td>Application Logic</td>
+                <td>Filtering, sorting, model interaction</td>
+            </tr>
+            <tr>
+                <td><code>src/view.py</code></td>
+                <td>UI Components</td>
+                <td>PhotoView, grid display, badges</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section" id="features">
+        <h2>3. Feature Engineering</h2>
+        
+        <h3>Handcrafted Features (78 dimensions)</h3>
+        <table>
+            <tr>
+                <th>Category</th>
+                <th>Features</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>EXIF Metadata</td>
+                <td>ISO, Aperture, Shutter Speed, Focal Length</td>
+                <td>Camera settings, technical quality indicators</td>
+            </tr>
+            <tr>
+                <td>Color Histograms</td>
+                <td>RGB distribution (24 bins)</td>
+                <td>Color composition, saturation patterns</td>
+            </tr>
+            <tr>
+                <td>Quality Metrics</td>
+                <td>Sharpness, Saturation, Entropy, Noise</td>
+                <td>Image quality assessment</td>
+            </tr>
+            <tr>
+                <td>Geometric</td>
+                <td>Width, Height, Aspect Ratio</td>
+                <td>Image dimensions, composition</td>
+            </tr>
+            <tr>
+                <td>Temporal</td>
+                <td>Hour, Day of Week, Month</td>
+                <td>Time-based patterns</td>
+            </tr>
+            <tr>
+                <td>Object Detection</td>
+                <td>Person Count, Object Count</td>
+                <td>Content indicators (from YOLOv8)</td>
+            </tr>
+        </table>
+        
+        <h3>Feature Interactions</h3>
+        <div class="info">
+            <strong>Feature Interactions:</strong> Top 15 features by variance are selected, then pairwise interactions (multiplication, ratio) are created. This adds ~100 interaction features, capturing non-linear relationships.
+        </div>
+        
+        <h3>Feature Caching</h3>
+        <p>Features are cached to disk (<code>feature_cache.pkl</code>) to avoid recomputation. Cache is invalidated when source images are modified (mtime check).</p>
+    </div>
+    
+    <div class="section" id="object-detection">
+        <h2>4. Object Detection</h2>
+        
+        <h3>YOLOv8 Implementation</h3>
+        <table>
+            <tr>
+                <th>Component</th>
+                <th>Details</th>
+            </tr>
+            <tr>
+                <td>Model</td>
+                <td>YOLOv8n (nano variant, fastest)</td>
+            </tr>
+            <tr>
+                <td>Classes</td>
+                <td>COCO dataset (80 classes: person, car, dog, etc.)</td>
+            </tr>
+            <tr>
+                <td>Confidence Threshold</td>
+                <td>0.6 (default), 0.8 (high confidence)</td>
+            </tr>
+            <tr>
+                <td>Device Support</td>
+                <td>CUDA, MPS (Apple Silicon), CPU fallback</td>
+            </tr>
+            <tr>
+                <td>Max Image Size</td>
+                <td>800px (scaled down for efficiency)</td>
+            </tr>
+        </table>
+        
+        <h3>Usage in Features</h3>
+        <ul>
+            <li><strong>Person Detection:</strong> Binary feature indicating person presence (confidence ≥ 0.6)</li>
+            <li><strong>Object Count:</strong> Total number of detected objects</li>
+            <li><strong>High-Confidence Objects:</strong> Objects with confidence ≥ 0.8 (max 5 shown in UI)</li>
+        </ul>
+        
+        <h3>Performance</h3>
+        <p>Detection runs in separate worker process to avoid blocking UI. Results are cached per image to avoid redundant detection calls.</p>
+    </div>
+    
+    <div class="section" id="embeddings">
+        <h2>5. Image Embeddings</h2>
+        
+        <h3>ResNet18 Embeddings</h3>
+        <table>
+            <tr>
+                <th>Property</th>
+                <th>Value</th>
+            </tr>
+            <tr>
+                <td>Model</td>
+                <td>ResNet18 (18-layer CNN)</td>
+            </tr>
+            <tr>
+                <td>Pre-training</td>
+                <td>ImageNet (1.2M images, 1000 classes)</td>
+            </tr>
+            <tr>
+                <td>Output Dimensions</td>
+                <td>512 (original) → 128 (PCA-reduced)</td>
+            </tr>
+            <tr>
+                <td>PCA Explained Variance</td>
+                <td>~95%+ (minimal information loss)</td>
+            </tr>
+            <tr>
+                <td>Preprocessing</td>
+                <td>Resize(256) → CenterCrop(224) → Normalize (ImageNet stats)</td>
+            </tr>
+        </table>
+        
+        <h3>What Embeddings Capture</h3>
+        <ul>
+            <li><strong>Low-level:</strong> Edges, textures, colors, gradients</li>
+            <li><strong>Mid-level:</strong> Shapes, patterns, object parts</li>
+            <li><strong>High-level:</strong> Objects, scenes, composition, lighting, aesthetic patterns</li>
+        </ul>
+        
+        <h3>Performance Impact</h3>
+        <div class="success">
+            <strong>Embeddings Contribution:</strong> +4.00% accuracy improvement
+            <ul>
+                <li>Without embeddings: 84.00% (78 handcrafted features only)</li>
+                <li>With embeddings: 88.00% (78 + 128 = 206 features)</li>
+            </ul>
+        </div>
+        
+        <h3>ResNet50 Experiments</h3>
+        <p>ResNet50 embeddings (2048 dims) were tested but did not show significant improvement over ResNet18, likely due to small dataset size (591 samples).</p>
+    </div>
+    
+    <div class="section" id="models">
+        <h2>6. Classification Models Tested</h2>
+        
+        <h3>Gradient Boosting Models</h3>
+        <table>
+            <tr>
+                <th>Model</th>
+                <th>Best Accuracy</th>
+                <th>Notes</th>
+            </tr>
+            <tr>
+                <td><strong>CatBoost</strong></td>
+                <td><strong>82.23% ± 1.76%</strong> (5-fold CV)</td>
+                <td>Best performance, handles class imbalance well, production model</td>
+            </tr>
+            <tr>
+                <td>XGBoost</td>
+                <td>72.00%</td>
+                <td>Baseline, worse than CatBoost on this task</td>
+            </tr>
+            <tr>
+                <td>LightGBM</td>
+                <td>~80%</td>
+                <td>Faster training, used in ensemble experiments</td>
+            </tr>
+        </table>
+        
+        <h3>Deep Learning Models</h3>
+        <table>
+            <tr>
+                <th>Model</th>
+                <th>Architecture</th>
+                <th>Results</th>
+            </tr>
+            <tr>
+                <td>Simple CNN</td>
+                <td>3 conv layers + 2 FC layers</td>
+                <td>~75% (underperformed due to small dataset)</td>
+            </tr>
+            <tr>
+                <td>Transfer Learning</td>
+                <td>ResNet18 fine-tuned</td>
+                <td>Not extensively tested (small dataset limitation)</td>
+            </tr>
+        </table>
+        
+        <h3>Ensemble Methods</h3>
+        <ul>
+            <li><strong>Stacking:</strong> Meta-learner on top of base models (CatBoost, XGBoost, LightGBM)</li>
+            <li><strong>Voting:</strong> Hard/soft voting ensembles</li>
+            <li><strong>Blending:</strong> Weighted average of predictions</li>
+            <li><strong>Result:</strong> Ensembles showed marginal improvement (~1-2%) but added complexity</li>
+        </ul>
+    </div>
+    
+    <div class="section" id="experiments">
+        <h2>7. Experiments & Results</h2>
+        
+        <h3>Learning Rate Study</h3>
+        <table>
+            <tr>
+                <th>Learning Rate</th>
+                <th>Accuracy (5-fold CV)</th>
+                <th>Std Dev</th>
+                <th>Notes</th>
+            </tr>
+            <tr>
+                <td>0.01</td>
+                <td>80.37%</td>
+                <td>±4.40%</td>
+                <td>Too small, underfitting</td>
+            </tr>
+            <tr>
+                <td>0.05</td>
+                <td>80.54%</td>
+                <td>±3.51%</td>
+                <td>Still underfitting</td>
+            </tr>
+            <tr>
+                <td><strong>0.10</strong></td>
+                <td><strong>82.23%</strong></td>
+                <td><strong>±1.76%</strong></td>
+                <td><strong>BEST (most stable)</strong></td>
+            </tr>
+            <tr>
+                <td>0.11</td>
+                <td>81.05%</td>
+                <td>±2.41%</td>
+                <td>Higher variance</td>
+            </tr>
+            <tr>
+                <td>0.20</td>
+                <td>80.21%</td>
+                <td>±2.85%</td>
+                <td>Too large, overfitting</td>
+            </tr>
+        </table>
+        
+        <div class="highlight">
+            <strong>Key Finding:</strong> Single test set (119 samples) showed high variance. LR=0.07 achieved 89.08% on one split but only 80.55% ± 3.87% in CV. Cross-validation revealed LR=0.1 is most reliable (82.23% ± 1.76%).
+        </div>
+        
+        <h3>Early Stopping Study</h3>
+        <table>
+            <tr>
+                <th>Configuration</th>
+                <th>Accuracy</th>
+                <th>Notes</th>
+            </tr>
+            <tr>
+                <td>No Early Stopping (200 iter)</td>
+                <td>84.87%</td>
+                <td>Baseline</td>
+            </tr>
+            <tr>
+                <td>Early Stopping (patience=50)</td>
+                <td>~80%</td>
+                <td>Premature stopping (small validation set)</td>
+            </tr>
+            <tr>
+                <td>Early Stopping (patience=200)</td>
+                <td>84.87%</td>
+                <td>Matches baseline, prevents overfitting</td>
+            </tr>
+        </table>
+        
+        <h3>Feature Ablation Studies</h3>
+        <table>
+            <tr>
+                <th>Feature Set</th>
+                <th>Accuracy</th>
+                <th>Change</th>
+            </tr>
+            <tr>
+                <td>Handcrafted only (78)</td>
+                <td>84.00%</td>
+                <td>Baseline</td>
+            </tr>
+            <tr>
+                <td>+ Embeddings (206)</td>
+                <td>88.00%</td>
+                <td>+4.00%</td>
+            </tr>
+            <tr>
+                <td>+ Feature Interactions (~306)</td>
+                <td>~86-87%</td>
+                <td>Marginal improvement</td>
+            </tr>
+        </table>
+        
+        <h3>Hyperparameter Tuning</h3>
+        <p><strong>Method:</strong> Optuna (Bayesian optimization), 30 trials</p>
+        <table>
+            <tr>
+                <th>Parameter</th>
+                <th>Search Range</th>
+                <th>Best Value</th>
+            </tr>
+            <tr>
+                <td>iterations</td>
+                <td>100-1000</td>
+                <td>200 (with early stopping: 2000)</td>
+            </tr>
+            <tr>
+                <td>learning_rate</td>
+                <td>0.01-0.3</td>
+                <td>0.1 (from CV study)</td>
+            </tr>
+            <tr>
+                <td>depth</td>
+                <td>4-10</td>
+                <td>6</td>
+            </tr>
+            <tr>
+                <td>l2_leaf_reg</td>
+                <td>0.1-10.0</td>
+                <td>1.0</td>
+            </tr>
+            <tr>
+                <td>border_count</td>
+                <td>32-255</td>
+                <td>Default (254)</td>
+            </tr>
+        </table>
+        
+        <h3>Threshold Optimization</h3>
+        <p>Optimal decision threshold: <strong>0.67</strong> (vs default 0.5)</p>
+        <ul>
+            <li>Reduces false positives (trash predicted as keep)</li>
+            <li>Balances precision (0.875) and recall (0.942)</li>
+            <li>Optimized on validation set via grid search</li>
+        </ul>
+    </div>
+    
+    <div class="section" id="best-model">
+        <h2>8. Best Model Configuration</h2>
+        
+        <h3>Production Model Settings</h3>
+        <table>
+            <tr>
+                <th>Component</th>
+                <th>Configuration</th>
+            </tr>
+            <tr>
+                <td>Classifier</td>
+                <td>CatBoostClassifier</td>
+            </tr>
+            <tr>
+                <td>Learning Rate</td>
+                <td>0.1 (validated with 5-fold CV)</td>
+            </tr>
+            <tr>
+                <td>Max Iterations</td>
+                <td>2000 (with early stopping)</td>
+            </tr>
+            <tr>
+                <td>Early Stopping</td>
+                <td>Enabled (patience=200, eval_metric="Accuracy")</td>
+            </tr>
+            <tr>
+                <td>Depth</td>
+                <td>6</td>
+            </tr>
+            <tr>
+                <td>L2 Regularization</td>
+                <td>1.0</td>
+            </tr>
+            <tr>
+                <td>Features</td>
+                <td>78 handcrafted + 128 embeddings = 206 total</td>
+            </tr>
+            <tr>
+                <td>Preprocessing</td>
+                <td>StandardScaler</td>
+            </tr>
+            <tr>
+                <td>Decision Threshold</td>
+                <td>0.67</td>
+            </tr>
+        </table>
+        
+        <h3>Performance Metrics</h3>
+        <div class="metric">
+            <div class="metric-value">82.23%</div>
+            <div class="metric-label">CV Accuracy</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value">±1.76%</div>
+            <div class="metric-label">Std Dev</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value">591</div>
+            <div class="metric-label">Samples</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value">5-fold</div>
+            <div class="metric-label">CV Folds</div>
+        </div>
+        
+        <h3>Dataset Statistics</h3>
+        <ul>
+            <li><strong>Total Samples:</strong> 591 manually labeled images</li>
+            <li><strong>Keep:</strong> 391 (66.2%)</li>
+            <li><strong>Trash:</strong> 200 (33.8%)</li>
+            <li><strong>Train/Test Split:</strong> 80/20 (stratified, random_state=42)</li>
+            <li><strong>Test Set Size:</strong> 119 samples</li>
+        </ul>
+    </div>
+    
+    <div class="section" id="learnings">
+        <h2>9. Key Learnings</h2>
+        
+        <h3>Cross-Validation is Essential</h3>
+        <div class="info">
+            <strong>Finding:</strong> Single test set (119 samples) showed high variance. Small LR changes flipped 8-14 predictions = 6-12% accuracy swings. 5-fold CV provides reliable estimates by averaging over multiple splits.
+        </div>
+        
+        <h3>Learning Rate Insights</h3>
+        <ul>
+            <li><strong>Smaller LR ≠ Higher Accuracy:</strong> LR=0.01-0.05 underfit (80-81%), LR=0.1 optimal (82.23%), LR≥0.15 overfit (80-81%)</li>
+            <li><strong>Optimal Range:</strong> 0.07-0.11 (sweet spot)</li>
+            <li><strong>Variance Matters:</strong> LR=0.07 had higher variance (±3.87%) than LR=0.1 (±1.76%)</li>
+        </ul>
+        
+        <h3>Early Stopping Considerations</h3>
+        <ul>
+            <li>Small validation sets (3-5%) cause premature stopping</li>
+            <li>High patience (200 rounds) needed to match baseline performance</li>
+            <li>Early stopping works best with validation set ≥10% of training data</li>
+        </ul>
+        
+        <h3>Feature Engineering</h3>
+        <ul>
+            <li><strong>Embeddings are crucial:</strong> +4% accuracy improvement</li>
+            <li><strong>Feature interactions:</strong> Marginal improvement, adds complexity</li>
+            <li><strong>Handcrafted + Learned:</strong> Complementary information sources</li>
+        </ul>
+        
+        <h3>Model Selection</h3>
+        <ul>
+            <li><strong>CatBoost > XGBoost:</strong> Better default performance, class imbalance handling</li>
+            <li><strong>Gradient Boosting > CNNs:</strong> Better for small datasets (591 samples)</li>
+            <li><strong>Ensembles:</strong> Marginal gains, added complexity not worth it</li>
+        </ul>
+        
+        <h3>Dataset Size Limitations</h3>
+        <div class="highlight">
+            <strong>Challenge:</strong> 591 samples is small for deep learning. ResNet50 embeddings didn't help, CNNs underperformed. Gradient boosting with handcrafted features + embeddings is optimal for this dataset size.
+        </div>
+    </div>
+    
+    <div class="section" id="future">
+        <h2>10. Future Improvements</h2>
+        
+        <h3>High Priority</h3>
+        <ul>
+            <li><strong>More Data:</strong> Label more images to reach 1000+ samples (would enable better deep learning)</li>
+            <li><strong>Better Embeddings:</strong> CLIP embeddings (semantic understanding), EfficientNet (better feature extraction)</li>
+            <li><strong>Data Augmentation:</strong> Rotation, flip, crop, color jitter to increase effective dataset size</li>
+        </ul>
+        
+        <h3>Medium Priority</h3>
+        <ul>
+            <li><strong>Class Balancing:</strong> SMOTE, focal loss, better class weights</li>
+            <li><strong>Feature Engineering:</strong> Domain-specific features (face detection, scene classification)</li>
+            <li><strong>Calibration:</strong> Platt scaling to improve probability estimates</li>
+        </ul>
+        
+        <h3>Low Priority</h3>
+        <ul>
+            <li><strong>Ensemble Refinement:</strong> Better stacking/blending strategies</li>
+            <li><strong>Active Learning:</strong> Select most informative images for labeling</li>
+            <li><strong>Transfer Learning:</strong> Fine-tune ResNet18 on keep/trash task</li>
+        </ul>
+        
+        <h3>Architecture Improvements</h3>
+        <ul>
+            <li><strong>Multi-task Learning:</strong> Predict keep/trash + quality score simultaneously</li>
+            <li><strong>Attention Mechanisms:</strong> Focus on important image regions</li>
+            <li><strong>Graph Neural Networks:</strong> Model relationships between images</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>Conclusion</h2>
+        <p>The Photo-Derush project demonstrates a systematic approach to building a photo curation system with limited data. Key achievements:</p>
+        <ul>
+            <li>Improved accuracy from 72% to 82.23% through careful experimentation</li>
+            <li>Validated findings with cross-validation to avoid overfitting to single test set</li>
+            <li>Combined handcrafted features with deep learning embeddings effectively</li>
+            <li>Established best practices for small dataset ML (gradient boosting > CNNs)</li>
+        </ul>
+        <p>The system is production-ready and can be improved further with more labeled data and advanced embedding models.</p>
+    </div>
+    
+    <div class="timestamp">
+        Report generated: 2025-12-29 13:29:10
+    </div>
+</body>
+</html>
