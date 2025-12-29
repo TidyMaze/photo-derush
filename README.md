@@ -8,6 +8,8 @@ Photo Derush is a desktop-first photo management tool that helps you quickly sor
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-active-success.svg)
 
+![Main Interface](screenshots/main-interface.png)
+
 ---
 
 ## ✨ What Makes This Special?
