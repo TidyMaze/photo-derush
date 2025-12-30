@@ -47,9 +47,38 @@ def extract_camera_id(exif: dict) -> str:
 
 
 def extract_timestamp(exif: dict, path: str) -> datetime:
-    """Extract timestamp from EXIF or fallback to file mtime."""
-    # Try EXIF DateTimeOriginal first
-    dt_original = exif.get("DateTimeOriginal")
+    """Extract timestamp from EXIF, filename, or fallback to file mtime."""
+    # Try to read EXIF directly from file if exif dict doesn't have DateTimeOriginal
+    # DateTimeOriginal (tag 36867) is in EXIF sub-IFD, not main IFD
+    dt_original = None
+    
+    # First, try to get from provided exif dict (might have string keys)
+    if isinstance(exif, dict):
+        dt_original = exif.get("DateTimeOriginal") or exif.get(36867) or exif.get("36867")
+        # Fallback to DateTime (tag 306 in main IFD)
+        if not dt_original:
+            dt_original = exif.get("DateTime") or exif.get(306) or exif.get("306")
+    
+    # If not found, try reading EXIF directly from file to access EXIF sub-IFD
+    if not dt_original:
+        try:
+            from PIL import Image
+            from PIL.ExifTags import EXIFIFD
+            with Image.open(path) as img:
+                exif_obj = img.getexif()
+                if exif_obj:
+                    # Try to get EXIF sub-IFD
+                    try:
+                        exif_ifd = exif_obj.get_ifd(EXIFIFD)
+                        dt_original = exif_ifd.get(36867)  # DateTimeOriginal
+                    except Exception:
+                        pass
+                    # Fallback to DateTime in main IFD
+                    if not dt_original:
+                        dt_original = exif_obj.get(306)  # DateTime
+        except Exception:
+            pass
+    
     if dt_original:
         try:
             # Parse EXIF datetime format: "YYYY:MM:DD HH:MM:SS"
@@ -57,6 +86,26 @@ def extract_timestamp(exif: dict, path: str) -> datetime:
                 return datetime.strptime(dt_original, "%Y:%m:%d %H:%M:%S")
         except Exception:
             pass
+
+    # Try parsing from filename (e.g., PXL_20250712_183730247.jpg)
+    filename = os.path.basename(path)
+    try:
+        # Pattern: PXL_YYYYMMDD_HHMMSSSSS.*
+        if filename.startswith("PXL_"):
+            parts = filename.split("_")
+            if len(parts) >= 2:
+                date_str = parts[1]  # YYYYMMDD
+                time_str = parts[2].split(".")[0]  # HHMMSSSSS (remove extension)
+                if len(date_str) == 8 and len(time_str) >= 6:
+                    year = int(date_str[:4])
+                    month = int(date_str[4:6])
+                    day = int(date_str[6:8])
+                    hour = int(time_str[:2])
+                    minute = int(time_str[2:4])
+                    second = int(time_str[4:6])
+                    return datetime(year, month, day, hour, minute, second)
+    except Exception:
+        pass
 
     # Fallback to file modification time
     try:
