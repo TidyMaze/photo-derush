@@ -75,6 +75,18 @@ pytest tests/
 
 **Tech Stack**: PySide6 (Qt), CatBoost, YOLOv8, ResNet18, SQLite
 
+### Linux Troubleshooting
+
+If you get "no Qt platform plugin could be initialized":
+
+```bash
+# Install required system libraries
+sudo apt-get install libxcb-xinerama0 libxcb-cursor0 libxcb1 libxkbcommon-x11-0
+
+# Or try setting platform explicitly
+QT_QPA_PLATFORM=xcb poetry run python app.py
+```
+
 ---
 
 ## 📚 Documentation
