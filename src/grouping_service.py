@@ -25,6 +25,8 @@ except ImportError:
 from src.photo_grouping import (
     PhotoMetadata,
     PHASH_HAMMING_THRESHOLD,
+    SESSION_GAP_MIN,
+    BURST_GAP_SEC,
     compute_pick_score,
     detect_sessions,
     group_near_duplicates,
@@ -100,8 +102,8 @@ def compute_grouping_for_photos(
     exif_data: dict[str, dict],  # filename -> exif dict
     keep_probabilities: dict[str, float] | None = None,  # filename -> keep prob (0-1)
     quality_metrics: dict[str, dict] | None = None,  # filename -> {sharpness, exposure, noise, ...}
-    session_gap_min: int = 30,
-    burst_gap_sec: float = 1.0,
+    session_gap_min: int = SESSION_GAP_MIN,
+    burst_gap_sec: float = BURST_GAP_SEC,
     phash_threshold: int = PHASH_HAMMING_THRESHOLD,
     progress_reporter=None,  # Optional ProgressReporter for UI progress
 ) -> dict[str, dict]:
