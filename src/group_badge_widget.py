@@ -78,8 +78,8 @@ class GroupBadgeWidget(QWidget):
 
         # Font setup
         font = QFont()
-        base_font_size = 8.0
-        font_pixel_size = max(10, int(base_font_size * dpr))
+        base_font_size = 6.0  # Reduced from 8.0
+        font_pixel_size = max(8, int(base_font_size * dpr))  # Reduced minimum from 10 to 8
         font.setPixelSize(font_pixel_size)
         font.setBold(True)
         painter.setFont(font)
