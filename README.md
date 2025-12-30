@@ -20,6 +20,9 @@ Photo Derush is a desktop photo management tool that helps you quickly sort thro
 - **🔄 Real-Time Learning**: Model retrains automatically as you label
 - **👁️ Visual Feedback**: See detected objects, EXIF data, and prediction probabilities
 - **🌙 Dark Theme**: Easy on the eyes for long labeling sessions
+- **📦 Smart Grouping**: Automatically groups similar photos by visual similarity, bursts, and sessions
+- **⭐ Best Pick**: Recommends the best photo in each group based on quality metrics
+- **🏷️ Group Badges**: Visual indicators show group size, best picks, and group IDs
 
 ---
 
@@ -60,6 +63,27 @@ Uses a **CatBoost classifier** trained on:
 - **Object detection**: YOLOv8 for detecting people, objects, and scenes
 
 **Performance**: 75% accuracy, <1% keep-loss rate (rarely misclassifies good photos as trash)
+
+### 📦 Photo Grouping
+
+Photos are automatically organized into groups using:
+
+- **Sessions**: Photos taken within 10 minutes by the same camera
+- **Bursts**: Rapid-fire shots within 15 seconds (within a session)
+- **Visual Similarity**: Perceptual hashing groups near-duplicates (hash distance ≤ 8)
+- **Burst Merging**: Groups from same burst merge if visually similar (distance ≤ 20)
+
+**Best Pick Selection**: Each group gets a recommended "best" photo based on:
+- Keep probability score
+- Sharpness and exposure quality
+- Face detection quality
+- Noise and motion blur levels
+
+**Visual Indicators**:
+- `⭐ BEST` badge on recommended photos (groups with 2+ images)
+- `×N` badge showing group size
+- `#ID` badge showing group identifier
+- Groups sorted by date, with best picks ranked first within each group
 
 > 📖 **Technical details**: See [docs/CROSS_PLATFORM_COMPATIBILITY.md](docs/CROSS_PLATFORM_COMPATIBILITY.md) and [docs/FILES_CREATED.md](docs/FILES_CREATED.md)
 
