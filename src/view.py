@@ -640,7 +640,7 @@ class PhotoView(QMainWindow):
         """Build status bar with image statistics (similar to web app status cards)."""
 
         # Dataset status: two rows. First row: Total / Labeled / Unlabeled.
-        # Second row: Detector / Device / Queue / Worker.
+        # Second row: Detector / Device / Model info.
         self.status_group = QGroupBox("📊 Dataset Status")
         self.status_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.status_group.setStyleSheet("""
@@ -674,9 +674,6 @@ class PhotoView(QMainWindow):
         self.embed_model_label = QLabel("Embeddings: unknown")
         # Feature extraction display
         self.feature_backend_label = QLabel("Features: unknown")
-        # Worker queue / state
-        self.worker_queue_label = QLabel("Queue: 0")
-        self.worker_state_label = QLabel("Workers: 0")
 
         # Style the main metric labels to look like status cards with better visual design
         self.total_images_label.setStyleSheet("""
@@ -730,7 +727,7 @@ class PhotoView(QMainWindow):
                 font-weight: 500;
             }
         """
-        for label in [self.det_model_label, self.det_device_label, self.class_model_label, self.embed_model_label, self.feature_backend_label, self.worker_queue_label, self.worker_state_label]:
+        for label in [self.det_model_label, self.det_device_label, self.class_model_label, self.embed_model_label, self.feature_backend_label]:
             label.setStyleSheet(info_style)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             # Enable word wrap for labels that might contain long text
@@ -775,16 +772,9 @@ class PhotoView(QMainWindow):
         ml_row.addWidget(self.embed_model_label)
         ml_row.addWidget(self.feature_backend_label)
         
-        # Row 4: Worker info
-        worker_row = QHBoxLayout()
-        worker_row.setSpacing(8)
-        worker_row.addWidget(self.worker_queue_label)
-        worker_row.addWidget(self.worker_state_label)
-
         outer.addLayout(top_row)
         outer.addLayout(detection_row)
         outer.addLayout(ml_row)
-        outer.addLayout(worker_row)
         self.status_group.setLayout(outer)
 
         self.side_layout.addWidget(self.status_group)
@@ -913,33 +903,6 @@ class PhotoView(QMainWindow):
                     except Exception:
                         logging.exception("Failed to import object_detection for fallback detector/device")
                         pass
-                # Query detection worker for queue length and running state if available
-                try:
-                    from . import detection_worker, object_detection
-
-                    if object_detection.USE_DETECTION_WORKER:
-                        try:
-                            w = detection_worker.get_global_worker()
-                            qlen = getattr(w, "queue_length", lambda: 0)()
-                            # determine worker state: UP if process exists and alive, DOWN otherwise
-                            proc = getattr(w, "proc", None)
-                            state = (
-                                "UP" if (proc is not None and getattr(proc, "is_alive", lambda: False)()) else "DOWN"
-                            )
-                            self.worker_queue_label.setText(f"Queue: {qlen}")
-                            self.worker_state_label.setText(f"Workers: {1 if state == 'UP' else 0}")
-                        except Exception:
-                            # If we can't reach the global worker, show DOWN
-                            self.worker_queue_label.setText("Queue: 0")
-                            self.worker_state_label.setText("Worker: DOWN")
-                    else:
-                        # Worker not enabled, show as down
-                        self.worker_queue_label.setText("Queue: N/A")
-                        self.worker_state_label.setText("Workers: 0")
-                except Exception:
-                    # detection_worker import failed or other error; show defaults
-                    self.worker_queue_label.setText("Queue: 0")
-                    self.worker_state_label.setText("Workers: 0")
             except Exception:
                 logging.exception("Failed to resolve detector/device for status bar")
 
@@ -1274,12 +1237,6 @@ class PhotoView(QMainWindow):
         except Exception as e:
             logging.warning(f"[view] Error cleaning up viewmodel: {e}")
 
-        # Stop detection worker (redundant but safe)
-        try:
-            from .detection_worker import stop_global_worker
-            stop_global_worker()
-        except Exception as e:
-            logging.warning(f"[view] Error stopping detection worker: {e}")
 
         super().closeEvent(event)
         logging.info("[view] CloseEvent complete")

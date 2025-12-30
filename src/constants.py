@@ -63,13 +63,6 @@ DEFAULT_MODEL_PATH = "~/.photo-derush-keep-trash-model.joblib"
 BEST_PARAMS_PATH = "~/.photo-derush-best-params.json"
 """Default path for hyperparameter tuning results"""
 
-# Detection Worker Configuration
-WORKER_MAX_QUEUE_LENGTH = 100
-"""Maximum queue length before falling back to in-process detection"""
-
-WORKER_TIMEOUT_SECONDS = 30.0
-"""Timeout for detection worker responses"""
-
 # Badge Colors
 BADGE_COLORS = {
     "keep_manual": "#008000",  # green

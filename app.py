@@ -100,8 +100,6 @@ def main():
                 logging.warning(f"Could not open log file {args.log_file}: {e}")
 
         logging.info("App main() starting...")
-        # Set detection worker env early to prefer in-process detection during debugging
-        os.environ.setdefault('DETECTION_WORKER', '0')
 
         # Create QApplication early so Qt event loop and signal handling are available
         app = QApplication(sys.argv)

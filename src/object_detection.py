@@ -242,11 +242,6 @@ class DetectionContext:
         # repeated model loads which have caused crashes on some platforms.
         self.detection_semaphore = threading.Semaphore(1)
 
-        # In-flight worker requests dedupe: map image_path -> threading.Event + result
-        # This prevents multiple callers from enqueueing the same image to the worker
-        # concurrently when using `USE_DETECTION_WORKER` mode.
-        self.worker_inflight: Dict[str, Tuple[threading.Event, Optional[List[Dict]]]] = {}
-        self.worker_inflight_lock = threading.Lock()
 
 
 # Global singleton instance
@@ -310,7 +305,6 @@ def _normalize_model_predictions(predictions):
 # Backend selection: force to centralized constant
 DETECTION_BACKEND = DETECTION_BACKEND
 DETECT_VERBOSE = os.environ.get("DETECT_VERBOSE", "0") in ("1", "true", "True")
-USE_DETECTION_WORKER = os.environ.get("DETECTION_WORKER", "0") in ("1", "true", "True")
 
 
 class TorchvisionAdapter:
@@ -598,162 +592,6 @@ def _load_model(device: str = "auto"):
             logging.exception("Failed to release _detection_ctx.detection_lock in _load_model")
 
 
-def _try_worker_detection(image_path: str, params: dict) -> Optional[List[Dict]]:
-    """Attempt detection via worker process. Returns None if worker unavailable/failed."""
-    if not USE_DETECTION_WORKER:
-        return None
-
-    try:
-        from .detection_worker import get_global_worker
-
-        worker = get_global_worker()
-
-        # Check worker health and backlog
-        max_qlen = _get_max_queue_length()
-        if not _is_worker_healthy(worker, max_qlen):
-            return None
-
-        # Deduplicate concurrent requests for same image
-        result = _try_get_inflight_result(image_path)
-        if result is not None:
-            return result
-
-        # Enqueue new request
-        req_id = worker.enqueue(image_path, params)
-
-        # Get result with retry on timeout
-        try:
-            resp = worker.get_result(req_id, timeout=30.0)
-        except TimeoutError:
-            resp = _retry_worker_request(worker, image_path, params)
-
-        # Handle response
-        if "error" in resp:
-            _cleanup_inflight(image_path)
-            raise RuntimeError(f"Detection worker error: {resp.get('error')}\n{resp.get('trace')}")
-
-        predictions = resp.get("detections", [])
-        _store_inflight_result(image_path, predictions)
-
-        # Return if already post-processed
-        if _is_final_detection_format(predictions):
-            return predictions  # type: ignore[return-value, no-any-return]
-
-    except Exception:
-        logging.exception("Detection worker failed; falling back to in-process detection")
-
-    return None
-
-
-def _get_max_queue_length() -> int:
-    """Get configured max queue length from environment."""
-    try:
-        return int(os.environ.get("DETECTION_WORKER_MAX_QLEN", "200"))
-    except Exception:
-        return 200
-
-
-def _is_worker_healthy(worker, max_qlen: int) -> bool:
-    """Check if worker process is alive and queue not overloaded."""
-    from .detection_worker import get_global_worker, stop_global_worker
-
-    # Check process alive
-    try:
-        proc_alive = getattr(worker.proc, "is_alive", lambda: False)()
-    except Exception:
-        proc_alive = False
-
-    if not proc_alive:
-        logging.warning("Detection worker process not alive; restarting")
-        try:
-            stop_global_worker()
-        except Exception:
-            logging.exception("Failed stopping dead worker")
-        worker = get_global_worker()
-
-    # Check queue backlog
-    try:
-        qlen = getattr(worker, "queue_length", lambda: 0)()
-    except Exception:
-        qlen = 0
-
-    if qlen > max_qlen:
-        logging.warning(
-            "Detection worker backlog too large (qlen=%s > max=%s); falling back to in-process", qlen, max_qlen
-        )
-        return False
-
-    return True
-
-
-def _try_get_inflight_result(image_path: str) -> Optional[List[Dict]]:
-    """Check if another thread is processing this image; wait and return result if so."""
-    with _detection_ctx.worker_inflight_lock:
-        inflight = _detection_ctx.worker_inflight.get(image_path)
-        if inflight is None:
-            # Mark as in-flight
-            event = threading.Event()
-            _detection_ctx.worker_inflight[image_path] = (event, None)
-            return None  # Caller should enqueue
-
-        event, cached_result = inflight
-
-    # Wait for in-flight request
-    event.wait(timeout=30.0)
-    with _detection_ctx.worker_inflight_lock:
-        _, res = _detection_ctx.worker_inflight.pop(image_path, (None, None))
-
-    return res  # May be None if timeout/error
-
-
-def _retry_worker_request(worker, image_path: str, params: dict):
-    """Retry worker request after timeout with restart."""
-    from .detection_worker import get_global_worker, stop_global_worker
-
-    logging.warning("Detection worker timed out; attempting restart and one retry")
-
-    if _shutdown_in_progress:
-        raise RuntimeError("Detection worker timeout during app shutdown")
-
-    try:
-        stop_global_worker()
-    except Exception:
-        logging.exception("Failed to stop worker during restart attempt")
-
-    worker = get_global_worker()
-    req_id = worker.enqueue(image_path, params)
-    return worker.get_result(req_id, timeout=60.0)
-
-
-def _cleanup_inflight(image_path: str):
-    """Remove and signal inflight marker on error."""
-    with _detection_ctx.worker_inflight_lock:
-        ev, _ = _detection_ctx.worker_inflight.pop(image_path, (None, None))
-        if ev is not None:
-            ev.set()
-
-
-def _store_inflight_result(image_path: str, predictions: List[Dict]):
-    """Store result for waiting threads and cleanup."""
-    with _detection_ctx.worker_inflight_lock:
-        ev_res = _detection_ctx.worker_inflight.pop(image_path, (None, None))
-        if ev_res[0] is not None:
-            _detection_ctx.worker_inflight[image_path] = (ev_res[0], predictions)
-            ev_res[0].set()
-            # Cleanup
-            try:
-                _detection_ctx.worker_inflight.pop(image_path, None)
-            except Exception:
-                pass
-
-
-def _is_final_detection_format(predictions) -> bool:
-    """Check if predictions are already post-processed (have 'class' key)."""
-    return isinstance(predictions, list) and (
-        len(predictions) == 0 or (isinstance(predictions[0], dict) and "class" in predictions[0])
-    )
-
-
 def detect_objects(
     image_path: str, config: DetectionConfig | None = None, confidence_threshold: float | None = None, **kwargs
 ) -> List[Dict]:
@@ -852,22 +690,19 @@ def detect_objects(
         "classes_filter": config.classes_filter,
         "min_area_ratio": config.min_area_ratio,
     }
-    predictions = _try_worker_detection(image_path, params)
+    # In-process detection
+    if not _detection_ctx.detection_lock.acquire(blocking=False):
+        logging.warning("Waiting for detection lock in detect_objects (another detection in-flight).")
+        _detection_ctx.detection_lock.acquire()
 
-    # Fall back to in-process detection if worker unavailable
-    if predictions is None:
-        if not _detection_ctx.detection_lock.acquire(blocking=False):
-            logging.warning("Waiting for detection lock in detect_objects (another detection in-flight).")
-            _detection_ctx.detection_lock.acquire()
-
+    try:
         try:
-            try:
-                import torch  # type: ignore[import-untyped]
-                with torch.no_grad():  # type: ignore[attr-defined]
-                    predictions = model(image_tensor, conf=keep_confidence)
-            except ImportError:
+            import torch  # type: ignore[import-untyped]
+            with torch.no_grad():  # type: ignore[attr-defined]
                 predictions = model(image_tensor, conf=keep_confidence)
-        finally:
+        except ImportError:
+            predictions = model(image_tensor, conf=keep_confidence)
+    finally:
             try:
                 _detection_ctx.detection_lock.release()
             except RuntimeError:
@@ -1372,26 +1207,3 @@ def sanitize_detection(item):
     raise ValueError(f"Unexpected detection item shape: {type(item)}")
 
 
-if USE_DETECTION_WORKER:
-    try:
-        import atexit
-
-        from .detection_worker import stop_global_worker  # type: ignore
-
-        # Global flag to prevent worker restarts during app shutdown
-        _shutdown_in_progress = False
-
-        def _shutdown_worker():
-            global _shutdown_in_progress
-            _shutdown_in_progress = True
-            try:
-                stop_global_worker()
-            except Exception:
-                logging.exception("Error stopping detection worker at exit")
-
-        atexit.register(_shutdown_worker)
-        __all__.extend(["get_global_worker", "stop_global_worker"])
-    except Exception:
-        logging.exception("Failed to import detection worker support")
-
-        __all__.append("sanitize_detection")

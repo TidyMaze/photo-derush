@@ -8,7 +8,6 @@ from . import object_detection
 from .auto_label_manager import AutoLabelManager  # type: ignore
 from .cache import ThumbnailCache  # type: ignore
 from .commands import CommandStack, SetLabelCommand  # type: ignore
-from .detection_worker import stop_global_worker  # type: ignore
 from .domain import ImageBrowserState  # type: ignore
 from .model import ImageModel, RatingsTagsRepository  # type: ignore
 from .selection import SelectionModel  # type: ignore
@@ -969,12 +968,6 @@ class PhotoViewModel(QObject):
             self.exif_service.cancel_all()
         except Exception as e:
             logging.warning(f"Error cancelling services: {e}")
-        
-        # Stop detection worker
-        try:
-            stop_global_worker()
-        except Exception as e:
-            logging.warning(f"Error stopping detection worker: {e}")
         
         # Stop all TaskRunner threads
         try:
