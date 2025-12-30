@@ -1,8 +1,10 @@
 # Study Script Outputs
 
 All study/analysis scripts and their outputs are organized in the `studies/` directory:
-- `studies/source/` - Analysis scripts
-- `studies/outputs/` - Generated images, HTML reports, and charts
+- `studies/source/` - Analysis scripts (42 scripts)
+- `studies/outputs/` - Generated images, HTML reports, and charts (21 files)
+
+These scripts are standalone analysis/visualization tools and are not imported by the main application.
 
 ## Images and HTML files produced by study/analysis scripts
 
