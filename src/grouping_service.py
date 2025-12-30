@@ -235,6 +235,13 @@ def compute_grouping_for_photos(
         for idx, (burst_id, group_id) in enumerate(zip(bursts, groups)):
             burst_to_groups[burst_id].add(group_id)
         
+        # Log groups before merging for debugging
+        groups_before_merge = set(groups)
+        logging.info(f"[grouping_service] Groups before merging: {len(groups_before_merge)} groups")
+        # Show which bursts have which groups (first 10 bursts)
+        sample_bursts = dict(list(burst_to_groups.items())[:10])
+        logging.info(f"[grouping_service] Sample burst-to-groups: {sample_bursts}")
+        
         # Build equivalence classes: groups that appear together in any burst should merge
         # Use union-find to merge all groups that appear together
         group_parent: dict[int, int] = {}
@@ -265,6 +272,7 @@ def compute_grouping_for_photos(
                 # Merge all groups in this burst together
                 for i in range(len(group_list) - 1):
                     union(group_list[i], group_list[i + 1])
+                logging.debug(f"[grouping_service] Burst {burst_id}: merging groups {group_list}")
         
         # Build final mapping: each group -> its root (minimum ID in equivalence class)
         merged_final: dict[int, int] = {}
