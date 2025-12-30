@@ -1914,9 +1914,10 @@ class PhotoView(QMainWindow):
         t0 = time.perf_counter()
         try:
             # Repaint all thumbnails to show updated predictions
-            state = getattr(self, "_last_browser_state", None)
-            detected_objects = getattr(state, "detected_objects", {}) if state else {}
-            group_info_dict = getattr(state, "group_info", {}) if state else {}
+            # OPTIMIZATION: Cache state access to avoid repeated getattr calls
+            state = self._last_browser_state if hasattr(self, "_last_browser_state") else None
+            detected_objects = state.detected_objects if state and hasattr(state, "detected_objects") else {}
+            group_info_dict = state.group_info if state and hasattr(state, "group_info") else {}
             
             # State data is available (logged at debug level if needed)
             
@@ -1994,8 +1995,8 @@ class PhotoView(QMainWindow):
             
             for (row, col), label in all_labels:
                 try:
-                    # Use stored filename - fail fast if not set
-                    fname = getattr(label, "_thumb_filename", None)
+                    # OPTIMIZATION: Direct attribute access (faster than getattr)
+                    fname = label._thumb_filename if hasattr(label, "_thumb_filename") else None
                     if not fname:
                         raise ValueError(f"Label at ({row}, {col}) missing _thumb_filename attribute")
 
