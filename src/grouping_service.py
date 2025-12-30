@@ -257,23 +257,18 @@ def compute_grouping_for_photos(
         group_count = len(set(groups))
         logging.info(f"[grouping_service] Step 6: Created {group_count} groups from near-duplicate detection")
         
-        # Post-process: Merge groups that share the same burst_id
-        # This ensures images from the same burst are grouped together even if visually different
-        # Note: We only merge by burst, not session, because sessions can span 30 minutes
-        # and include many visually different photos
-        burst_to_groups: dict[int, set[int]] = defaultdict(set)
+        # Post-process: Merge groups from same burst if visually somewhat similar
+        # Use a more lenient threshold (20) for burst merging vs strict threshold (8) for initial grouping
+        # This allows images from same burst to merge if they're reasonably similar, but prevents
+        # merging completely different images (distance > 20) even if in same burst
+        BURST_MERGE_THRESHOLD = 20  # More lenient threshold for burst merging
+        
+        burst_to_groups: dict[int, list[tuple[int, str]]] = defaultdict(list)  # burst_id -> [(group_id, filename), ...]
         for idx, (burst_id, group_id) in enumerate(zip(bursts, groups)):
-            burst_to_groups[burst_id].add(group_id)
+            filename = sorted_filenames_for_grouping[idx]
+            burst_to_groups[burst_id].append((group_id, filename))
         
-        # Log groups before merging for debugging
-        groups_before_merge = set(groups)
-        logging.info(f"[grouping_service] Groups before merging: {len(groups_before_merge)} groups")
-        # Show which bursts have which groups (first 10 bursts)
-        sample_bursts = dict(list(burst_to_groups.items())[:10])
-        logging.info(f"[grouping_service] Sample burst-to-groups: {sample_bursts}")
-        
-        # Build equivalence classes: groups that appear together in any burst should merge
-        # Use union-find to merge all groups that appear together
+        # For each burst, check if groups should merge based on visual similarity
         group_parent: dict[int, int] = {}
         
         def find(gid: int) -> int:
@@ -289,35 +284,78 @@ def compute_grouping_for_photos(
             root1 = find(gid1)
             root2 = find(gid2)
             if root1 != root2:
-                # Always merge to smaller ID
                 if root1 < root2:
                     group_parent[root2] = root1
                 else:
                     group_parent[root1] = root2
         
-        # For each burst, merge all groups that appear together
-        for burst_id, group_ids in burst_to_groups.items():
-            if len(group_ids) > 1:
-                group_list = sorted(group_ids)
-                # Merge all groups in this burst together
-                for i in range(len(group_list) - 1):
-                    union(group_list[i], group_list[i + 1])
-                logging.debug(f"[grouping_service] Burst {burst_id}: merging groups {group_list}")
+        # Compute hashes for all images (needed for burst merging)
+        all_hashes: dict[str, str] = {}
+        for filename in sorted_filenames_for_grouping:
+            path = os.path.join(image_dir, filename)
+            h = hash_fn(filename)
+            if h:
+                all_hashes[filename] = h
         
-        # Build final mapping: each group -> its root (minimum ID in equivalence class)
+        # For each burst, check pairwise hash distances between groups
+        merged_bursts = 0
+        for burst_id, group_items in burst_to_groups.items():
+            if len(group_items) <= 1:
+                continue
+            
+            # Group items by group_id
+            groups_in_burst: dict[int, list[str]] = defaultdict(list)
+            for group_id, filename in group_items:
+                groups_in_burst[group_id].append(filename)
+            
+            if len(groups_in_burst) <= 1:
+                continue  # Only one group in this burst, nothing to merge
+            
+            # Check pairwise distances between groups in this burst
+            group_list = list(groups_in_burst.keys())
+            should_merge = False
+            
+            for i, gid1 in enumerate(group_list):
+                for gid2 in group_list[i+1:]:
+                    # Find minimum distance between any images in these two groups
+                    min_dist = float('inf')
+                    for f1 in groups_in_burst[gid1]:
+                        for f2 in groups_in_burst[gid2]:
+                            h1 = all_hashes.get(f1)
+                            h2 = all_hashes.get(f2)
+                            if h1 and h2:
+                                try:
+                                    hash1 = imagehash.hex_to_hash(h1)
+                                    hash2 = imagehash.hex_to_hash(h2)
+                                    dist = hash1 - hash2
+                                    if dist < min_dist:
+                                        min_dist = dist
+                                except Exception:
+                                    pass
+                    
+                    # If groups are visually similar enough, merge them
+                    if min_dist <= BURST_MERGE_THRESHOLD:
+                        union(gid1, gid2)
+                        should_merge = True
+                        logging.debug(f"[grouping_service] Burst {burst_id}: merging groups {gid1} and {gid2} (distance {min_dist} <= {BURST_MERGE_THRESHOLD})")
+            
+            if should_merge:
+                merged_bursts += 1
+        
+        # Build final mapping: each group -> its root
         merged_final: dict[int, int] = {}
         for gid in set(groups):
             merged_final[gid] = find(gid)
         
         merged_count = 0
         for idx, group_id in enumerate(groups):
-            if group_id in merged_final:
+            if group_id in merged_final and merged_final[group_id] != group_id:
                 groups[idx] = merged_final[group_id]
                 merged_count += 1
         
-        if merged_count > 0:
+        if merged_bursts > 0:
             final_group_count = len(set(groups))
-            logging.info(f"[grouping_service] Merged {merged_count} images from same bursts: {group_count} → {final_group_count} groups")
+            logging.info(f"[grouping_service] Merged {merged_bursts} bursts with visually similar groups: {group_count} → {final_group_count} groups")
         
         if progress_reporter:
             progress_reporter.detail(f"Created {len(set(groups))} groups")
