@@ -23,10 +23,10 @@ except ImportError:
     IMAGEHASH_AVAILABLE = False
 
 from src.photo_grouping import (
-    PhotoMetadata,
+    BURST_GAP_SEC,
     PHASH_HAMMING_THRESHOLD,
     SESSION_GAP_MIN,
-    BURST_GAP_SEC,
+    PhotoMetadata,
     compute_pick_score,
     detect_sessions,
     group_near_duplicates,
@@ -53,14 +53,14 @@ def extract_timestamp(exif: dict, path: str) -> datetime:
     # Try to read EXIF directly from file if exif dict doesn't have DateTimeOriginal
     # DateTimeOriginal (tag 36867) is in EXIF sub-IFD, not main IFD
     dt_original = None
-    
+
     # First, try to get from provided exif dict (might have string keys)
     if isinstance(exif, dict):
         dt_original = exif.get("DateTimeOriginal") or exif.get(36867) or exif.get("36867")
         # Fallback to DateTime (tag 306 in main IFD)
         if not dt_original:
             dt_original = exif.get("DateTime") or exif.get(306) or exif.get("306")
-    
+
     # If not found, try reading EXIF directly from file to access EXIF sub-IFD
     if not dt_original:
         try:
@@ -79,7 +79,7 @@ def extract_timestamp(exif: dict, path: str) -> datetime:
                         dt_original = exif_obj.get(306)  # DateTime
         except Exception:
             pass
-    
+
     if dt_original:
         try:
             # Parse EXIF datetime format: "YYYY:MM:DD HH:MM:SS"
@@ -165,11 +165,11 @@ def compute_grouping_for_photos(
     if progress_reporter:
         progress_reporter.update(3, 8)
         progress_reporter.detail("Detecting sessions...")
-    logging.info(f"[grouping_service] Step 2/8: Sorting photos by camera and timestamp...")
+    logging.info("[grouping_service] Step 2/8: Sorting photos by camera and timestamp...")
     photos.sort(key=lambda p: (p.camera_id, p.timestamp))
 
     # Step 2: Detect sessions
-    logging.info(f"[grouping_service] Step 3/8: Detecting sessions...")
+    logging.info("[grouping_service] Step 3/8: Detecting sessions...")
     sessions = detect_sessions(photos, session_gap_min=session_gap_min)
     session_count = len(set(sessions))
     logging.info(f"[grouping_service] Step 3: Found {session_count} sessions")
@@ -180,7 +180,7 @@ def compute_grouping_for_photos(
     if progress_reporter:
         progress_reporter.update(4, 8)
         progress_reporter.detail("Detecting bursts...")
-    logging.info(f"[grouping_service] Step 4/8: Detecting bursts...")
+    logging.info("[grouping_service] Step 4/8: Detecting bursts...")
     bursts: list[int] = []
     burst_id = 0
     last_timestamp: datetime | None = None
@@ -204,14 +204,14 @@ def compute_grouping_for_photos(
     if progress_reporter:
         progress_reporter.update(5, 8)
         progress_reporter.detail("Computing perceptual hashes...")
-    logging.info(f"[grouping_service] Step 5/8: Computing perceptual hashes...")
-    
+    logging.info("[grouping_service] Step 5/8: Computing perceptual hashes...")
+
     # Initialize hash cache
     from .phash_cache import PerceptualHashCache
     hash_cache = PerceptualHashCache()
     cache_hits = 0
     cache_misses = 0
-    
+
     def hash_fn(filename: str) -> str:
         nonlocal cache_hits, cache_misses
         path = os.path.join(image_dir, filename)
@@ -220,7 +220,7 @@ def compute_grouping_for_photos(
         if cached_hash:
             cache_hits += 1
             return cached_hash
-        
+
         # Compute hash
         cache_misses += 1
         try:
@@ -235,7 +235,7 @@ def compute_grouping_for_photos(
             error_hash = f"error_{filename}"
             # Don't cache errors
             return error_hash
-    
+
     # Save cache after all hashes are computed
     hash_cache.save()
 
@@ -256,21 +256,21 @@ def compute_grouping_for_photos(
         )
         group_count = len(set(groups))
         logging.info(f"[grouping_service] Step 6: Created {group_count} groups from near-duplicate detection")
-        
+
         # Post-process: Merge groups from same burst if visually somewhat similar
         # Use a more lenient threshold (20) for burst merging vs strict threshold (8) for initial grouping
         # This allows images from same burst to merge if they're reasonably similar, but prevents
         # merging completely different images (distance > 20) even if in same burst
         BURST_MERGE_THRESHOLD = 20  # More lenient threshold for burst merging
-        
+
         burst_to_groups: dict[int, list[tuple[int, str]]] = defaultdict(list)  # burst_id -> [(group_id, filename), ...]
         for idx, (burst_id, group_id) in enumerate(zip(bursts, groups)):
             filename = sorted_filenames_for_grouping[idx]
             burst_to_groups[burst_id].append((group_id, filename))
-        
+
         # For each burst, check if groups should merge based on visual similarity
         group_parent: dict[int, int] = {}
-        
+
         def find(gid: int) -> int:
             """Find root of group (with path compression)."""
             if gid not in group_parent:
@@ -278,7 +278,7 @@ def compute_grouping_for_photos(
             if group_parent[gid] != gid:
                 group_parent[gid] = find(group_parent[gid])
             return group_parent[gid]
-        
+
         def union(gid1: int, gid2: int):
             """Merge two groups (always keep smaller ID as root)."""
             root1 = find(gid1)
@@ -288,7 +288,7 @@ def compute_grouping_for_photos(
                     group_parent[root2] = root1
                 else:
                     group_parent[root1] = root2
-        
+
         # Compute hashes for all images (needed for burst merging)
         all_hashes: dict[str, str] = {}
         for filename in sorted_filenames_for_grouping:
@@ -296,25 +296,25 @@ def compute_grouping_for_photos(
             h = hash_fn(filename)
             if h:
                 all_hashes[filename] = h
-        
+
         # For each burst, check pairwise hash distances between groups
         merged_bursts = 0
         for burst_id, group_items in burst_to_groups.items():
             if len(group_items) <= 1:
                 continue
-            
+
             # Group items by group_id
             groups_in_burst: dict[int, list[str]] = defaultdict(list)
             for group_id, filename in group_items:
                 groups_in_burst[group_id].append(filename)
-            
+
             if len(groups_in_burst) <= 1:
                 continue  # Only one group in this burst, nothing to merge
-            
+
             # Check pairwise distances between groups in this burst
             group_list = list(groups_in_burst.keys())
             should_merge = False
-            
+
             for i, gid1 in enumerate(group_list):
                 for gid2 in group_list[i+1:]:
                     # Find minimum distance between any images in these two groups
@@ -332,31 +332,31 @@ def compute_grouping_for_photos(
                                         min_dist = dist
                                 except Exception:
                                     pass
-                    
+
                     # If groups are visually similar enough, merge them
                     if min_dist <= BURST_MERGE_THRESHOLD:
                         union(gid1, gid2)
                         should_merge = True
                         logging.debug(f"[grouping_service] Burst {burst_id}: merging groups {gid1} and {gid2} (distance {min_dist} <= {BURST_MERGE_THRESHOLD})")
-            
+
             if should_merge:
                 merged_bursts += 1
-        
+
         # Build final mapping: each group -> its root
         merged_final: dict[int, int] = {}
         for gid in set(groups):
             merged_final[gid] = find(gid)
-        
+
         merged_count = 0
         for idx, group_id in enumerate(groups):
             if group_id in merged_final and merged_final[group_id] != group_id:
                 groups[idx] = merged_final[group_id]
                 merged_count += 1
-        
+
         if merged_bursts > 0:
             final_group_count = len(set(groups))
             logging.info(f"[grouping_service] Merged {merged_bursts} bursts with visually similar groups: {group_count} → {final_group_count} groups")
-        
+
         if progress_reporter:
             progress_reporter.detail(f"Created {len(set(groups))} groups")
         # Save cache after grouping completes
@@ -370,14 +370,14 @@ def compute_grouping_for_photos(
         if progress_reporter:
             progress_reporter.update(6, 8)
             progress_reporter.detail("Using bursts as groups...")
-        logging.info(f"[grouping_service] Step 6/8: Using bursts as groups (imagehash not available)")
+        logging.info("[grouping_service] Step 6/8: Using bursts as groups (imagehash not available)")
         groups = bursts
 
     # Step 5: Compute pick_scores
     if progress_reporter:
         progress_reporter.update(7, 8)
         progress_reporter.detail("Computing pick scores...")
-    logging.info(f"[grouping_service] Step 7/8: Computing pick scores...")
+    logging.info("[grouping_service] Step 7/8: Computing pick scores...")
     pick_scores: list[float] = []
     timestamps: list[datetime] = []
 
@@ -405,7 +405,7 @@ def compute_grouping_for_photos(
     if progress_reporter:
         progress_reporter.update(8, 8)
         progress_reporter.detail("Recommending best picks...")
-    logging.info(f"[grouping_service] Step 8/8: Recommending best picks...")
+    logging.info("[grouping_service] Step 8/8: Recommending best picks...")
     best_flags = recommend_best_pick(groups, pick_scores, timestamps=timestamps)
     best_count = sum(best_flags)
     logging.info(f"[grouping_service] Step 8: Selected {best_count} best picks")
@@ -418,7 +418,7 @@ def compute_grouping_for_photos(
         group_sizes[group_id] = group_sizes.get(group_id, 0) + 1
 
     # Step 8: Build result dict (mapped back to original filename order)
-    logging.info(f"[grouping_service] Building final result dictionary...")
+    logging.info("[grouping_service] Building final result dictionary...")
     result: dict[str, dict] = {}
 
     # Create mapping from sorted order back to original filenames

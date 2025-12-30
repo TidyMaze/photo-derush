@@ -151,11 +151,11 @@ class PhotoView(QMainWindow):
 
         self._build_ui()
         self._connect_signals()  # Connect signals AFTER UI is built
-        
+
         # Purge stale caches on startup to prevent bad bounding boxes from previous runs
         # Don't clear detection cache on startup - preserve cache between runs
         self.purge_overlay_caches(clear_detection_cache=False)
-    
+
     def purge_overlay_caches(self, clear_detection_cache=False):
         """Purge caches that might contain stale overlay data.
         
@@ -165,20 +165,20 @@ class PhotoView(QMainWindow):
         # Clear pixmap caches
         self._pixmap_cache.clear()
         self._converted_pixmap_cache.clear()
-        
+
         # Clear base_pixmap from all labels (contains overlays)
         # Note: base_pixmap should NOT contain overlays, but clear it to force regeneration
         for label in self._all_widgets.values():
             if hasattr(label, "base_pixmap"):
                 label.base_pixmap = None  # type: ignore[attr-defined]
-        
+
         # Clear overlay cache from overlay_widget module if imported
         try:
             from src.overlay_widget import _overlay_cache
             _overlay_cache.clear()
         except ImportError:
             pass
-        
+
         # Only clear detection cache file if explicitly requested (e.g., on startup)
         if clear_detection_cache:
             try:
@@ -194,7 +194,7 @@ class PhotoView(QMainWindow):
                         delattr(self.viewmodel, "_cached_detection_cache_mtime")
             except Exception as e:
                 logging.warning(f"Failed to remove detection cache: {e}")
-        
+
         logging.info("Purged overlay caches" + (" (including detection cache)" if clear_detection_cache else ""))
         self._setup_shortcuts()
         # Debounce timer for selection-driven heavy updates
@@ -759,7 +759,7 @@ class PhotoView(QMainWindow):
         # Messages are logged instead
         logging.info(f"[Toast] {message}")
         pass
-    
+
     def _close_all_toasts(self):
         """Close all active toast windows."""
         for toast in list(self._active_toasts):
@@ -1175,28 +1175,28 @@ class PhotoView(QMainWindow):
         logging.info("[view] CloseEvent triggered, cleaning up all processes...")
         self._close_hover_tooltip()
         self._close_all_toasts()
-        
+
         # Shutdown lazy loader
         try:
             if hasattr(self, 'lazy_loader'):
                 self.lazy_loader.shutdown(wait=False)
         except Exception as e:
             logging.warning(f"[view] Error shutting down lazy loader: {e}")
-        
+
         # Cleanup viewmodel (will handle TaskRunner, detection worker, multiprocessing pools, etc.)
         try:
             if hasattr(self, 'viewmodel'):
                 self.viewmodel.cleanup()
         except Exception as e:
             logging.warning(f"[view] Error cleaning up viewmodel: {e}")
-        
+
         # Stop detection worker (redundant but safe)
         try:
             from .detection_worker import stop_global_worker
             stop_global_worker()
         except Exception as e:
             logging.warning(f"[view] Error stopping detection worker: {e}")
-        
+
         super().closeEvent(event)
         logging.info("[view] CloseEvent complete")
 
@@ -1229,37 +1229,37 @@ class PhotoView(QMainWindow):
             if viewport_width <= 0:
                 # Fallback to default if viewport not ready
                 return self.images_per_row
-            
+
             # Account for spacing: (n-1) gaps between n items, plus some margin
             spacing = self.grid_layout.spacing()
             margin = 20  # Extra margin to prevent overflow
             available_width = viewport_width - margin
-            
+
             # Calculate how many thumbnails fit
             thumb_with_spacing = self.thumb_size + spacing
             if thumb_with_spacing <= 0:
                 return self.images_per_row
-            
+
             cols = max(1, int(available_width / thumb_with_spacing))
-            
+
             return cols
         except Exception:
             logging.exception("Failed to calculate images_per_row")
             return self.images_per_row
-    
+
     def _relayout_grid(self):
         """Relayout all images in the grid based on current width."""
         if not self._all_widgets:
             return
-        
+
         # Get current column count
         cols_per_row = self._calculate_images_per_row()
-        
+
         # Get filtered images from viewmodel BEFORE skip check to detect sort order changes
         filtered_images = []
         if hasattr(self.viewmodel, 'current_filtered_images'):
             filtered_images = list(self.viewmodel.current_filtered_images())
-        
+
         # Optimization: Skip relayout if column count hasn't changed AND widgets are already in layout
         # AND filtered_images order hasn't changed (sort order is the same)
         # BUT: Always run if widgets exist but aren't in layout (label_refs empty but _all_widgets not empty)
@@ -1267,18 +1267,18 @@ class PhotoView(QMainWindow):
         # Compare as tuples to handle list vs tuple comparison
         filtered_images_tuple = tuple(filtered_images) if filtered_images else None
         # Order changed if: (1) last order is None (first time), OR (2) last order exists and is different
-        filtered_order_changed = (self._last_filtered_images_order is None or 
+        filtered_order_changed = (self._last_filtered_images_order is None or
                                    filtered_images_tuple != self._last_filtered_images_order)
         # Skip ONLY if: column count unchanged AND widgets in layout AND order hasn't changed
-        if (self._last_cols_per_row == cols_per_row and 
-            self._last_cols_per_row is not None and 
-            widgets_in_layout and 
+        if (self._last_cols_per_row == cols_per_row and
+            self._last_cols_per_row is not None and
+            widgets_in_layout and
             not filtered_order_changed):
             return
         self._last_cols_per_row = cols_per_row
         # Store filtered_images order to detect sort changes (already retrieved above)
         self._last_filtered_images_order = filtered_images_tuple
-        
+
         # Collect widgets that should be visible based on filtered_images
         # CRITICAL: Iterate filtered_images in order to preserve uncertainty-based sorting
         items = []
@@ -1311,7 +1311,7 @@ class PhotoView(QMainWindow):
                 label_to_first_filename[label] = filename
                 items.append(label)
             logging.info(f"[GRID] Collected {len(items)} unique items (deduplicated from {len(self._all_widgets)} entries)")
-        
+
         # Disable updates during relayout for better performance
         self.grid_widget.setUpdatesEnabled(False)
         try:
@@ -1323,10 +1323,10 @@ class PhotoView(QMainWindow):
                 widget = item.widget()
                 if widget:
                     widget.hide()  # Hide before removing to prevent window creation
-            
+
             # Clear label_refs before re-adding (but widgets are preserved in _all_widgets)
             self.label_refs.clear()
-            
+
             # Re-add widgets in new positions
             # Track which labels we've already added to prevent duplicates
             seen_labels = set()
@@ -1337,7 +1337,7 @@ class PhotoView(QMainWindow):
                     logging.error(f"[DUPLICATE] Label {id(label)} with filename {label_filename} appears multiple times in grid! Skipping duplicate at position {idx}")
                     continue
                 seen_labels.add(label)
-                
+
                 new_row = idx // cols_per_row
                 new_col = idx % cols_per_row
                 # Ensure widget has parent before adding to layout
@@ -1346,7 +1346,7 @@ class PhotoView(QMainWindow):
                 self.grid_layout.addWidget(label, new_row, new_col)
                 label.show()  # Show after adding to layout
                 self.label_refs[(new_row, new_col)] = label
-                
+
                 label_filename = getattr(label, "_thumb_filename", "unknown")
                 logging.debug(f"[GRID] Positioned label {label_filename} at ({new_row}, {new_col}), label_id={id(label)}")
                 # If label doesn't have a pixmap, request thumbnail
@@ -1366,7 +1366,7 @@ class PhotoView(QMainWindow):
                         # If we can't check, request thumbnail anyway to be safe
                         logging.info(f"[THUMBNAIL] Re-requesting thumbnail for {filename} (could not check pixmap)")
                         self.viewmodel.load_thumbnail(filename)
-            
+
             # Ensure hidden widgets are still tracked (but not in layout)
             # This allows them to reappear when filter changes
             for f_name, label in self._all_widgets.items():
@@ -1378,7 +1378,7 @@ class PhotoView(QMainWindow):
                     label.hide()
                     # Don't add to label_refs (it's not in the grid)
                     # But widget is preserved in memory via _all_widgets reference
-            
+
             # Log final grid state for debugging
             grid_summary = []
             for (r, c), lbl in sorted(self.label_refs.items()):
@@ -1387,7 +1387,7 @@ class PhotoView(QMainWindow):
             logging.info(f"[GRID] Final grid state: {len(self.label_refs)} positions, {len(set(self.label_refs.values()))} unique labels. Positions: {', '.join(grid_summary[:9])}")
         finally:
             self.grid_widget.setUpdatesEnabled(True)
-    
+
     def _on_image_added(self, filename, idx):
         # Calculate columns dynamically based on available width
         cols_per_row = self._calculate_images_per_row()
@@ -1395,23 +1395,23 @@ class PhotoView(QMainWindow):
         # This ensures relayout optimization works correctly
         if self._last_cols_per_row != cols_per_row:
             self._last_cols_per_row = cols_per_row
-        
+
         row = idx // cols_per_row
         col = idx % cols_per_row
         label = QLabel(self.grid_widget)  # Ensure parent is set immediately
-        
+
         # Add reusable bounding box overlay widget
         from src.bbox_overlay_widget import BoundingBoxOverlayWidget
         bbox_overlay = BoundingBoxOverlayWidget(label)
         bbox_overlay.hide()  # Hide until detections are ready
         label._bbox_overlay = bbox_overlay  # type: ignore[attr-defined]
-        
+
         # Add reusable badge overlay widget
         from src.badge_overlay_widget import BadgeOverlayWidget
         badge_overlay = BadgeOverlayWidget(label)
         badge_overlay.hide()  # Hide until badge data is ready
         label._badge_overlay = badge_overlay  # type: ignore[attr-defined]
-        
+
         # Add group badge overlay widget
         from src.group_badge_widget import GroupBadgeWidget
         group_badge_overlay = GroupBadgeWidget(label)
@@ -1461,18 +1461,18 @@ class PhotoView(QMainWindow):
         label.show()
         self.grid_layout.addWidget(label, row, col)
         self.label_refs[(row, col)] = label
-        
+
         # Check if this filename already has a widget (shouldn't happen, but log if it does)
         existing_label = self._all_widgets.get(filename)
         if existing_label and existing_label != label:
             logging.warning(f"[THUMBNAIL] Filename {filename} already has a widget, overwriting. Old widget: {existing_label}, New widget: {label}")
-        
+
         # Check for duplicate filename in grid (bug detection)
         if filename in self._all_widgets:
             existing_label = self._all_widgets[filename]
             if existing_label != label:
                 logging.error(f"[DUPLICATE] Filename {filename} already in grid at different position! Existing label: {existing_label}, New label: {label}, row={row}, col={col}")
-        
+
         # Check if this label is already used for a different filename (would cause duplicate images)
         for existing_filename, existing_label in self._all_widgets.items():
             if existing_label == label and existing_filename != filename:
@@ -1483,7 +1483,7 @@ class PhotoView(QMainWindow):
                     del self.label_refs[(row, col)]
                 label.hide()
                 return  # Don't add duplicate label
-        
+
         self._all_widgets[filename] = label  # Track all widgets by filename
         logging.info(f"[GRID] Added image {filename} at position ({row}, {col}), label_id={id(label)}")
 
@@ -1534,7 +1534,7 @@ class PhotoView(QMainWindow):
 
             # Get device pixel ratio to scale badge dimensions
             dpr = pixmap.devicePixelRatio() or 1.0
-            
+
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -1545,14 +1545,14 @@ class PhotoView(QMainWindow):
             else:
                 pct = 0.0
             letter = "K" if is_keep else "T"
-            
+
             # Emoji indicator for source: ✓ manual, 🤖 auto, no emoji for predicted
             emoji = ""
             if label_source == "manual":
                 emoji = "✓ "
             elif label_source == "auto":
                 emoji = "🤖 "
-            
+
             badge_text = f"{emoji}{pct:.1f}% {letter}"
 
             # Background color: different for manual vs auto
@@ -1584,7 +1584,7 @@ class PhotoView(QMainWindow):
 
             # Background with color already set based on source (manual/auto have different colors)
             painter.fillRect(x, y, badge_w, badge_h, bg_color)
-            
+
             # No border needed - emoji and color distinguish manual/auto
 
             # White text with dark outline for readability
@@ -1715,19 +1715,19 @@ class PhotoView(QMainWindow):
         """
         if not objects:
             return []
-        
+
         # Filter by minimum confidence
         filtered = [obj for obj in objects if isinstance(obj, dict) and obj.get("confidence", 0.0) >= min_confidence]
-        
+
         if not filtered:
             return []
-        
+
         # Calculate area for each object and filter by minimum area
         for obj in filtered:
             bbox = obj.get("bbox")
             det_w = obj.get("det_w")
             det_h = obj.get("det_h")
-            
+
             if bbox and det_w and det_h and len(bbox) == 4:
                 # Bbox is [x1, y1, x2, y2] in absolute pixels
                 x1, y1, x2, y2 = bbox
@@ -1743,16 +1743,16 @@ class PhotoView(QMainWindow):
             else:
                 obj["_area"] = 0.0
                 obj["_area_ratio"] = 0.0
-        
+
         # Filter by minimum area ratio (exclude tiny objects)
         filtered = [obj for obj in filtered if obj.get("_area_ratio", 0.0) >= min_area_ratio]
-        
+
         if not filtered:
             return []
-        
+
         # Sort by confidence descending, then by area descending
         filtered.sort(key=lambda o: (o.get("confidence", 0.0), o.get("_area", 0.0)), reverse=True)
-        
+
         # Return top N
         return filtered[:max_objects]
 
@@ -1774,23 +1774,23 @@ class PhotoView(QMainWindow):
             return pixmap
 
         try:
-            from PySide6.QtGui import QColor, QPainter, QPen
-            from PySide6.QtCore import Qt
+            from PySide6.QtGui import QPainter
+
             from .view_helpers import paint_bboxes
 
             # Get DPR and calculate dimensions
             dpr = pixmap.devicePixelRatio() or 1.0
-            
+
             # Convert pixmap to QImage first to get logical pixel dimensions
-            from PySide6.QtGui import QImage, QPixmap
+            from PySide6.QtGui import QPixmap
             image = pixmap.toImage()
             if image.isNull():
                 return pixmap
-            
+
             # QImage is always in logical pixels (DPR removed)
             image_w_logical = image.width()
             image_h_logical = image.height()
-            
+
             # Calculate image dimensions (use logical pixels)
             # thumb_w/thumb_h are in retina pixels, convert to logical
             # These represent the actual image size within the canvas (from PIL thumbnail metadata)
@@ -1804,9 +1804,9 @@ class PhotoView(QMainWindow):
                 img_h = image_h_logical
             offset_x_logical = int(offset_x / dpr) if dpr > 0 else offset_x
             offset_y_logical = int(offset_y / dpr) if dpr > 0 else offset_y
-            
+
             logging.debug(f"[BBOX-FIX] _paint_bboxes: dpr={dpr}, thumb_w={thumb_w}, thumb_h={thumb_h}, img_w={img_w}, img_h={img_h}, offset=({offset_x_logical}, {offset_y_logical}), image_size=({image_w_logical}, {image_h_logical})")
-            
+
             # CRITICAL: img_w/img_h must match the actual displayed image size in the QImage
             # The QImage canvas is image_w_logical x image_h_logical (typically 800x800 for thumb_size=800)
             # The image is positioned at (offset_x_logical, offset_y_logical) with size (img_w, img_h)
@@ -1818,15 +1818,15 @@ class PhotoView(QMainWindow):
             if not painter.isActive():
                 logging.error("[BBOX-DEBUG] Painter failed to initialize!")
                 return pixmap
-            
+
             # Draw bboxes on QImage (logical coordinates)
             paint_bboxes(painter, objects, offset_x_logical, offset_y_logical, img_w, img_h)
             painter.end()
-            
+
             # Convert back to QPixmap with DPR=1.0
             result_pixmap = QPixmap.fromImage(image)
             result_pixmap.setDevicePixelRatio(1.0)
-            
+
             return result_pixmap
         except Exception as e:
             logging.exception(f"Failed to paint bboxes: {e}")
@@ -1837,7 +1837,7 @@ class PhotoView(QMainWindow):
         """Refresh label badges and bboxes on all thumbnail labels."""
         # Don't purge caches on every refresh - only clear in-memory pixmap caches if needed
         # Detection cache file should persist across refreshes
-        
+
         import time
         t0 = time.perf_counter()
         try:
@@ -1867,12 +1867,12 @@ class PhotoView(QMainWindow):
                     fname = getattr(label, "_thumb_filename", None)
                     if not fname:
                         raise ValueError(f"Label at ({row}, {col}) missing _thumb_filename attribute")
-                    
+
                     # Get full path from model for state lookup
                     label_path = self.viewmodel.model.get_image_path(fname)
                     if not label_path:
                         raise ValueError(f"Model returned no path for filename {fname}")
-                    
+
                     current_label = self.viewmodel.model.get_state(label_path)
                     current_prob = None
                     if state:
@@ -1895,7 +1895,7 @@ class PhotoView(QMainWindow):
                     last_prob = getattr(label, "_last_prediction_prob", None)
                     last_label = getattr(label, "_last_label_state", None)
                     last_objects_count = getattr(label, "_last_objects_count", 0)
-                    
+
                     # Skip repaint if nothing changed (optimization to reduce CPU)
                     # Handle None comparisons correctly: None != None is False, but we want to detect when prob appears/disappears
                     prob_changed = False
@@ -1905,10 +1905,10 @@ class PhotoView(QMainWindow):
                         prob_changed = True  # Prediction disappeared
                     elif current_prob is not None and last_prob is not None:
                         prob_changed = abs(current_prob - last_prob) > 0.001  # Prediction changed significantly
-                    
+
                     label_changed = current_label != last_label
                     objects_changed = len(objects) != last_objects_count
-                    
+
                     # PERFORMANCE: Use getattr with default instead of hasattr+getattr to reduce calls
                     # Always repaint on first load (when _last_prediction_prob doesn't exist yet)
                     # OR when we have a prediction but haven't displayed it yet (force initial display)
@@ -1927,7 +1927,7 @@ class PhotoView(QMainWindow):
                     # Force repaint if we have a prediction but badge wasn't painted yet
                     # OR if we have a prediction and it's the first time we're seeing it (even if badge was painted before)
                     needs_badge_paint = (current_prob is not None and not getattr(label, "_badge_painted", False)) or (current_prob is not None and is_first_load)
-                    
+
                     # Always update group badges (independent of prediction changes)
                     # Update group badge overlay BEFORE the continue check
                     group_badge_overlay = getattr(label, "_group_badge_overlay", None)
@@ -1939,7 +1939,7 @@ class PhotoView(QMainWindow):
                                 is_best = group_info.get("is_group_best", False)
                                 group_size = group_info.get("group_size", 1)
                                 group_id = group_info.get("group_id")
-                                
+
                                 # Always show badge if we have group info (to show group_id)
                                 if group_id is not None or is_best or group_size > 1:
                                     logging.debug(f"[group-badge] Showing badge for {fname}: is_best={is_best}, group_size={group_size}, group_id={group_id}")
@@ -1951,7 +1951,7 @@ class PhotoView(QMainWindow):
                                     group_badge_overlay.raise_()
                                 else:
                                     group_badge_overlay.hide()
-                    
+
                     if not (prob_changed or label_changed or objects_changed or is_first_load or needs_initial_display or needs_badge_paint):
                         continue  # Skip repaint if nothing changed
 
@@ -1976,18 +1976,18 @@ class PhotoView(QMainWindow):
                             label_filename = getattr(label, "_thumb_filename", None)
                             if label_filename != fname:
                                 raise ValueError(f"Filename mismatch in _refresh_thumbnail_badges: label._thumb_filename={label_filename}, state fname={fname}")
-                            
+
                             if bbox_overlay and has_bboxes:
                                 # Get full path from model using filename - fail fast if not found
                                 if not fname:
-                                    raise ValueError(f"fname is None when updating bbox overlay in _refresh_thumbnail_badges")
+                                    raise ValueError("fname is None when updating bbox overlay in _refresh_thumbnail_badges")
                                 if label_filename != fname:
                                     raise ValueError(f"Filename mismatch: label._thumb_filename={label_filename}, state fname={fname}")
-                                
+
                                 label_path = self.viewmodel.model.get_image_path(fname)
                                 if not label_path:
                                     raise ValueError(f"Model returned no path for filename {fname}")
-                                
+
                                 try:
                                     from PIL import Image
                                     img = Image.open(label_path)
@@ -2017,7 +2017,7 @@ class PhotoView(QMainWindow):
                         label_filename = getattr(label, "_thumb_filename", None)
                         if label_filename != fname:
                             raise ValueError(f"Filename mismatch in _refresh_thumbnail_badges badge: label._thumb_filename={label_filename}, state fname={fname}")
-                        
+
                         badge_overlay = getattr(label, "_badge_overlay", None)
                         if badge_overlay:
                             if current_label:
@@ -2043,7 +2043,7 @@ class PhotoView(QMainWindow):
                                 badge_overlay.raise_()
                             else:
                                 badge_overlay.hide()
-                        
+
                         # Group badge overlay is updated above (before the continue check)
                         # This ensures badges are always updated even if predictions haven't changed
 
@@ -2074,11 +2074,11 @@ class PhotoView(QMainWindow):
             if pixmap is None:
                 label.clear()
                 return
-            
+
             # Get device pixel ratio for retina displays
             dpr = self._dpr
             target_size = int(self.thumb_size * dpr)
-            
+
             # Pixmap should already be at retina resolution from _convert_to_pixmap
             # Just verify and ensure DPR is set
             try:
@@ -2093,8 +2093,8 @@ class PhotoView(QMainWindow):
                 # Use stored filename - fail fast if not set
                 fname = getattr(label, "_thumb_filename", None)
                 if not fname:
-                    raise ValueError(f"Label missing _thumb_filename attribute in _set_label_pixmap")
-                
+                    raise ValueError("Label missing _thumb_filename attribute in _set_label_pixmap")
+
                 if fname:
 
                     # Get actual thumbnail dimensions from label storage
@@ -2127,6 +2127,7 @@ class PhotoView(QMainWindow):
                                     if not obj.get("det_w") or not obj.get("det_h"):
                                         try:
                                             from PIL import Image
+
                                             from src.object_detection import DetectionConfig
                                             img = Image.open(label_path)
                                             orig_w, orig_h = img.size
@@ -2144,7 +2145,7 @@ class PhotoView(QMainWindow):
                                         except Exception as e:
                                             logging.error(f"[BBOX-FIX] Failed to infer det_w/det_h for {fname}: {e}")
                                             raise  # Fail fast - bbox scaling requires det_w/det_h
-                            
+
                             # Update bounding box overlay widget (reusable component)
                             # Only show if objects have bbox data
                             has_bboxes = any(obj.get("bbox") is not None for obj in filtered_objects)
@@ -2153,11 +2154,11 @@ class PhotoView(QMainWindow):
                             if bbox_overlay and has_bboxes:
                                 # Get full path from model using filename - fail fast if not found
                                 if not fname:
-                                    raise ValueError(f"fname is None when updating bbox overlay")
+                                    raise ValueError("fname is None when updating bbox overlay")
                                 label_path = self.viewmodel.model.get_image_path(fname)
                                 if not label_path:
                                     raise ValueError(f"Model returned no path for filename {fname}")
-                                
+
                                 try:
                                     from PIL import Image
                                     img = Image.open(label_path)
@@ -2178,7 +2179,7 @@ class PhotoView(QMainWindow):
                                 bbox_overlay.hide()
                                 if filtered_objects:
                                     logging.info(f"[BBOX-WIDGET] Hiding overlay for {fname}: {len(filtered_objects)} objects but no bbox data")
-                            
+
                             # Offsets and thumb dimensions are already at retina resolution (from pixmap sampling)
                             # Do NOT scale again - they're already correct for the retina pixmap
                             # Note: bboxes now drawn via widget overlay, but keep pixmap painting as fallback
@@ -2191,10 +2192,10 @@ class PhotoView(QMainWindow):
                     label_filename = getattr(label, "_thumb_filename", None)
                     if label_filename != fname:
                         raise ValueError(f"Filename mismatch in _set_label_pixmap badge: label._thumb_filename={label_filename}, state fname={fname}")
-                    
+
                     # Get full path from model for state lookup - fail fast if not found
                     if not fname:
-                        raise ValueError(f"fname is None in _set_label_pixmap")
+                        raise ValueError("fname is None in _set_label_pixmap")
                     label_path = self.viewmodel.model.get_image_path(fname)
                     if not label_path:
                         raise ValueError(f"Model returned no path for filename {fname}")
@@ -2202,7 +2203,7 @@ class PhotoView(QMainWindow):
                     prob = state.predicted_probabilities.get(fname) if state else None
                     if prob is not None and prob != prob:  # NaN check
                         prob = None
-                    
+
                     badge_overlay = getattr(label, "_badge_overlay", None)
                     badge_was_painted = False
                     if badge_overlay and label_filename == fname:
@@ -2234,7 +2235,7 @@ class PhotoView(QMainWindow):
                             badge_was_painted = True
                         else:
                             badge_overlay.hide()
-                    
+
                     # Only mark badge as painted if we actually painted one
                     if badge_was_painted:
                         label._badge_painted = True  # type: ignore[attr-defined]
@@ -2251,7 +2252,6 @@ class PhotoView(QMainWindow):
             # Even though we already created a copy, Qt's setPixmap might optimize and share internally
             # Converting to QImage and back forces a complete, independent copy
             try:
-                from PySide6.QtGui import QImage
                 final_img = pixmap.toImage()
                 if final_img.isNull():
                     logging.error(f"[THUMBNAIL] Failed to convert pixmap to image for final copy (fname={getattr(label, '_thumb_filename', 'unknown')})")
@@ -2298,7 +2298,7 @@ class PhotoView(QMainWindow):
         try:
             # EXIF display is updated via _on_exif_changed signal from viewmodel
             # when selection changes, viewmodel automatically loads details and emits exif_changed
-            
+
             # Only refresh badges if browser state is present
             if getattr(self, "_last_browser_state", None):
                 self._refresh_thumbnail_badges()
@@ -2392,8 +2392,8 @@ class PhotoView(QMainWindow):
             lines.append(f"   Uncertainty: {uncertainty_pct}% (higher = more uncertain)")
         elif p is None:
             # No prediction = highest uncertainty
-            lines.append(f"\n🤖 Prediction: No prediction yet")
-            lines.append(f"   Uncertainty: 100.0% (no prediction = highest uncertainty)")
+            lines.append("\n🤖 Prediction: No prediction yet")
+            lines.append("   Uncertainty: 100.0% (no prediction = highest uncertainty)")
 
         # EXIF data
         if exif:
@@ -2556,7 +2556,7 @@ class PhotoView(QMainWindow):
                 if hasattr(thumb, "info") and thumb.info:
                     # Try to get original path from metadata
                     thumb_filename = thumb.info.get("original_path") or thumb.info.get("thumb_filename")
-                
+
                 # Use image data + filename + DPR as cache key to ensure uniqueness per file
                 thumb_bytes = thumb.tobytes()
                 import hashlib
@@ -2567,7 +2567,7 @@ class PhotoView(QMainWindow):
                 # Creating fresh pixmaps for each label ensures complete independence
             except Exception:
                 pass
-        
+
         # DON'T resize PIL image - it breaks coordinate mapping
         # The thumbnail is already at the correct size (128x128), and we'll scale it via DPR
         # Resizing here would change the coordinate space and break bbox alignment
@@ -2587,7 +2587,7 @@ class PhotoView(QMainWindow):
                 logging.debug(f"[BBOX-DEBUG] Attaching PIL.Image.info to QPixmap: {thumb.info}")
                 # Store as a temporary reference on the pixmap (won't survive pickling, but fine for GUI)
                 pm._pil_info = thumb.info  # type: ignore[attr-defined]
-            
+
             # DISABLED: Don't cache converted pixmaps to prevent sharing between labels
             # Each label needs a completely unique pixmap, even if the source image is the same
             # if cache_key:
@@ -2598,7 +2598,7 @@ class PhotoView(QMainWindow):
             #         for k in keys_to_remove:
             #             del self._converted_pixmap_cache[k]
             #     self._converted_pixmap_cache[cache_key] = pm
-            
+
             return pm
         except Exception as e:
             logging.debug(f"ImageQt conversion failed, falling back to PNG: {e}")
@@ -2639,7 +2639,7 @@ class PhotoView(QMainWindow):
             # Use direct lookup in _all_widgets (maps filename -> label)
             path_filename = os.path.basename(path)
             label = self._all_widgets.get(path_filename)
-            
+
             # If label not found, try multiple fallback strategies
             if not label:
                 # Strategy 1: Match by _thumb_filename attribute
@@ -2649,7 +2649,7 @@ class PhotoView(QMainWindow):
                         label = candidate_label
                         logging.debug(f"[THUMBNAIL] Found label for {path_filename} via _thumb_filename match")
                         break
-                
+
                 # Strategy 2: Match by tooltip (full path)
                 if not label:
                     for candidate_label in self._all_widgets.values():
@@ -2665,9 +2665,9 @@ class PhotoView(QMainWindow):
                                     label = candidate_label
                                     logging.debug(f"[THUMBNAIL] Found label for {path_filename} via tooltip string match")
                                     break
-            
+
             # Strategy 3 removed - too aggressive, could cause wrong assignments
-            
+
             # If still not found, log detailed info and skip
             if not label:
                 available = list(self._all_widgets.keys())[:20]  # First 20 for logging
@@ -2687,14 +2687,14 @@ class PhotoView(QMainWindow):
                             visible_without_pixmap.append(fn or "no_filename")
                 logging.warning(f"[THUMBNAIL] No label found for {path_filename} in _all_widgets (has {len(self._all_widgets)} entries). Available keys: {available[:10]}, _thumb_filenames: {thumb_filenames[:10]}, visible_without_pixmap: {visible_without_pixmap[:10]}")
                 return
-            
+
             # CRITICAL: Verify the stored filename matches BEFORE processing
             # This prevents assigning thumbnails to wrong labels
             label_filename = getattr(label, "_thumb_filename", None)
             if label_filename != path_filename:
                 logging.error(f"[THUMBNAIL] FILENAME MISMATCH: Thumbnail for {path_filename} found label with _thumb_filename={label_filename}. Skipping to prevent wrong assignment.")
                 return
-            
+
             # Safety check: if label already has a pixmap, verify it's for the same image
             # (This catches race conditions where filename might have changed)
             try:
@@ -2707,14 +2707,14 @@ class PhotoView(QMainWindow):
                         return
             except Exception:
                 pass
-            
+
             # Find grid position for this label
             grid_pos = None
             for (r, c), lbl in self.label_refs.items():
                 if lbl == label:
                     grid_pos = (r, c)
                     break
-            
+
             # Check if this label already has a pixmap for a different image
             try:
                 existing_pixmap = label.pixmap()
@@ -2725,7 +2725,7 @@ class PhotoView(QMainWindow):
                         return
             except Exception:
                 pass
-            
+
             logging.debug(f"[THUMBNAIL] Assigning thumbnail {path_filename} to label with _thumb_filename={label_filename}, grid_pos={grid_pos}, label_id={id(label)}, label visible={label.isVisible()}")
 
             # KISS: Extract metadata and convert to pixmap - work in logical pixels, let Qt handle DPR
@@ -2743,7 +2743,7 @@ class PhotoView(QMainWindow):
                     logging.debug(f"[THUMBNAIL] Created unique PIL Image copy for {path_filename}, thumb_id={id(thumb)}")
             except Exception as e:
                 logging.warning(f"[THUMBNAIL] Failed to create PIL Image copy for {path_filename}: {e}")
-            
+
             # Convert thumbnail to QPixmap first
             try:
                 pixmap = self._convert_to_pixmap(thumb)
@@ -2786,13 +2786,13 @@ class PhotoView(QMainWindow):
                 thumb_height_logical = thumb_height
                 offset_x_logical = offset_x
                 offset_y_logical = offset_y
-                
+
                 # Scale to retina for storage
                 thumb_width = int(thumb_width * dpr)
                 thumb_height = int(thumb_height * dpr)
                 offset_x = int(offset_x * dpr)
                 offset_y = int(offset_y * dpr)
-                
+
                 # Recompute offsets from dimensions in logical pixels, then scale to retina
                 # pixmap.width() returns logical pixels (Qt divides by DPR automatically)
                 canvas_size_logical = pixmap.width()
@@ -2801,17 +2801,16 @@ class PhotoView(QMainWindow):
                 # Scale recomputed offsets to retina
                 offset_x = int(offset_x_logical * dpr)
                 offset_y = int(offset_y_logical * dpr)
-                
+
                 # Final verification: ensure label filename still matches (prevent race conditions)
                 label_filename_check = getattr(label, "_thumb_filename", None)
                 if label_filename_check != path_filename:
                     # Filename changed during load - skip to prevent wrong image
                     return
-                
+
                 # Create a DEEP copy for base_pixmap to prevent sharing between labels
                 # Convert to QImage and back to QPixmap to force a true deep copy
                 try:
-                    from PySide6.QtGui import QImage
                     # Convert pixmap to image (forces deep copy of pixel data)
                     img = pixmap.toImage()
                     if img.isNull():
@@ -2838,11 +2837,10 @@ class PhotoView(QMainWindow):
                 if final_filename_check != path_filename:
                     logging.error(f"[THUMBNAIL] Race condition: Label filename changed from {path_filename} to {final_filename_check} during processing. Skipping.")
                     return
-                
+
                 # Create a DEEP copy to draw overlays on - ensure each label gets its own pixmap
                 # Convert to QImage and back to QPixmap to force a true deep copy (prevents sharing)
                 try:
-                    from PySide6.QtGui import QImage
                     # Convert pixmap to image (forces deep copy of pixel data)
                     img = pixmap.toImage()
                     if img.isNull():
@@ -2858,7 +2856,7 @@ class PhotoView(QMainWindow):
                 except Exception as e:
                     logging.error(f"[THUMBNAIL] Failed to create deep copy of pixmap for {path_filename}: {e}")
                     return
-                
+
                 # Apply overlays for current state (bboxes, badges)
                 try:
                     # Find current grid position
@@ -2867,14 +2865,14 @@ class PhotoView(QMainWindow):
                         if lbl == label:
                             current_pos = (r, c)
                             break
-                    
+
                     # Verify no other label at this position has a different filename
                     if current_pos:
                         other_label = self.label_refs.get(current_pos)
                         if other_label and other_label != label:
                             logging.error(f"[THUMBNAIL] Position {current_pos} has different label! Expected {id(label)}, found {id(other_label)}")
                             return
-                    
+
                     # Log pixmap IDs to track if same pixmap is being used for multiple labels
                     logging.debug(f"[THUMBNAIL] Setting pixmap for {path_filename} at grid_pos={current_pos}, label_id={id(label)}, label_filename={getattr(label, '_thumb_filename', None)}, pixmap_id={id(pixmap)}, overlay_id={id(overlay)}, label visible={label.isVisible()}, pixmap size={pixmap.width()}x{pixmap.height()}")
                     self._set_label_pixmap(label, overlay, ctx="thumbnail")
@@ -2936,7 +2934,7 @@ class PhotoView(QMainWindow):
             self._progress_update_timer.setSingleShot(True)
             self._progress_update_pending = {}
             self._progress_update_timer.timeout.connect(self._apply_progress_update)
-        
+
         # Store pending update
         self._progress_update_pending = {
             "name": "Loading images",
@@ -2944,11 +2942,11 @@ class PhotoView(QMainWindow):
             "total": total,
             "detail": None
         }
-        
+
         # Restart timer (debounce to max 10 updates/sec)
         if not self._progress_update_timer.isActive():
             self._progress_update_timer.start(100)
-        
+
         # Hide when complete (not debounced - immediate)
         if current >= total:
             self.progress_bar.hide()
@@ -2984,7 +2982,7 @@ class PhotoView(QMainWindow):
             self._progress_update_timer.setSingleShot(True)
             self._progress_update_pending = {}
             self._progress_update_timer.timeout.connect(self._apply_progress_update)
-        
+
         # Store pending update
         self._progress_update_pending = {
             "name": name,
@@ -2992,22 +2990,22 @@ class PhotoView(QMainWindow):
             "total": total,
             "detail": detail
         }
-        
+
         # Restart timer (debounce to max 10 updates/sec)
         if not self._progress_update_timer.isActive():
             self._progress_update_timer.start(100)
-    
+
     def _apply_progress_update(self):
         """Apply debounced progress bar update."""
         if not self._progress_update_pending:
             return
-        
+
         pending = self._progress_update_pending
         name = pending["name"]
         current = pending["current"]
         total = pending["total"]
         detail = pending.get("detail")
-        
+
         if total > 0:
             if self.progress_bar.maximum() != total:
                 self.progress_bar.setMaximum(total)
@@ -3023,7 +3021,7 @@ class PhotoView(QMainWindow):
         # Ensure progress bar is visible during progress updates
         if not self.progress_bar.isVisible():
             self.progress_bar.show()
-        
+
         self._progress_update_pending = {}
 
     def _on_task_finished(self, name, ok):
@@ -3176,7 +3174,7 @@ class PhotoView(QMainWindow):
             return
 
         self._last_browser_state = state
-        
+
         # Debug: log group_info if present
         group_info = getattr(state, "group_info", {})
         if group_info:
@@ -3188,23 +3186,23 @@ class PhotoView(QMainWindow):
         pred_labels = getattr(state, "predicted_labels", {})
         detected_objects = getattr(state, "detected_objects", {})
         filtered_images = getattr(state, "filtered_images", None)
-        
+
         # Force relayout when predictions are complete to ensure final sorted order is applied
         # This handles the case where initial relayout happened before predictions,
         # so we need to re-layout with the final uncertainty-based sort
         if filtered_images and len(pred_probs) > 0:
             total_images = len(filtered_images)
             predictions_complete = len(pred_probs) >= total_images * 0.9  # 90% have predictions
-            
+
             # Track if we've already forced a relayout for this prediction completion
             if not hasattr(self, "_predictions_complete_relayout_forced"):
                 self._predictions_complete_relayout_forced = False
-            
+
             if predictions_complete and not self._predictions_complete_relayout_forced:
                 # Reset last order to force relayout with final sorted order
                 self._last_filtered_images_order = None
                 self._predictions_complete_relayout_forced = True  # Only force once
-        
+
         # Auto-select image with most bounding boxes for testing
         if detected_objects and not hasattr(self, "_auto_selected_most_boxes"):
             max_count = 0
@@ -3336,7 +3334,6 @@ class PhotoView(QMainWindow):
         if not filename:
             return None
         fname = os.path.basename(filename)
-        import math
         # 1. snapshot
         if self._state:
             try:
@@ -3426,12 +3423,12 @@ class PhotoView(QMainWindow):
         # Restart timer on each resize event (debounce) - stop and restart to reset timeout
         self._window_resize_relayout_timer.stop()
         self._window_resize_relayout_timer.start(150)  # 150ms debounce
-    
+
     def eventFilter(self, obj, event):
         # PERFORMANCE: Early return for unhandled events to avoid expensive checks
         # Cache event type to avoid repeated calls (222k calls -> significant savings)
         event_type = event.type()
-        
+
         # Handle resize events on scroll area viewport
         if obj == self.scroll_area.viewport() and event_type == QEvent.Type.Resize:
             # Debounce relayout to avoid excessive calls during resize
@@ -3444,12 +3441,12 @@ class PhotoView(QMainWindow):
             self._resize_relayout_timer.stop()
             self._resize_relayout_timer.start(150)  # 150ms debounce
             return False
-        
+
         # PERFORMANCE: Only check for thumbnail events if object has _thumb_filename attribute
         # This avoids hasattr() calls for most events (majority of 222k calls)
         if not hasattr(obj, "_thumb_filename"):
             return super().eventFilter(obj, event)
-        
+
         # Handle context menu from thumbnail QLabel
         try:
             # Hover previews disabled to prevent window accumulation
