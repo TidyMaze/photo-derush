@@ -36,7 +36,7 @@ class PhotoMetadata:
 # Default thresholds
 SESSION_GAP_MIN = 30  # minutes
 BURST_GAP_SEC = 1.0  # seconds
-PHASH_HAMMING_THRESHOLD = 12  # bits (for near-duplicate detection) - balanced threshold for grouping similar images
+PHASH_HAMMING_THRESHOLD = 8  # bits (for near-duplicate detection) - stricter to avoid transitive over-grouping
 
 
 def detect_sessions(
