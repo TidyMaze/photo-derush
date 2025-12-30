@@ -13,7 +13,8 @@ from api.models.project import Project
 async def check_predictions():
     """Check why predictions return 0 results."""
     # Connect to actual database
-    db_path = Path("/Users/yannrolland/work/photo-derush/photoderush.db")
+    import os
+    db_path = Path(os.getenv("PHOTO_DERUSH_DB", "photoderush.db"))
     if not db_path.exists():
         print(f"❌ Database not found: {db_path}")
         return

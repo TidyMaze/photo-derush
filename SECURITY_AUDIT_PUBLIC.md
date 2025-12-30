@@ -19,9 +19,9 @@
 **Status:** ⚠️ **SHOULD FIX**
 
 Found hardcoded personal paths in multiple files:
-- `/Users/yannrolland/work/photo-derush` (29 files)
-- `/Users/yannrolland/Pictures/photo-dataset` (scripts)
-- Debug log paths: `/Users/yannrolland/work/photo-derush/.cursor/debug.log`
+- `/Users/username/work/photo-derush` (29 files)
+- `/Users/username/Pictures/photo-dataset` (scripts)
+- Debug log paths: `/Users/username/work/photo-derush/.cursor/debug.log`
 
 **Files with hardcoded paths:**
 - `src/auto_label_manager.py` (many debug log writes)
@@ -38,14 +38,14 @@ Found hardcoded personal paths in multiple files:
 ### 3. Personal Username in Code
 **Status:** ⚠️ **SHOULD FIX**
 
-Username "yannrolland" appears in:
+Personal username appears in:
 - File paths (as shown above)
 - Debug logging statements
 - Script default paths
 
 **Recommendation:**
 - Replace with generic paths or environment variables
-- Use `os.path.expanduser("~")` instead of hardcoded `/Users/yannrolland/`
+- Use `os.path.expanduser("~")` instead of hardcoded `/Users/username/`
 
 ## ✅ SAFE - No Issues Found
 

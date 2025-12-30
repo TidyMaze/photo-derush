@@ -1,5 +1,6 @@
 """Quick test of predictions with new threshold."""
 import asyncio
+import os
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -9,7 +10,7 @@ from api.services.ml import MLService
 
 
 async def quick_test():
-    db_path = Path("/Users/yannrolland/work/photo-derush/photoderush.db")
+    db_path = Path(os.getenv("PHOTO_DERUSH_DB", "photoderush.db"))
     db_url = f"sqlite+aiosqlite:///{db_path}"
     engine = create_async_engine(db_url, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

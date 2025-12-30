@@ -9,7 +9,8 @@ echo "════════════════════════�
 echo ""
 
 # Change to project directory
-cd /Users/yannrolland/work/photo-derush
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
 
 # Kill any existing servers
 echo "🛑 Stopping existing servers..."

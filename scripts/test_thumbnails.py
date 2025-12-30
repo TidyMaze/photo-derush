@@ -22,7 +22,7 @@ except Exception as e:
     print(f"   ❌ Backend not accessible: {e}")
     print()
     print("Please start the backend:")
-    print("  cd /Users/yannrolland/work/photo-derush")
+    print("  cd <project-directory>")
     print("  poetry run uvicorn api.main:app --reload --port 8000")
     sys.exit(1)
 

@@ -9,8 +9,9 @@ try:
 except Exception:
     pass
 
-# Make sure we're in the right directory
-os.chdir('/Users/yannrolland/work/photo-derush')
+# Make sure we're in the right directory (script's directory)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
 sys.path.insert(0, '.')
 
 def run_plot():

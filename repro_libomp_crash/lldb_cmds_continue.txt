@@ -1,5 +1,6 @@
-target create --no-dependents /Users/yannrolland/work/photo-derush/.venv/bin/python
-process launch --env DYLD_PRINT_LIBRARIES=1 -- /Users/yannrolland/work/photo-derush/.venv/bin/python /Users/yannrolland/work/photo-derush/repro_libomp_crash/run_yolov8_direct.py --iterations 200
+# Note: Update paths below to match your environment
+# target create --no-dependents <PROJECT_DIR>/.venv/bin/python
+# process launch --env DYLD_PRINT_LIBRARIES=1 -- <PROJECT_DIR>/.venv/bin/python <PROJECT_DIR>/repro_libomp_crash/run_yolov8_direct.py --iterations 200
 process continue
 thread backtrace all
 quit

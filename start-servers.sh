@@ -10,7 +10,8 @@ pkill -f "vite" 2>/dev/null
 sleep 1
 
 # Start backend
-cd /Users/yannrolland/work/photo-derush
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
 echo "🚀 Backend auto-start disabled (see script)."
 # Disabled auto-start of API server. To run manually:
 # nohup poetry run uvicorn api.main:app --reload --port 8000 > /tmp/backend.log 2>&1 &
@@ -18,7 +19,7 @@ echo "🚀 Backend auto-start disabled (see script)."
 sleep 2
 
 # Start frontend
-cd /Users/yannrolland/work/photo-derush/web
+cd "$SCRIPT_DIR/web"
 echo "🎨 Starting Frontend UI..."
 nohup npm run dev > /tmp/frontend.log 2>&1 &
 echo $! > /tmp/frontend.pid

@@ -5,7 +5,7 @@ and print a concise comparison report.
 Usage:
   poetry run python scripts/run_train_compare.py [IMAGE_DIR]
 
-Defaults to: /Users/yannrolland/Pictures/photo-dataset (as commonly used locally).
+Defaults to: ~/Pictures/photo-dataset (or set PHOTO_DATASET_DIR env var).
 """
 from __future__ import annotations
 

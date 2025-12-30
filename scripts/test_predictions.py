@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 async def test_predictions():
     """Test prediction on actual database."""
     # Connect to database
-    db_path = Path("/Users/yannrolland/work/photo-derush/photoderush.db")
+    import os
+    db_path = Path(os.getenv("PHOTO_DERUSH_DB", "photoderush.db"))
     if not db_path.exists():
         print(f"❌ Database not found: {db_path}")
         return

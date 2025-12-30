@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Direct test of predict method to see actual error."""
 import asyncio
+import os
 import sys
 
-sys.path.insert(0, '/Users/yannrolland/work/photo-derush')
+# Add script directory to path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
 
 async def test_predict():
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
