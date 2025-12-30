@@ -213,9 +213,11 @@ def compute_grouping_for_photos(
             progress_reporter.update(6, 8)
             progress_reporter.detail("Grouping near-duplicates...")
         logging.info(f"[grouping_service] Step 6/8: Grouping near-duplicates (hamming_threshold={phash_threshold})...")
+        # Use sorted filenames to match the order of photos, sessions, bursts
+        sorted_filenames_for_grouping = [p.filename for p in photos]
         # Pass image_dir and hash_cache to group_near_duplicates for cache access
         groups = group_near_duplicates(
-            filenames,
+            sorted_filenames_for_grouping,  # Use sorted order to match photos/sessions/bursts
             hash_fn,
             hamming_threshold=phash_threshold,
             progress_reporter=progress_reporter,
