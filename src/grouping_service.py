@@ -227,46 +227,49 @@ def compute_grouping_for_photos(
         group_count = len(set(groups))
         logging.info(f"[grouping_service] Step 6: Created {group_count} groups from near-duplicate detection")
         
-        # Post-process: Merge groups that share the same burst_id OR session_id
-        # This ensures images from the same burst/session are grouped together even if visually different
+        # Post-process: Merge groups that share the same burst_id
+        # This ensures images from the same burst are grouped together even if visually different
+        # Note: We only merge by burst, not session, because sessions can span 30 minutes
+        # and include many visually different photos
         burst_to_groups: dict[int, set[int]] = defaultdict(set)
-        session_to_groups: dict[int, set[int]] = defaultdict(set)
-        for idx, (burst_id, session_id, group_id) in enumerate(zip(bursts, sessions, groups)):
+        for idx, (burst_id, group_id) in enumerate(zip(bursts, groups)):
             burst_to_groups[burst_id].add(group_id)
-            session_to_groups[session_id].add(group_id)
         
-        # Create mapping: merge groups within same burst OR same session
-        group_to_merged: dict[int, int] = {}
+        # Build equivalence classes: groups that appear together in any burst should merge
+        # Use union-find to merge all groups that appear together
+        group_parent: dict[int, int] = {}
         
-        # First, merge groups within same burst
+        def find(gid: int) -> int:
+            """Find root of group (with path compression)."""
+            if gid not in group_parent:
+                group_parent[gid] = gid
+            if group_parent[gid] != gid:
+                group_parent[gid] = find(group_parent[gid])
+            return group_parent[gid]
+        
+        def union(gid1: int, gid2: int):
+            """Merge two groups (always keep smaller ID as root)."""
+            root1 = find(gid1)
+            root2 = find(gid2)
+            if root1 != root2:
+                # Always merge to smaller ID
+                if root1 < root2:
+                    group_parent[root2] = root1
+                else:
+                    group_parent[root1] = root2
+        
+        # For each burst, merge all groups that appear together
         for burst_id, group_ids in burst_to_groups.items():
             if len(group_ids) > 1:
-                min_group_id = min(group_ids)
-                for gid in group_ids:
-                    # Only set if not already merged (burst takes priority)
-                    if gid not in group_to_merged:
-                        group_to_merged[gid] = min_group_id
+                group_list = sorted(group_ids)
+                # Merge all groups in this burst together
+                for i in range(len(group_list) - 1):
+                    union(group_list[i], group_list[i + 1])
         
-        # Then, merge groups within same session (if not already merged by burst)
-        for session_id, group_ids in session_to_groups.items():
-            if len(group_ids) > 1:
-                # Filter out already-merged groups, find min of remaining
-                unmerged = [gid for gid in group_ids if gid not in group_to_merged]
-                if len(unmerged) > 1:
-                    min_group_id = min(unmerged)
-                    for gid in unmerged:
-                        group_to_merged[gid] = min_group_id
-        
-        # Apply merging (need to handle transitive merges)
-        # If group A merges to B, and B merges to C, we need A -> C
-        # Build transitive closure
+        # Build final mapping: each group -> its root (minimum ID in equivalence class)
         merged_final: dict[int, int] = {}
-        for gid in group_to_merged:
-            target = group_to_merged[gid]
-            # Follow chain until we find the final target
-            while target in group_to_merged and target != group_to_merged[target]:
-                target = group_to_merged[target]
-            merged_final[gid] = target
+        for gid in set(groups):
+            merged_final[gid] = find(gid)
         
         merged_count = 0
         for idx, group_id in enumerate(groups):
