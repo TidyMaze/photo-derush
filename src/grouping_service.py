@@ -258,10 +258,10 @@ def compute_grouping_for_photos(
         logging.info(f"[grouping_service] Step 6: Created {group_count} groups from near-duplicate detection")
 
         # Post-process: Merge groups from same burst if visually somewhat similar
-        # Use a more lenient threshold (20) for burst merging vs strict threshold (8) for initial grouping
+        # Use a more lenient threshold (30) for burst merging vs strict threshold (8) for initial grouping
         # This allows images from same burst to merge if they're reasonably similar, but prevents
-        # merging completely different images (distance > 20) even if in same burst
-        BURST_MERGE_THRESHOLD = 20  # More lenient threshold for burst merging
+        # merging completely different images (distance > 30) even if in same burst
+        BURST_MERGE_THRESHOLD = 30  # More lenient threshold for burst merging
 
         burst_to_groups: dict[int, list[tuple[int, str]]] = defaultdict(list)  # burst_id -> [(group_id, filename), ...]
         for idx, (burst_id, group_id) in enumerate(zip(bursts, groups)):
