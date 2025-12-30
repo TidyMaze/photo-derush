@@ -256,6 +256,9 @@ class PhotoView(QMainWindow):
         """Build the main UI layout."""
         self.central_widget = QWidget()
         self.main_layout = QHBoxLayout(self.central_widget)
+        # Minimize margins to reduce wasted space
+        self.main_layout.setContentsMargins(4, 4, 4, 4)
+        self.main_layout.setSpacing(4)
         self.setCentralWidget(self.central_widget)
 
         self._build_left_panel()
@@ -295,12 +298,18 @@ class PhotoView(QMainWindow):
         self.side_panel = QWidget()
         # Allow the side panel to shrink horizontally; don't force a large min width
         self.side_panel.setMinimumWidth(0)
-        # Set maximum width to prevent panel from being too wide, but allow it to fill available space
+        # Set maximum width to prevent panel from being too wide
+        # Use Preferred instead of Maximum so it sizes to content (up to max width)
         self.side_panel.setMaximumWidth(350)
-        self.side_panel.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Expanding)
+        self.side_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.side_layout = QVBoxLayout(self.side_panel)
+        # Minimize margins to reduce wasted space
+        self.side_layout.setContentsMargins(4, 4, 4, 4)
+        self.side_layout.setSpacing(4)
         self.side_scroll = QScrollArea()
         self.side_scroll.setWidgetResizable(True)
+        # Remove margins from scroll area to eliminate gap
+        self.side_scroll.setContentsMargins(0, 0, 0, 0)
         # Prevent horizontal scrolling in the side panel; only allow vertical scrolling
         try:
             self.side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
