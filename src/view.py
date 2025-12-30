@@ -295,9 +295,9 @@ class PhotoView(QMainWindow):
         self.side_panel = QWidget()
         # Allow the side panel to shrink horizontally; don't force a large min width
         self.side_panel.setMinimumWidth(0)
-        # Set maximum width to prevent panel from being too wide
+        # Set maximum width to prevent panel from being too wide, but allow it to fill available space
         self.side_panel.setMaximumWidth(350)
-        self.side_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.side_panel.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Expanding)
         self.side_layout = QVBoxLayout(self.side_panel)
         self.side_scroll = QScrollArea()
         self.side_scroll.setWidgetResizable(True)
@@ -307,7 +307,8 @@ class PhotoView(QMainWindow):
         except Exception:
             logging.exception("Failed to set horizontal scroll bar policy")
         self.side_scroll.setWidget(self.side_panel)
-        self.main_layout.addWidget(self.side_scroll, stretch=2)
+        # Use stretch=0 so side panel only takes the space it needs (up to max width), eliminating right gap
+        self.main_layout.addWidget(self.side_scroll, stretch=0)
 
         self._build_action_buttons()  # Keep/Trash buttons at top
         self._build_directory_selector()
