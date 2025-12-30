@@ -303,6 +303,8 @@ class PhotoViewModel(QObject):
                             # the potentially heavy detection routine here. It ensures
                             # the cache contains bounding-box coordinates for UI overlay.
                             dets = object_detection.detect_objects(path)
+                            # Model is now loaded - refresh UI state to show actual device/model
+                            # (The _emit_state_snapshot() at end of task will update UI with actual values)
                             # Ensure all dict entries are canonical via sanitizer
                             new_dets = []
                             for d in dets:
@@ -337,9 +339,10 @@ class PhotoViewModel(QObject):
                             base = os.path.basename(self.model.get_image_path(fname) or fname)
                             new_results[base] = c.get(base, [])
                         self._detected_objects = new_results
-                        # Emit a fresh snapshot so UI updates (safe to call)
+                        # Emit a fresh snapshot so UI updates with actual device/model (after first detection loads model)
+                        # Use immediate emit to update UI right away instead of waiting for debounce
                         try:
-                            self._emit_state_snapshot()
+                            self._emit_state_snapshot_immediate()
                         except Exception:
                             logging.exception("Error in viewmodel formatting")
                             raise
@@ -1041,10 +1044,34 @@ class PhotoViewModel(QObject):
         detection_model = "unknown"
         try:
             from . import object_detection as _od
+            from .constants import YOLO_MODEL_NAME
 
             detection_backend = getattr(_od, "DETECTION_BACKEND", detection_backend)
-            detection_device = _od.get_loaded_device() or detection_device
-            detection_model = _od.get_loaded_model_name() or detection_model
+            # Try to get loaded device/model, but fall back to expected values if not loaded yet
+            loaded_device = _od.get_loaded_device()
+            loaded_model = _od.get_loaded_model_name()
+            
+            # If model not loaded yet, show expected values (will update when model loads)
+            if loaded_device:
+                detection_device = loaded_device
+            else:
+                # Show expected device (will be auto-detected on first load)
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        detection_device = "cuda (expected)"
+                    elif torch.backends.mps.is_available():
+                        detection_device = "mps (expected)"
+                    else:
+                        detection_device = "cpu (expected)"
+                except ImportError:
+                    detection_device = "cpu (expected)"
+            
+            if loaded_model:
+                detection_model = loaded_model
+            else:
+                # Show expected model name from constants
+                detection_model = YOLO_MODEL_NAME
         except Exception:
             # ignore if object_detection can't be imported
             pass

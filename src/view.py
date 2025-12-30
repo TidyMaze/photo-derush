@@ -860,9 +860,10 @@ class PhotoView(QMainWindow):
                     self.feature_backend_label.setText(f"Features: {feature_backend}")
 
                 # If state didn't include backend/device/model (model not loaded yet), try fallback to object_detection module
-                if not backend or not device or not model:
+                if not backend or not device or not model or device == "unknown" or model == "unknown":
                     try:
                         from . import object_detection
+                        from .constants import YOLO_MODEL_NAME
 
                         ob_backend = getattr(object_detection, "DETECTION_BACKEND", None)
                         try:
@@ -871,13 +872,31 @@ class PhotoView(QMainWindow):
                         except Exception:
                             ob_device = None
                             ob_model = None
+                        
                         if ob_backend:
                             self.det_backend_label.setText(f"Detector: {ob_backend}")
+                        
+                        # Show device - use loaded if available, otherwise show expected
                         if ob_device is not None:
-                            # device might be a torch.device or string
                             self.det_device_label.setText(f"Device: {str(ob_device)}")
+                        elif device == "unknown":
+                            # Show expected device
+                            try:
+                                import torch
+                                if torch.cuda.is_available():
+                                    self.det_device_label.setText("Device: cuda (expected)")
+                                elif torch.backends.mps.is_available():
+                                    self.det_device_label.setText("Device: mps (expected)")
+                                else:
+                                    self.det_device_label.setText("Device: cpu (expected)")
+                            except ImportError:
+                                self.det_device_label.setText("Device: cpu (expected)")
+                        
+                        # Show model - use loaded if available, otherwise show expected
                         if ob_model:
                             self.det_model_label.setText(f"Model: {ob_model}")
+                        elif model == "unknown":
+                            self.det_model_label.setText(f"Model: {YOLO_MODEL_NAME}")
                     except Exception:
                         logging.exception("Failed to import object_detection for fallback detector/device")
                         pass
