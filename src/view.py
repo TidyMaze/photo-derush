@@ -371,6 +371,8 @@ class PhotoView(QMainWindow):
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍 Search by filename...")
+        # Prevent search input from forcing panel width
+        self.search_input.setMaximumWidth(400)
         self.search_input.setStyleSheet("""
             QLineEdit {
                 padding: 4px 8px;
@@ -719,6 +721,8 @@ class PhotoView(QMainWindow):
         for label in [self.det_model_label, self.det_device_label, self.class_model_label, self.embed_model_label, self.feature_backend_label, self.worker_queue_label, self.worker_state_label]:
             label.setStyleSheet(info_style)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            # Enable word wrap for labels that might contain long text
+            label.setWordWrap(True)
 
         # Arrange into multiple rows with spacing
         outer = QVBoxLayout()
@@ -961,6 +965,8 @@ class PhotoView(QMainWindow):
         self.exif_view.setMinimumHeight(150)
         self.exif_view.setMaximumHeight(300)
         self.exif_view.setPlaceholderText("Select an image to view details.")
+        # Enable word wrap to prevent long lines from forcing panel width
+        self.exif_view.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.exif_view.setStyleSheet("""
             QTextEdit {
                 font-family: 'Monaco', 'Courier New', monospace;
