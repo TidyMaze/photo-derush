@@ -1039,9 +1039,10 @@ class PhotoViewModel(QObject):
             # Continue even if filters fail
 
         # Try to detect which detection backend/device/model is in use for UI display
+        # Note: We combine backend+model into a single "detection_model" field to avoid redundancy
         detection_backend = "unknown"
         detection_device = "unknown"
-        detection_model = "unknown"
+        detection_model = "unknown"  # Will show model name (e.g., "yolov8n") which includes backend info
         try:
             from . import object_detection as _od
             from .constants import YOLO_MODEL_NAME
@@ -1051,21 +1052,27 @@ class PhotoViewModel(QObject):
             loaded_device = _od.get_loaded_device()
             loaded_model = _od.get_loaded_model_name()
             
-            # If model not loaded yet, show expected values (will update when model loads)
+            # If model not loaded yet, determine expected device using same logic as _load_model
             if loaded_device:
                 detection_device = loaded_device
             else:
-                # Show expected device (will be auto-detected on first load)
+                # Use same device detection logic as object_detection._load_model()
+                # This includes the YOLOv8-on-MPS workaround that forces CPU on macOS
                 try:
                     import torch
+                    import platform
                     if torch.cuda.is_available():
-                        detection_device = "cuda (expected)"
+                        detection_device = "cuda"
                     elif torch.backends.mps.is_available():
-                        detection_device = "mps (expected)"
+                        # YOLOv8 on MPS on macOS is unstable, so force CPU (same logic as _load_model)
+                        if platform.system() == "Darwin" and detection_backend == "yolov8":
+                            detection_device = "cpu"
+                        else:
+                            detection_device = "mps"
                     else:
-                        detection_device = "cpu (expected)"
+                        detection_device = "cpu"
                 except ImportError:
-                    detection_device = "cpu (expected)"
+                    detection_device = "cpu"
             
             if loaded_model:
                 detection_model = loaded_model

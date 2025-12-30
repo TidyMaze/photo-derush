@@ -651,10 +651,9 @@ class PhotoView(QMainWindow):
         self.labeled_images_label = QLabel("✅ Labeled: 0")
         self.unlabeled_images_label = QLabel("⚪ Unlabeled: 0")
         self.selected_count_label = QLabel("🎯 Selected: 0")
-        # Detection backend/device/model display
-        self.det_backend_label = QLabel("Detector: unknown")
+        # Detection model/device display (combined backend+model into single field)
+        self.det_model_label = QLabel("Detector: unknown")
         self.det_device_label = QLabel("Device: unknown")
-        self.det_model_label = QLabel("Model: unknown")
         # Classification model display
         self.class_model_label = QLabel("Classification: unknown")
         # Embedding model display
@@ -717,7 +716,7 @@ class PhotoView(QMainWindow):
                 font-weight: 500;
             }
         """
-        for label in [self.det_backend_label, self.det_device_label, self.det_model_label, self.class_model_label, self.embed_model_label, self.feature_backend_label, self.worker_queue_label, self.worker_state_label]:
+        for label in [self.det_model_label, self.det_device_label, self.class_model_label, self.embed_model_label, self.feature_backend_label, self.worker_queue_label, self.worker_state_label]:
             label.setStyleSheet(info_style)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -750,9 +749,8 @@ class PhotoView(QMainWindow):
         # Row 2: Object Detection info
         detection_row = QHBoxLayout()
         detection_row.setSpacing(8)
-        detection_row.addWidget(self.det_backend_label)
-        detection_row.addWidget(self.det_device_label)
         detection_row.addWidget(self.det_model_label)
+        detection_row.addWidget(self.det_device_label)
         
         # Row 3: Classification, Embeddings, Features
         ml_row = QHBoxLayout()
@@ -829,16 +827,13 @@ class PhotoView(QMainWindow):
 
             # Show all computation models/devices from viewmodel snapshot if available
             try:
-                # Detection info
-                backend = getattr(self._state, "detection_backend", None) if self._state else None
+                # Detection info (combined backend+model into single field)
                 device = getattr(self._state, "detection_device", None) if self._state else None
                 model = getattr(self._state, "detection_model", None) if self._state else None
-                if backend:
-                    self.det_backend_label.setText(f"Detector: {backend}")
                 if device:
                     self.det_device_label.setText(f"Device: {device}")
-                if model:
-                    self.det_model_label.setText(f"Model: {model}")
+                if model and model != "unknown":
+                    self.det_model_label.setText(f"Detector: {model}")
 
                 # Classification info
                 class_type = getattr(self._state, "classification_model_type", None) if self._state else None
@@ -859,13 +854,13 @@ class PhotoView(QMainWindow):
                 if feature_backend != "unknown":
                     self.feature_backend_label.setText(f"Features: {feature_backend}")
 
-                # If state didn't include backend/device/model (model not loaded yet), try fallback to object_detection module
-                if not backend or not device or not model or device == "unknown" or model == "unknown":
+                # If state didn't include device/model (model not loaded yet), try fallback to object_detection module
+                if not device or not model or device == "unknown" or model == "unknown":
                     try:
                         from . import object_detection
                         from .constants import YOLO_MODEL_NAME
+                        import platform
 
-                        ob_backend = getattr(object_detection, "DETECTION_BACKEND", None)
                         try:
                             ob_device = object_detection.get_loaded_device()
                             ob_model = object_detection.get_loaded_model_name()
@@ -873,30 +868,32 @@ class PhotoView(QMainWindow):
                             ob_device = None
                             ob_model = None
                         
-                        if ob_backend:
-                            self.det_backend_label.setText(f"Detector: {ob_backend}")
-                        
-                        # Show device - use loaded if available, otherwise show expected
+                        # Show device - use loaded if available, otherwise determine expected using same logic as _load_model
                         if ob_device is not None:
                             self.det_device_label.setText(f"Device: {str(ob_device)}")
                         elif device == "unknown":
-                            # Show expected device
+                            # Use same device detection logic as object_detection._load_model()
                             try:
                                 import torch
+                                backend = getattr(object_detection, "DETECTION_BACKEND", "yolov8")
                                 if torch.cuda.is_available():
-                                    self.det_device_label.setText("Device: cuda (expected)")
+                                    self.det_device_label.setText("Device: cuda")
                                 elif torch.backends.mps.is_available():
-                                    self.det_device_label.setText("Device: mps (expected)")
+                                    # YOLOv8 on MPS on macOS is unstable, so force CPU (same logic as _load_model)
+                                    if platform.system() == "Darwin" and backend == "yolov8":
+                                        self.det_device_label.setText("Device: cpu")
+                                    else:
+                                        self.det_device_label.setText("Device: mps")
                                 else:
-                                    self.det_device_label.setText("Device: cpu (expected)")
+                                    self.det_device_label.setText("Device: cpu")
                             except ImportError:
-                                self.det_device_label.setText("Device: cpu (expected)")
+                                self.det_device_label.setText("Device: cpu")
                         
                         # Show model - use loaded if available, otherwise show expected
                         if ob_model:
-                            self.det_model_label.setText(f"Model: {ob_model}")
+                            self.det_model_label.setText(f"Detector: {ob_model}")
                         elif model == "unknown":
-                            self.det_model_label.setText(f"Model: {YOLO_MODEL_NAME}")
+                            self.det_model_label.setText(f"Detector: {YOLO_MODEL_NAME}")
                     except Exception:
                         logging.exception("Failed to import object_detection for fallback detector/device")
                         pass
