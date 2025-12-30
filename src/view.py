@@ -1918,11 +1918,7 @@ class PhotoView(QMainWindow):
             detected_objects = getattr(state, "detected_objects", {}) if state else {}
             group_info_dict = getattr(state, "group_info", {}) if state else {}
             
-            # Debug: log state data
-            if detected_objects:
-                logging.info(f"[badge-refresh] State has {len(detected_objects)} files with detected_objects")
-            if group_info_dict:
-                logging.info(f"[badge-refresh] State has {len(group_info_dict)} files with group_info")
+            # State data is available (logged at debug level if needed)
             
             # OPTIMIZATION: Batch visibility changes to avoid expensive show() calls (2.6s -> target <1s)
             # Track which widgets need to be shown/hidden, apply at end in one batch
@@ -2155,7 +2151,7 @@ class PhotoView(QMainWindow):
                                 widgets_to_hide.discard(bbox_overlay)
                                 bbox_overlay.raise_()
                                 bboxes_updated += 1
-                                logging.debug(f"[BBOX-WIDGET] Updated overlay for {fname}: {len(objects)} objects with bboxes, label={label_w}x{label_h}, widget visible={bbox_overlay.isVisible()}")
+                                logging.debug(f"[BBOX-WIDGET] Updated overlay for {fname}: {len(objects)} objects with bboxes")
                             except Exception as e:
                                 logging.exception(f"[BBOX-WIDGET] Failed to update overlay for {fname}: {e}")
                         elif bbox_overlay:
@@ -2247,13 +2243,13 @@ class PhotoView(QMainWindow):
                 # Always show widget (don't check isVisible() - force show)
                 widget.show()
                 widget.raise_()  # Ensure widget is on top after showing
-                widget.update()  # Force immediate repaint
-                # Also ensure parent is updated and raised
+                # Also ensure parent is updated and raised BEFORE widget update
                 parent.update()
                 parent.raise_()  # Ensure parent is on top
-                # Verify widget is actually visible after show()
-                if not widget.isVisible():
-                    logging.error(f"[badge-refresh] Widget {type(widget).__name__} still not visible after show()! parent visible={parent.isVisible()}, widget geometry={widget.geometry()}")
+                # Force widget repaint AFTER parent is updated
+                widget.update()  # Schedule async repaint
+                widget.repaint()  # Force synchronous repaint (blocks until painted)
+                # Widget should now be visible and painted
             
             t1 = time.perf_counter()
             if repaint_count > 0 or widgets_to_show or widgets_to_hide:

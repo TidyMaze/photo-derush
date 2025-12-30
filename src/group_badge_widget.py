@@ -56,6 +56,9 @@ class GroupBadgeWidget(QWidget):
         has_best_badge = self.is_best and self.group_size >= 2
         has_size_badge = self.group_size > 1
         
+        if not self.isVisible():
+            return
+        
         if not (has_group_id or has_best_badge or has_size_badge):
             return  # Nothing to show
 

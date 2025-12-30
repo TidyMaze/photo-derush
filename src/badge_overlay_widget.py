@@ -81,7 +81,6 @@ class BadgeOverlayWidget(QWidget):
     
     def paintEvent(self, event):
         """Draw badge at display resolution."""
-        # Always paint if widget is visible and has valid geometry
         if not self.isVisible():
             return
         if not self.label_text and self.probability is None:

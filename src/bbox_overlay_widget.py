@@ -54,11 +54,13 @@ class BoundingBoxOverlayWidget(QWidget):
         from PySide6.QtGui import QPainter
         import logging
         
+        if not self.isVisible():
+            return
+        
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         if not self.detections or not self.original_image_size:
-            logging.debug(f"[BBOX-WIDGET] paintEvent: no detections or size - detections={len(self.detections) if self.detections else 0}, size={self.original_image_size}")
             return
         
         # Get displayed image size (overlay widget matches image size)
@@ -79,6 +81,5 @@ class BoundingBoxOverlayWidget(QWidget):
         
         # Use reusable paint_bboxes function
         # offset_x=0, offset_y=0 because overlay widget is positioned to match image exactly
-        logging.debug(f"[BBOX-WIDGET] paintEvent: drawing {len(self.detections)} bboxes on {img_w}x{img_h} widget")
         paint_bboxes(painter, self.detections, 0, 0, img_w, img_h, thumb_label=None)
 
