@@ -63,13 +63,12 @@ def extract_timestamp(exif: dict, path: str) -> datetime:
     if not dt_original:
         try:
             from PIL import Image
-            from PIL.ExifTags import EXIFIFD
             with Image.open(path) as img:
                 exif_obj = img.getexif()
                 if exif_obj:
-                    # Try to get EXIF sub-IFD
+                    # Try to get EXIF sub-IFD (0x8769 is EXIFIFD constant)
                     try:
-                        exif_ifd = exif_obj.get_ifd(EXIFIFD)
+                        exif_ifd = exif_obj.get_ifd(0x8769)
                         dt_original = exif_ifd.get(36867)  # DateTimeOriginal
                     except Exception:
                         pass
@@ -87,27 +86,7 @@ def extract_timestamp(exif: dict, path: str) -> datetime:
         except Exception:
             pass
 
-    # Try parsing from filename (e.g., PXL_20250712_183730247.jpg)
-    filename = os.path.basename(path)
-    try:
-        # Pattern: PXL_YYYYMMDD_HHMMSSSSS.*
-        if filename.startswith("PXL_"):
-            parts = filename.split("_")
-            if len(parts) >= 2:
-                date_str = parts[1]  # YYYYMMDD
-                time_str = parts[2].split(".")[0]  # HHMMSSSSS (remove extension)
-                if len(date_str) == 8 and len(time_str) >= 6:
-                    year = int(date_str[:4])
-                    month = int(date_str[4:6])
-                    day = int(date_str[6:8])
-                    hour = int(time_str[:2])
-                    minute = int(time_str[2:4])
-                    second = int(time_str[4:6])
-                    return datetime(year, month, day, hour, minute, second)
-    except Exception:
-        pass
-
-    # Fallback to file modification time
+    # Fallback to file modification time (do NOT parse from filename)
     try:
         mtime = os.path.getmtime(path)
         return datetime.fromtimestamp(mtime)
