@@ -1351,7 +1351,8 @@ class PhotoView(QMainWindow):
             # This ensures images are displayed even if filters haven't been applied yet
             # CRITICAL: Deduplicate - same label might be stored under multiple filenames (bug)
             label_to_first_filename = {}  # Track which filename each label was first seen under
-            logging.info(f"[GRID] Collecting items from _all_widgets (has {len(self._all_widgets)} entries)")
+            # Removed frequent logging.info - called on every relayout (performance optimization)
+            # logging.info(f"[GRID] Collecting items from _all_widgets (has {len(self._all_widgets)} entries)")
             for filename, label in self._all_widgets.items():
                 if label in seen_labels:
                     first_filename = label_to_first_filename.get(label, "unknown")
@@ -1360,7 +1361,8 @@ class PhotoView(QMainWindow):
                 seen_labels.add(label)
                 label_to_first_filename[label] = filename
                 items.append(label)
-            logging.info(f"[GRID] Collected {len(items)} unique items (deduplicated from {len(self._all_widgets)} entries)")
+            # Removed frequent logging.info - called on every relayout (performance optimization)
+            # logging.info(f"[GRID] Collected {len(items)} unique items (deduplicated from {len(self._all_widgets)} entries)")
 
         # Disable updates during relayout for better performance
         self.grid_widget.setUpdatesEnabled(False)
@@ -1399,8 +1401,9 @@ class PhotoView(QMainWindow):
                     label.show()
                 self.label_refs[(new_row, new_col)] = label
 
-                label_filename = getattr(label, "_thumb_filename", "unknown")
-                logging.debug(f"[GRID] Positioned label {label_filename} at ({new_row}, {new_col}), label_id={id(label)}")
+                # Removed frequent logging.debug - called for every label positioning (performance optimization)
+                # label_filename = getattr(label, "_thumb_filename", "unknown")
+                # logging.debug(f"[GRID] Positioned label {label_filename} at ({new_row}, {new_col}), label_id={id(label)}")
                 # If label doesn't have a pixmap, request thumbnail
                 # Simple check: if label has no pixmap set via setPixmap, request thumbnail
                 filename = getattr(label, "_thumb_filename", None)
@@ -1431,12 +1434,12 @@ class PhotoView(QMainWindow):
                     # Don't add to label_refs (it's not in the grid)
                     # But widget is preserved in memory via _all_widgets reference
 
-            # Log final grid state for debugging
-            grid_summary = []
-            for (r, c), lbl in sorted(self.label_refs.items()):
-                fn = getattr(lbl, "_thumb_filename", "unknown")
-                grid_summary.append(f"({r},{c})={fn}")
-            logging.info(f"[GRID] Final grid state: {len(self.label_refs)} positions, {len(set(self.label_refs.values()))} unique labels. Positions: {', '.join(grid_summary[:9])}")
+            # Removed frequent logging.info - called on every relayout (performance optimization)
+            # grid_summary = []
+            # for (r, c), lbl in sorted(self.label_refs.items()):
+            #     fn = getattr(lbl, "_thumb_filename", "unknown")
+            #     grid_summary.append(f"({r},{c})={fn}")
+            # logging.info(f"[GRID] Final grid state: {len(self.label_refs)} positions, {len(set(self.label_refs.values()))} unique labels. Positions: {', '.join(grid_summary[:9])}")
         finally:
             self.grid_widget.setUpdatesEnabled(True)
 
@@ -1541,7 +1544,8 @@ class PhotoView(QMainWindow):
                 return  # Don't add duplicate label
 
         self._all_widgets[filename] = label  # Track all widgets by filename
-        logging.info(f"[GRID] Added image {filename} at position ({row}, {col}), label_id={id(label)}")
+        # Removed frequent logging.info - called for every image (performance optimization)
+        # logging.info(f"[GRID] Added image {filename} at position ({row}, {col}), label_id={id(label)}")
 
         if idx == 0:
             self.scroll_area.verticalScrollBar().setValue(0)
@@ -1983,10 +1987,11 @@ class PhotoView(QMainWindow):
             # Process group badges for all labels if group_info is present
             if process_all_for_groups:
                 all_labels = list(self.label_refs.items())
-                logging.info(f"[badge-refresh] Processing ALL {len(all_labels)} labels for group badges (group_info present)")
+                # Removed frequent logging.info - called on every badge refresh (performance optimization)
+                # logging.info(f"[badge-refresh] Processing ALL {len(all_labels)} labels for group badges (group_info present)")
             else:
                 all_labels = visible_labels
-                logging.info(f"[badge-refresh] Processing {len(visible_labels)} visible labels out of {len(self.label_refs)} total")
+                # logging.info(f"[badge-refresh] Processing {len(visible_labels)} visible labels out of {len(self.label_refs)} total")
             
             # Initialize counters for debugging
             badges_updated = 0
@@ -2276,8 +2281,9 @@ class PhotoView(QMainWindow):
                 # Widget should now be visible and painted
             
             t1 = time.perf_counter()
-            if repaint_count > 0 or widgets_to_show or widgets_to_hide:
-                logging.info(f"[badge-refresh] Repainted {repaint_count}/{len(self.label_refs)} thumbnails, showing {len(widgets_to_show)} widgets (badges: {badges_updated}, bboxes: {bboxes_updated}, groups: {groups_updated}), hiding {len(widgets_to_hide)} widgets")
+            # Removed frequent logging.info - called on every badge refresh (performance optimization)
+            # if repaint_count > 0 or widgets_to_show or widgets_to_hide:
+            #     logging.info(f"[badge-refresh] Repainted {repaint_count}/{len(self.label_refs)} thumbnails, showing {len(widgets_to_show)} widgets (badges: {badges_updated}, bboxes: {bboxes_updated}, groups: {groups_updated}), hiding {len(widgets_to_hide)} widgets")
         except Exception:
             logging.exception("Failed in _refresh_thumbnail_badges")
             raise  # Fail fast - badge refresh errors should be visible
@@ -2323,16 +2329,9 @@ class PhotoView(QMainWindow):
                     detected_objects = getattr(state, "detected_objects", {}) if state else {}
                     objects = detected_objects.get(fname, [])
 
-                    logging.info(
-                        f"[OVERLAY-TEST] _set_label_pixmap: fname={fname}, ctx={ctx}, has_state={state is not None}, objects_count={len(objects)}"
-                    )
-
                     # Filter objects before painting: min confidence + top N by confidence/area
                     if objects:
                         filtered_objects = self._filter_objects_for_display(objects, min_confidence=0.6, max_objects=3)
-                        logging.info(
-                            f"[OVERLAY-TEST] Filtered {len(objects)} -> {len(filtered_objects)} objects for {fname}"
-                        )
                         if filtered_objects:
                             # CRITICAL: Ensure det_w/det_h are set for proper bbox scaling
                             # If missing (from old cache), infer from image file
@@ -2365,7 +2364,8 @@ class PhotoView(QMainWindow):
                             # Only show if objects have bbox data
                             has_bboxes = any(obj.get("bbox") is not None for obj in filtered_objects)
                             bbox_overlay = getattr(label, "_bbox_overlay", None)
-                            logging.info(f"[BBOX-WIDGET] {fname}: overlay={bbox_overlay is not None}, filtered_objects={len(filtered_objects)}, has_bboxes={has_bboxes}")
+                            # Removed frequent logging.info - called for every thumbnail with objects (performance optimization)
+                            # logging.info(f"[BBOX-WIDGET] {fname}: overlay={bbox_overlay is not None}, filtered_objects={len(filtered_objects)}, has_bboxes={has_bboxes}")
                             if bbox_overlay and has_bboxes:
                                 # Get full path from model using filename - fail fast if not found
                                 if not fname:
@@ -2387,21 +2387,25 @@ class PhotoView(QMainWindow):
                                     # OPTIMIZATION: Batch visibility change (don't call show() directly)
                                     # Visibility will be handled by badge refresh batching
                                     bbox_overlay.raise_()
-                                    logging.info(f"[BBOX-WIDGET] Updated overlay for {fname}: {len(filtered_objects)} objects with bboxes, label={label_w}x{label_h}, widget visible={bbox_overlay.isVisible()}")
+                                    # Removed frequent logging.info - called for every thumbnail update (performance optimization)
+                                    # logging.info(f"[BBOX-WIDGET] Updated overlay for {fname}: {len(filtered_objects)} objects with bboxes, label={label_w}x{label_h}, widget visible={bbox_overlay.isVisible()}")
                                 except Exception as e:
                                     logging.exception(f"[BBOX-WIDGET] Failed to update overlay for {fname}: {e}")
                             elif bbox_overlay:
                                 # Hide if no bboxes
                                 bbox_overlay.hide()
-                                if filtered_objects:
-                                    logging.info(f"[BBOX-WIDGET] Hiding overlay for {fname}: {len(filtered_objects)} objects but no bbox data")
+                                # Removed frequent logging.info - called for every thumbnail without bbox data (performance optimization)
+                                # if filtered_objects:
+                                #     logging.info(f"[BBOX-WIDGET] Hiding overlay for {fname}: {len(filtered_objects)} objects but no bbox data")
 
                             # Offsets and thumb dimensions are already at retina resolution (from pixmap sampling)
                             # Do NOT scale again - they're already correct for the retina pixmap
                             # Note: bboxes now drawn via widget overlay, but keep pixmap painting as fallback
                             # pixmap = self._paint_bboxes(pixmap, filtered_objects, offset_x, offset_y, thumb_w, thumb_h)
                     else:
-                        logging.debug(f"[OVERLAY-TEST] No objects to paint for {fname}")
+                        # Removed frequent logging.debug - called for every thumbnail without objects (performance optimization)
+                        # logging.debug(f"[OVERLAY-TEST] No objects to paint for {fname}")
+                        pass
 
                     # Update badge overlay widget if this label has a state OR if we have a prediction for unlabeled images
                     # Verify filename matches - fail fast on mismatch
@@ -2486,12 +2490,8 @@ class PhotoView(QMainWindow):
                             # Store filename as a property (won't affect rendering)
                             final_pixmap._assigned_filename = fname  # type: ignore[attr-defined]
                         label.setPixmap(final_pixmap)
-                        # Verify the pixmap was set correctly
-                        verify_pixmap = label.pixmap()
-                        if verify_pixmap and not verify_pixmap.isNull():
-                            assigned_fname = getattr(verify_pixmap, "_assigned_filename", None)
-                            if assigned_fname != fname:
-                                logging.error(f"[THUMBNAIL] Pixmap filename mismatch after setPixmap: expected {fname}, got {assigned_fname}")
+                        # Removed pixmap filename verification - false positives when pixmap created before filename set
+                        # This check was causing frequent ERROR logs without actual issues
             except Exception as e:
                 logging.error(f"[THUMBNAIL] Failed to create final pixmap copy: {e}, using original")
                 label.setPixmap(pixmap)  # Fallback to original on error
