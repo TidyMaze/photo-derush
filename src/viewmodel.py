@@ -469,42 +469,94 @@ class PhotoViewModel(QObject):
 
                 filtered.append(fname)
         
-        # ALWAYS sort by uncertainty (descending: highest uncertainty first)
-        # This ensures images are always displayed with most uncertain (need review) first
-        # Images with predictions near 0.5 are most uncertain and should be reviewed first
+        # Sort by group: images in same group together, groups sorted by date ASC
+        # Within each group, sort by pick_score DESC (best picks first)
         
-        # Take a snapshot of probabilities to ensure consistency during sorting
-        probs = dict(getattr(self._auto, "predicted_probabilities", {}))
+        from datetime import datetime
+        import os
         
-        # PERFORMANCE: Pre-compute all uncertainty scores once to avoid repeated calculations
-        # This reduces 790k+ calls to uncertainty_score down to one per image
-        import math
-        log2 = math.log(2)  # Cache log(2) to avoid repeated calculation
-        uncertainty_cache = {}
-        for fname in filtered:
-            prob = probs.get(fname)
-            if prob is None:
-                uncertainty = 1.0  # No prediction = highest uncertainty = appear first
-            else:
-                # Clamp probability to avoid log(0)
-                prob_clamped = max(0.0001, min(0.9999, prob))
-                # Entropy: -p*log(p) - (1-p)*log(1-p)
-                # Normalized to [0, 1] by dividing by log(2) (max entropy for binary)
-                entropy = -(prob_clamped * math.log(prob_clamped) + (1 - prob_clamped) * math.log(1 - prob_clamped)) / log2
-                uncertainty = entropy
-            uncertainty_cache[fname] = uncertainty
+        # Helper to extract timestamp from image
+        def get_image_timestamp(fname: str) -> datetime:
+            path = self._image_path_cache.get(fname) if hasattr(self, "_image_path_cache") else self.model.get_image_path(fname)
+            if path:
+                try:
+                    exif = self.model.load_exif(path)
+                    dt_original = exif.get("DateTimeOriginal")
+                    if dt_original and isinstance(dt_original, str):
+                        try:
+                            return datetime.strptime(dt_original, "%Y:%m:%d %H:%M:%S")
+                        except Exception:
+                            return datetime.fromtimestamp(os.path.getmtime(path))
+                    else:
+                        return datetime.fromtimestamp(os.path.getmtime(path))
+                except Exception:
+                    return datetime.now()
+            return datetime.now()
         
-        def uncertainty_score(fname: str) -> tuple[float, str]:
-            """Return uncertainty score tuple: (uncertainty, filename) for stable sorting.
+        # Get group info (may be empty if grouping not computed yet)
+        group_info = getattr(self, "_group_info", {})
+        
+        # If no group info available, fall back to uncertainty sorting
+        if not group_info:
+            # Fallback: sort by uncertainty (original behavior)
+            probs = dict(getattr(self._auto, "predicted_probabilities", {}))
+            import math
+            log2 = math.log(2)
+            uncertainty_cache = {}
+            for fname in filtered:
+                prob = probs.get(fname)
+                if prob is None:
+                    uncertainty = 1.0
+                else:
+                    prob_clamped = max(0.0001, min(0.9999, prob))
+                    entropy = -(prob_clamped * math.log(prob_clamped) + (1 - prob_clamped) * math.log(1 - prob_clamped)) / log2
+                    uncertainty = entropy
+                uncertainty_cache[fname] = uncertainty
             
-            Uses pre-computed uncertainty cache to avoid repeated calculations.
-            """
-            uncertainty = uncertainty_cache.get(fname, 1.0)  # Default to 1.0 if not in cache
-            return (uncertainty, fname)  # Use filename as secondary key for stable sort
-        
-        # ALWAYS sort by uncertainty DESC (highest uncertainty first)
-        # Use tuple key to ensure stable sort when uncertainties are equal
-        filtered.sort(key=uncertainty_score, reverse=True)  # DESC: highest uncertainty first
+            def uncertainty_score(fname: str) -> tuple[float, str]:
+                uncertainty = uncertainty_cache.get(fname, 1.0)
+                return (uncertainty, fname)
+            
+            filtered.sort(key=uncertainty_score, reverse=True)
+        else:
+            # Compute earliest date per group (for sorting groups)
+            group_earliest_date: dict[int | None, datetime] = {}
+            
+            # Get timestamps and track earliest date per group
+            for fname in filtered:
+                ts = get_image_timestamp(fname)
+                ginfo = group_info.get(fname, {})
+                group_id = ginfo.get("group_id")
+                if group_id not in group_earliest_date or ts < group_earliest_date[group_id]:
+                    group_earliest_date[group_id] = ts
+            
+            # Sort key: (group_earliest_date, -pick_score, filename)
+            # Groups sorted by earliest date ASC, within group by pick_score DESC
+            def group_sort_key(fname: str) -> tuple[datetime, float, str]:
+                ginfo = group_info.get(fname, {})
+                group_id = ginfo.get("group_id")
+                pick_score = ginfo.get("pick_score", 0.0)
+                # Use earliest date of the group, or image's own date if group_id is None
+                if group_id is not None and group_id in group_earliest_date:
+                    group_date = group_earliest_date[group_id]
+                else:
+                    # Fallback: use image's own date
+                    group_date = get_image_timestamp(fname)
+                # Use negative pick_score for descending sort within group
+                return (group_date, -pick_score, fname)
+            
+            # Sort by group (date ASC) and pick_score (DESC within group)
+            filtered.sort(key=group_sort_key)
+            
+            # Debug: log first few items to verify sorting
+            if len(filtered) > 0:
+                logging.debug(f"[sorting] First 5 items after group sort:")
+                for i, fname in enumerate(filtered[:5]):
+                    ginfo = group_info.get(fname, {})
+                    gid = ginfo.get("group_id")
+                    ps = ginfo.get("pick_score", 0.0)
+                    gdate = group_earliest_date.get(gid, datetime.now())
+                    logging.debug(f"[sorting]   {i+1}. {fname[:40]:40s} group={gid} date={gdate} score={ps:.4f}")
         
         # Check if selected image is filtered out, and mark for selection update
         selected_was_filtered = False
@@ -1257,6 +1309,8 @@ class PhotoViewModel(QObject):
         """Handle grouping completion - emit state snapshot from main thread."""
         logging.info(f"[grouping] Signal received, emitting state snapshot (group_info has {len(self._group_info)} entries)")
         try:
+            # Re-apply filters to re-sort with new group info
+            self._apply_filters()
             self._emit_state_snapshot()
         except Exception as e:
             logging.exception(f"[grouping] Failed to emit state snapshot: {e}")

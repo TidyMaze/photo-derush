@@ -89,3 +89,7 @@ logs/
 .cache
 .cursor
 .cursor/debug.log
+
+# Cache files
+*.pkl
+feature_cache.pkl
