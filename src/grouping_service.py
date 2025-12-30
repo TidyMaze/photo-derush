@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import defaultdict
 from datetime import datetime
 
 try:
@@ -225,8 +226,60 @@ def compute_grouping_for_photos(
         )
         group_count = len(set(groups))
         logging.info(f"[grouping_service] Step 6: Created {group_count} groups from near-duplicate detection")
+        
+        # Post-process: Merge groups that share the same burst_id OR session_id
+        # This ensures images from the same burst/session are grouped together even if visually different
+        burst_to_groups: dict[int, set[int]] = defaultdict(set)
+        session_to_groups: dict[int, set[int]] = defaultdict(set)
+        for idx, (burst_id, session_id, group_id) in enumerate(zip(bursts, sessions, groups)):
+            burst_to_groups[burst_id].add(group_id)
+            session_to_groups[session_id].add(group_id)
+        
+        # Create mapping: merge groups within same burst OR same session
+        group_to_merged: dict[int, int] = {}
+        
+        # First, merge groups within same burst
+        for burst_id, group_ids in burst_to_groups.items():
+            if len(group_ids) > 1:
+                min_group_id = min(group_ids)
+                for gid in group_ids:
+                    # Only set if not already merged (burst takes priority)
+                    if gid not in group_to_merged:
+                        group_to_merged[gid] = min_group_id
+        
+        # Then, merge groups within same session (if not already merged by burst)
+        for session_id, group_ids in session_to_groups.items():
+            if len(group_ids) > 1:
+                # Filter out already-merged groups, find min of remaining
+                unmerged = [gid for gid in group_ids if gid not in group_to_merged]
+                if len(unmerged) > 1:
+                    min_group_id = min(unmerged)
+                    for gid in unmerged:
+                        group_to_merged[gid] = min_group_id
+        
+        # Apply merging (need to handle transitive merges)
+        # If group A merges to B, and B merges to C, we need A -> C
+        # Build transitive closure
+        merged_final: dict[int, int] = {}
+        for gid in group_to_merged:
+            target = group_to_merged[gid]
+            # Follow chain until we find the final target
+            while target in group_to_merged and target != group_to_merged[target]:
+                target = group_to_merged[target]
+            merged_final[gid] = target
+        
+        merged_count = 0
+        for idx, group_id in enumerate(groups):
+            if group_id in merged_final:
+                groups[idx] = merged_final[group_id]
+                merged_count += 1
+        
+        if merged_count > 0:
+            final_group_count = len(set(groups))
+            logging.info(f"[grouping_service] Merged {merged_count} images from same bursts: {group_count} → {final_group_count} groups")
+        
         if progress_reporter:
-            progress_reporter.detail(f"Created {group_count} groups")
+            progress_reporter.detail(f"Created {len(set(groups))} groups")
         # Save cache after grouping completes
         hash_cache.save()
         if cache_hits > 0 or cache_misses > 0:
