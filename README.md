@@ -73,11 +73,7 @@ Photos are automatically organized into groups using:
 - **Visual Similarity**: Perceptual hashing groups near-duplicates (hash distance ≤ 8)
 - **Burst Merging**: Groups from same burst merge if visually similar (distance ≤ 20)
 
-**Best Pick Selection**: Each group gets a recommended "best" photo based on:
-- Keep probability score
-- Sharpness and exposure quality
-- Face detection quality
-- Noise and motion blur levels
+**Best Pick Selection**: Each group gets a recommended "best" photo based on the model's keep/trash score (highest keep probability wins).
 
 **Visual Indicators**:
 - `⭐ BEST` badge on recommended photos (groups with 2+ images)

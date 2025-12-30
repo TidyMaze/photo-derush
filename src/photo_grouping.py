@@ -244,50 +244,23 @@ def compute_pick_score(
     motion_blur: float | None = None,
     weights: dict[str, float] | None = None,
 ) -> float:
-    """Compute heuristic pick_score for best-pick recommendation.
+    """Compute pick_score for best-pick recommendation.
+
+    Uses the keep/trash score directly (no heuristic).
 
     Args:
         global_keep_score: Model's keep probability (0-1)
-        sharpness: Sharpness metric (higher = better, normalized 0-1)
-        exposure_quality: Exposure quality (0-1, higher = better)
-        noise_level: Noise level (0-1, lower = better, will be inverted)
-        face_quality: Face detection quality (0-1, higher = better, optional)
-        motion_blur: Motion blur estimate (0-1, lower = better, will be inverted)
-        weights: Optional custom weights dict
+        sharpness: Unused (kept for API compatibility)
+        exposure_quality: Unused (kept for API compatibility)
+        noise_level: Unused (kept for API compatibility)
+        face_quality: Unused (kept for API compatibility)
+        motion_blur: Unused (kept for API compatibility)
+        weights: Unused (kept for API compatibility)
 
     Returns:
-        Pick score (higher = better candidate for best pick)
+        Pick score (same as global_keep_score, higher = better candidate for best pick)
     """
-    default_weights = {
-        "global_keep": 0.4,
-        "sharpness": 0.25,
-        "exposure": 0.15,
-        "noise": 0.1,
-        "face": 0.05,
-        "motion_blur": 0.05,
-    }
-    w = weights or default_weights
-
-    score = w["global_keep"] * global_keep_score
-
-    if sharpness is not None:
-        score += w["sharpness"] * sharpness
-
-    if exposure_quality is not None:
-        score += w["exposure"] * exposure_quality
-
-    if noise_level is not None:
-        # Invert noise (lower noise = higher score)
-        score += w["noise"] * (1.0 - min(1.0, noise_level))
-
-    if face_quality is not None:
-        score += w["face"] * face_quality
-
-    if motion_blur is not None:
-        # Invert motion blur (lower blur = higher score)
-        score += w["motion_blur"] * (1.0 - min(1.0, motion_blur))
-
-    return float(score)
+    return float(global_keep_score)
 
 
 def recommend_best_pick(
