@@ -4,11 +4,14 @@
 import os
 import sys
 from pathlib import Path
+from collections import defaultdict
 
 import imagehash
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+from scipy.cluster.hierarchy import dendrogram, linkage, leaves_list
+from scipy.spatial.distance import squareform
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -120,9 +123,44 @@ def compute_hash_matrix(image_dir: str, output_path: str = "hash_correlation_mat
     ax.set_yticks(np.arange(-0.5, n, 1), minor=True)
     ax.grid(which='minor', color='gray', linestyle='-', linewidth=0.1, alpha=0.3)
     
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    print(f"Saved correlation matrix to {output_path}")
+    # For large datasets, create alternative visualizations
+    if n > 200:
+        print(f"\nLarge dataset ({n} images), creating alternative visualizations...")
+        
+        # 1. Sampled correlation matrix (every Nth image)
+        sample_step = max(1, n // 200)  # Sample to ~200 images max
+        sampled_indices = list(range(0, n, sample_step))
+        sampled_matrix = distance_matrix[np.ix_(sampled_indices, sampled_indices)]
+        sampled_filenames = [filenames_list[i] for i in sampled_indices]
+        
+        print(f"Creating sampled matrix ({len(sampled_indices)} images)...")
+        _plot_correlation_matrix(sampled_matrix, sampled_filenames, 
+                                 output_path.replace('.png', '_sampled.png'),
+                                 f'Sampled Correlation Matrix ({len(sampled_indices)}/{n} images)')
+        
+        # 2. Clustered heatmap
+        print("Creating clustered heatmap...")
+        _plot_clustered_heatmap(distance_matrix, filenames_list, 
+                                output_path.replace('.png', '_clustered.png'))
+        
+        # 3. Network graph of similar pairs
+        print("Creating similarity network graph...")
+        _plot_similarity_network(distance_matrix, filenames_list,
+                                output_path.replace('.png', '_network.png'))
+        
+        # 4. Distance distribution histogram
+        print("Plotting distance histogram...")
+        hist_output = output_path.replace('.png', '_histogram.png')
+        _plot_distance_histogram(distance_matrix, hist_output)
+    else:
+        # For smaller datasets, show full matrix
+        print("Plotting full correlation matrix...")
+        _plot_correlation_matrix(distance_matrix, filenames_list, output_path,
+                                 f'Perceptual Hash Distance Matrix ({n} images)')
+        
+        # Always create histogram
+        hist_output = output_path.replace('.png', '_histogram.png')
+        _plot_distance_histogram(distance_matrix, hist_output)
     
     # Print statistics
     print("\nDistance Statistics:")
@@ -134,21 +172,179 @@ def compute_hash_matrix(image_dir: str, output_path: str = "hash_correlation_mat
     
     # Count pairs within different thresholds
     print("\nPairs within thresholds:")
+    upper_triangle = distance_matrix[np.triu_indices(n, k=1)]
+    total_pairs = len(upper_triangle)
     for threshold in [5, 8, 10, 15, 20, 30]:
-        count = np.sum(distance_matrix <= threshold) - n  # Subtract diagonal (self-distances)
-        count = count // 2  # Divide by 2 since matrix is symmetric
-        print(f"  Distance <= {threshold}: {count} pairs ({count / (n * (n-1) / 2) * 100:.2f}%)")
+        count = np.sum(upper_triangle <= threshold)
+        print(f"  Distance <= {threshold}: {count:,} pairs ({count / total_pairs * 100:.2f}%)")
     
-    # Plot histogram of pair distances
-    print("\nPlotting distance histogram...")
-    hist_output = output_path.replace('.png', '_histogram.png')
+    return distance_matrix, filenames_list
+
+
+def _plot_correlation_matrix(distance_matrix, filenames_list, output_path, title):
+    """Plot correlation matrix heatmap."""
+    n = len(filenames_list)
+    fig, ax = plt.subplots(figsize=(min(20, n/10), min(20, n/10)))
     
-    # Extract upper triangle (excluding diagonal) to avoid double counting
+    im = ax.imshow(distance_matrix, cmap='viridis_r', aspect='auto', interpolation='nearest')
+    
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label('Hash Distance (Hamming)', rotation=270, labelpad=20)
+    
+    # Set labels (sample every Nth filename)
+    step = max(1, n // 50)
+    tick_positions = list(range(0, n, step))
+    tick_labels = [os.path.basename(filenames_list[i])[:15] + '...' 
+                   if len(os.path.basename(filenames_list[i])) > 15 
+                   else os.path.basename(filenames_list[i]) 
+                   for i in tick_positions]
+    
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels(tick_labels, rotation=90, fontsize=6)
+    ax.set_yticks(tick_positions)
+    ax.set_yticklabels(tick_labels, fontsize=6)
+    
+    ax.set_xlabel('Image Index', fontsize=10)
+    ax.set_ylabel('Image Index', fontsize=10)
+    ax.set_title(f'{title}\nDistance range: {distance_matrix.min()} - {distance_matrix.max()}', 
+                 fontsize=12)
+    
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"  Saved to {output_path}")
+
+
+def _plot_clustered_heatmap(distance_matrix, filenames_list, output_path):
+    """Plot clustered heatmap using hierarchical clustering."""
+    n = len(filenames_list)
+    
+    # Sample if too large
+    if n > 300:
+        sample_step = n // 300
+        sampled_indices = list(range(0, n, sample_step))
+        sampled_matrix = distance_matrix[np.ix_(sampled_indices, sampled_indices)]
+        sampled_filenames = [filenames_list[i] for i in sampled_indices]
+        n = len(sampled_indices)
+    else:
+        sampled_matrix = distance_matrix
+        sampled_filenames = filenames_list
+    
+    # Convert to condensed distance matrix for linkage
+    condensed_distances = squareform(sampled_matrix)
+    
+    # Perform hierarchical clustering
+    linkage_matrix = linkage(condensed_distances, method='ward')
+    
+    # Get dendrogram leaf order
+    dendro_order = leaves_list(linkage_matrix)
+    
+    # Reorder matrix by dendrogram order
+    reordered_matrix = sampled_matrix[np.ix_(dendro_order, dendro_order)]
+    
+    # Create figure with subplots
+    fig = plt.figure(figsize=(16, 12))
+    gs = fig.add_gridspec(2, 2, height_ratios=[1, 4], width_ratios=[1, 4], hspace=0.1, wspace=0.1)
+    
+    # Dendrogram
+    ax_dendro = fig.add_subplot(gs[0, 1])
+    dendrogram(linkage_matrix, ax=ax_dendro, orientation='top', no_labels=True, color_threshold=0.7*max(linkage_matrix[:,2]))
+    ax_dendro.set_ylabel('Distance', fontsize=10)
+    ax_dendro.set_title('Hierarchical Clustering Dendrogram', fontsize=12)
+    
+    # Heatmap
+    ax_heatmap = fig.add_subplot(gs[1, 1])
+    im = ax_heatmap.imshow(reordered_matrix, cmap='viridis_r', aspect='auto', interpolation='nearest')
+    ax_heatmap.set_xlabel('Image Index (clustered)', fontsize=10)
+    ax_heatmap.set_ylabel('Image Index (clustered)', fontsize=10)
+    ax_heatmap.set_title('Clustered Hash Distance Matrix', fontsize=12)
+    
+    # Colorbar
+    cbar = plt.colorbar(im, ax=ax_heatmap)
+    cbar.set_label('Hash Distance', rotation=270, labelpad=20)
+    
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"  Saved to {output_path}")
+    plt.close()
+
+
+def _plot_similarity_network(distance_matrix, filenames_list, output_path, threshold=30):
+    """Plot network graph showing connections between similar images."""
+    try:
+        import networkx as nx
+    except ImportError:
+        print("  Skipping network graph (networkx not available)")
+        return
+    
+    n = len(filenames_list)
+    
+    # Create graph
+    G = nx.Graph()
+    
+    # Add nodes
+    for i, filename in enumerate(filenames_list):
+        G.add_node(i, label=os.path.basename(filename)[:20])
+    
+    # Add edges for similar pairs
+    edge_count = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            if distance_matrix[i, j] <= threshold:
+                G.add_edge(i, j, weight=distance_matrix[i, j])
+                edge_count += 1
+    
+    if edge_count == 0:
+        print(f"  No edges found below threshold {threshold}")
+        return
+    
+    print(f"  Found {edge_count} edges (distance <= {threshold})")
+    
+    # Sample nodes if graph is too large
+    if n > 200:
+        # Keep nodes with most connections
+        degrees = dict(G.degree())
+        top_nodes = sorted(degrees.items(), key=lambda x: x[1], reverse=True)[:200]
+        nodes_to_keep = [node for node, _ in top_nodes]
+        G = G.subgraph(nodes_to_keep).copy()
+        print(f"  Sampled to {len(G.nodes())} nodes")
+    
+    # Layout
+    pos = nx.spring_layout(G, k=1, iterations=50, seed=42)
+    
+    # Plot
+    fig, ax = plt.subplots(figsize=(16, 12))
+    
+    # Draw edges
+    edges = G.edges()
+    weights = [G[u][v]['weight'] for u, v in edges]
+    nx.draw_networkx_edges(G, pos, alpha=0.2, width=0.5, edge_color='gray', ax=ax)
+    
+    # Draw nodes (size by degree)
+    node_sizes = [G.degree(node) * 50 + 100 for node in G.nodes()]
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color='lightblue', 
+                           alpha=0.7, ax=ax)
+    
+    # Draw labels (only for nodes with high degree)
+    high_degree_nodes = [node for node in G.nodes() if G.degree(node) > 2]
+    labels = {node: G.nodes[node]['label'] for node in high_degree_nodes}
+    nx.draw_networkx_labels(G, pos, labels, font_size=6, ax=ax)
+    
+    ax.set_title(f'Similarity Network (distance <= {threshold})\n'
+                 f'{len(G.nodes())} nodes, {len(G.edges())} edges', fontsize=14)
+    ax.axis('off')
+    
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"  Saved to {output_path}")
+    plt.close()
+
+
+def _plot_distance_histogram(distance_matrix, output_path):
+    """Plot histogram of distance distribution."""
+    n = len(distance_matrix)
     upper_triangle = distance_matrix[np.triu_indices(n, k=1)]
     
     fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Create histogram
     bins = np.arange(0, distance_matrix.max() + 2) - 0.5
     counts, bins, patches = ax.hist(upper_triangle, bins=bins, edgecolor='black', alpha=0.7)
     
@@ -179,15 +375,16 @@ def compute_hash_matrix(image_dir: str, output_path: str = "hash_correlation_mat
     for threshold in [8, 30]:
         count = np.sum(upper_triangle <= threshold)
         percentage = count / len(upper_triangle) * 100
-        ax.text(threshold, counts[int(threshold)] * 1.1, 
-                f'{count:,} pairs\n({percentage:.1f}%)',
-                ha='center', fontsize=9, bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        if threshold < len(counts):
+            ax.text(threshold, counts[int(threshold)] * 1.1, 
+                    f'{count:,} pairs\n({percentage:.1f}%)',
+                    ha='center', fontsize=9, 
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
     plt.tight_layout()
-    plt.savefig(hist_output, dpi=150, bbox_inches='tight')
-    print(f"Saved histogram to {hist_output}")
-    
-    return distance_matrix, filenames_list
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"  Saved to {output_path}")
+    plt.close()
 
 
 def main():
