@@ -11,7 +11,7 @@
 - ✅ No `.env` history found in git commits
 
 ### Database Files
-- ✅ `photoderush.db` is **NOT** tracked in git
+- ✅ `photoderush.db` has been **DELETED** (was unused dead code)
 - ✅ Database files are properly excluded in `.gitignore`
 
 ### Credentials & Secrets
@@ -44,11 +44,7 @@
 
 #### Python Scripts
 - ✅ `scripts/run_train_compare.py` - Updated docstring, uses `os.path.expanduser("~")`
-- ✅ `scripts/quick_test.py` - Now uses `PHOTO_DERUSH_DB` env var
-- ✅ `scripts/debug_predictions.py` - Now uses `PHOTO_DERUSH_DB` env var
-- ✅ `scripts/test_thumbnails.py` - Updated help message to use generic paths
-- ✅ `scripts/test_predictions.py` - Now uses `PHOTO_DERUSH_DB` env var
-- ✅ `test_predict_direct.py` - Now uses script directory detection
+- ✅ Dead API/database scripts **DELETED** (test_predictions.py, quick_test.py, debug_predictions.py, verify_db.py, test_predict_direct.py, test_scanner_direct.py, migrate_json_to_db.py, test_thumbnails.py)
 
 #### Debug/Test Files
 - ✅ `repro_libomp_crash/lldb_cmds.txt` - Commented with placeholders
@@ -57,8 +53,8 @@
 **Changes Made:**
 - All shell scripts now use `$SCRIPT_DIR` or `$(pwd)` instead of hardcoded paths
 - All Python scripts use `os.path.expanduser("~")`, `os.getcwd()`, or environment variables
-- Database paths use `PHOTO_DERUSH_DB` environment variable (defaults to `photoderush.db`)
 - Dataset paths use `PHOTO_DATASET_DIR` environment variable (defaults to `~/Pictures/photo-dataset`)
+- Dead API code removed (`api/` directory deleted)
 
 ## 📋 RECOMMENDATIONS
 
@@ -72,7 +68,6 @@
 - Review git history for any previously committed secrets (already checked - clean)
 
 ### Environment Variables Available
-- `PHOTO_DERUSH_DB` - Database file path (defaults to `photoderush.db`)
 - `PHOTO_DATASET_DIR` - Dataset directory path (defaults to `~/Pictures/photo-dataset`)
 
 ## 🔍 VERIFICATION COMMANDS

@@ -11,7 +11,7 @@
 - ✅ No `.env` history found in git commits
 
 ### Database Files
-- ✅ `photoderush.db` is **NOT** tracked in git
+- ✅ `photoderush.db` has been **DELETED** (was unused dead code from incomplete API)
 - ✅ Database files are properly excluded in `.gitignore`
 
 ### Credentials & Secrets
