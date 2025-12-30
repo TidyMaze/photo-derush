@@ -23,6 +23,7 @@ except ImportError:
 
 from src.photo_grouping import (
     PhotoMetadata,
+    PHASH_HAMMING_THRESHOLD,
     compute_pick_score,
     detect_sessions,
     group_near_duplicates,
@@ -72,7 +73,7 @@ def compute_grouping_for_photos(
     quality_metrics: dict[str, dict] | None = None,  # filename -> {sharpness, exposure, noise, ...}
     session_gap_min: int = 30,
     burst_gap_sec: float = 1.0,
-    phash_threshold: int = 10,
+    phash_threshold: int = PHASH_HAMMING_THRESHOLD,
     progress_reporter=None,  # Optional ProgressReporter for UI progress
 ) -> dict[str, dict]:
     """Compute grouping for all photos.
