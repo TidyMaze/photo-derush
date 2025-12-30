@@ -2079,7 +2079,8 @@ class PhotoView(QMainWindow):
 
                                 # Always show badge if we have group info (to show group_id)
                                 if group_id is not None or is_best or group_size > 1:
-                                    logging.info(f"[group-badge] Showing badge for {fname}: is_best={is_best}, group_size={group_size}, group_id={group_id}")
+                                    # Removed frequent logging.info - called for every image with group info (performance optimization)
+                                    # logging.info(f"[group-badge] Showing badge for {fname}: is_best={is_best}, group_size={group_size}, group_id={group_id}")
                                     group_badge_overlay.set_group_info(is_best=is_best, group_size=group_size, group_id=group_id)
                                     label_w = label.width()
                                     label_h = label.height()
