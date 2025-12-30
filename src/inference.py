@@ -33,7 +33,7 @@ class ModelBundle:
     calibrator: Optional[Any] = None
 
 
-def invalidate_model_cache(model_path: str = None):
+def invalidate_model_cache(model_path: str | None = None):
     """Invalidate the model cache for a specific path or all paths.
 
     Call this after retraining to ensure the new model is loaded.
@@ -49,7 +49,7 @@ def invalidate_model_cache(model_path: str = None):
             logging.info("[inference] Invalidated all model caches")
 
 
-def check_model_health(model_path: str = None) -> bool:
+def check_model_health(model_path: str | None = None) -> bool:
     """Check if model is healthy (has non-zero feature importances).
     
     Returns True if model is healthy, False otherwise.
@@ -77,7 +77,7 @@ def check_model_health(model_path: str = None) -> bool:
         return False
 
 
-def load_model(model_path: str = None) -> Optional[ModelBundle]:
+def load_model(model_path: str | None = None) -> Optional[ModelBundle]:
     # Lazy import to avoid loading xgboost at module level
     if model_path is None:
         from .training_core import DEFAULT_MODEL_PATH
@@ -203,7 +203,7 @@ def load_ensemble_models():
 
 
 def predict_keep_probability(
-    image_paths: list[str], model_path: str = None, progress_callback=None
+    image_paths: list[str], model_path: str | None = None, progress_callback=None
 ) -> list[float]:
     # Lazy import to avoid loading xgboost at module level
     if model_path is None:
@@ -372,7 +372,7 @@ def _predict_with_model(image_paths: list[str], model, meta, calibrator, progres
 
 # --- Streaming incremental prediction ---
 def predict_keep_probability_stream(
-    image_paths: list[str], model_path: str = None, per_prediction_callback=None, progress_callback=None
+    image_paths: list[str], model_path: str | None = None, per_prediction_callback=None, progress_callback=None
 ) -> list[float]:
     """Stream keep probabilities image-by-image, invoking per_prediction_callback(fname, prob, idx, total).
     Falls back to batch function if model load fails. Returns full list of probabilities.
@@ -479,14 +479,64 @@ def predict_keep_probability_stream(
 __all__ = ["load_model", "predict_keep_probability", "predict_keep_probability_stream"]
 
 
-def _compute_image_embeddings(image_paths: list[str]) -> np.ndarray:
+# Module-level cache for embedding model and device
+_embedding_model_cache: dict[str, Any] = {}
+_embedding_device: str | None = None
+_embedding_model_lock = threading.Lock()
+
+
+def _get_embedding_device(device: str = "auto") -> str:
+    """Auto-detect best available device for embeddings (similar to object detection).
+    
+    Args:
+        device: Device string ("auto", "cpu", "cuda", "mps")
+    
+    Returns:
+        Device string ("cpu", "cuda", or "mps")
+    """
+    if device != "auto":
+        return device
+    
+    # Allow forcing device via environment variable
+    env_device = os.environ.get("EMBEDDING_DEVICE")
+    if env_device:
+        return env_device
+    
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+        elif torch.backends.mps.is_available():
+            return "mps"
+    except ImportError:
+        pass
+    
+    return "cpu"
+
+
+def _get_embedding_device_used() -> str:
+    """Get the device currently used for embeddings."""
+    global _embedding_device
+    return _embedding_device or "cpu"
+
+
+def _compute_image_embeddings(image_paths: list[str], device: str = "auto") -> np.ndarray:
     """Compute or fetch embeddings for a list of image paths.
 
     Strategy:
     - If a cached embeddings file exists at `.cache/embeddings_resnet18_full.joblib` or similar, load and align.
     - Otherwise, attempt to import torch/torchvision and build embeddings on-the-fly (best-effort).
     - If neither is available, return zero vectors.
+    
+    Args:
+        image_paths: List of image file paths
+        device: Device to use ("auto", "cpu", "cuda", "mps"). Defaults to "auto" (auto-detect).
+    
+    Returns:
+        numpy array of embeddings (n_images, embedding_dim)
     """
+    global _embedding_model_cache, _embedding_device, _embedding_model_lock
+    
     # Try cached embeddings in common path
     possible = [
         os.path.join(".cache", "embeddings_resnet18_full.joblib"),
@@ -524,10 +574,23 @@ def _compute_image_embeddings(image_paths: list[str]) -> np.ndarray:
         from PIL import Image
         from torchvision import models, transforms
 
-        model = models.resnet18(pretrained=True)
-        # Remove final classifier
-        model = torch.nn.Sequential(*list(model.children())[:-1])
-        model.eval()
+        # Auto-detect device
+        effective_device = _get_embedding_device(device)
+        _embedding_device = effective_device
+        
+        # Cache model per device to avoid reloading
+        with _embedding_model_lock:
+            if effective_device not in _embedding_model_cache:
+                logging.info(f"[inference] Loading ResNet18 for embeddings on {effective_device}")
+                model = models.resnet18(pretrained=True)
+                # Remove final classifier
+                model = torch.nn.Sequential(*list(model.children())[:-1])
+                model.eval()
+                # Move model to device
+                model = model.to(effective_device)
+                _embedding_model_cache[effective_device] = model
+            else:
+                model = _embedding_model_cache[effective_device]
 
         def _embed(p):
             img = Image.open(p).convert("RGB")
@@ -539,10 +602,17 @@ def _compute_image_embeddings(image_paths: list[str]) -> np.ndarray:
                     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ]
             )
-            t = tf(img).unsqueeze(0)
+            # Apply transforms (returns tensor after ToTensor)
+            tensor_result = tf(img)
+            # Type assertion: ToTensor() in Compose ensures this is a tensor
+            if not isinstance(tensor_result, torch.Tensor):
+                raise RuntimeError("Expected tensor from transforms")
+            # Add batch dimension and move to device
+            t = tensor_result.unsqueeze(0).to(effective_device)
             with torch.no_grad():
                 out = model(t)
-            return out.squeeze().numpy().reshape(1, -1)
+            # Move result back to CPU for numpy conversion
+            return out.cpu().squeeze().numpy().reshape(1, -1)
 
         mats = []
         for p in image_paths:

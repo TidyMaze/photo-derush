@@ -227,6 +227,7 @@ class DetectionContext:
         self.model_cache: Dict[Tuple[str, str], Any] = {}
         self.weights_cache: Dict[Tuple[str, str], Any] = {}
         self.device_map: Dict[str, str] = {}  # maps backend->device actually used
+        self.model_name_map: Dict[str, str] = {}  # maps backend->model name actually used
 
         # Serialize native detector calls to avoid concurrent invocations of
         # libtorch/ultralytics which may interact poorly with OpenMP thread pools
@@ -583,10 +584,11 @@ def _load_model(device: str = "auto"):
             # Some wrappers (like YOLO wrapper) may ignore .to(); log and continue
             logging.exception("Model .to(device) failed or was ignored")
 
-        # Cache and record actual device used for this backend
+        # Cache and record actual device and model name used for this backend
         _detection_ctx.model_cache[key] = model
         _detection_ctx.weights_cache[key] = weights
         _detection_ctx.device_map[effective_backend] = device
+        _detection_ctx.model_name_map[effective_backend] = YOLO_MODEL_NAME
 
         return model, weights
     finally:
@@ -1155,6 +1157,8 @@ __all__ = [
     "load_object_cache",
     "save_object_cache",
     "get_cache_path",
+    "get_loaded_device",
+    "get_loaded_model_name",
 ]
 
 
@@ -1311,6 +1315,19 @@ def get_loaded_device() -> Optional[str]:
     """
     try:
         return _detection_ctx.device_map.get(DETECTION_BACKEND)
+    except Exception:
+        return None
+
+
+def get_loaded_model_name() -> Optional[str]:
+    """Return the model name used for the loaded detection backend in this process, if any.
+
+    This maps the current `DETECTION_BACKEND` to the model name that was actually used
+    when the backend was first loaded in this process. Returns None if no model
+    has been loaded yet.
+    """
+    try:
+        return _detection_ctx.model_name_map.get(DETECTION_BACKEND)
     except Exception:
         return None
 

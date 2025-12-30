@@ -72,8 +72,17 @@ class ImageBrowserState:
     predicted_probabilities: dict[str, float] = field(default_factory=dict)  # filename -> probability (0.0-1.0)
     auto_assigned_paths: set = field(default_factory=set)  # paths that were auto-labeled (vs manual)
     detected_objects: dict[str, list[str]] = field(default_factory=dict)  # filename -> list of detected objects
-    # Detection backend/device info (for UI display)
+    # Detection backend/device/model info (for UI display)
     detection_backend: str = "unknown"
     detection_device: str = "unknown"
+    detection_model: str = "unknown"  # e.g., "yolov8n"
+    # Classification model info
+    classification_model_type: str = "unknown"  # "XGBoost" or "CatBoost"
+    classification_model_path: str = "unknown"  # model file path
+    # Embedding model info
+    embedding_model: str = "unknown"  # e.g., "ResNet18"
+    embedding_device: str = "unknown"  # device used for embeddings
+    # Feature extraction info
+    feature_extraction_backend: str = "unknown"  # e.g., "PIL/OpenCV/NumPy"
     # Grouping data
     group_info: dict[str, dict] = field(default_factory=dict)  # filename -> {group_id, group_size, is_group_best, pick_score}

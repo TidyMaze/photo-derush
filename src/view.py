@@ -651,9 +651,16 @@ class PhotoView(QMainWindow):
         self.labeled_images_label = QLabel("✅ Labeled: 0")
         self.unlabeled_images_label = QLabel("⚪ Unlabeled: 0")
         self.selected_count_label = QLabel("🎯 Selected: 0")
-        # Detection backend/device display
+        # Detection backend/device/model display
         self.det_backend_label = QLabel("Detector: unknown")
         self.det_device_label = QLabel("Device: unknown")
+        self.det_model_label = QLabel("Model: unknown")
+        # Classification model display
+        self.class_model_label = QLabel("Classification: unknown")
+        # Embedding model display
+        self.embed_model_label = QLabel("Embeddings: unknown")
+        # Feature extraction display
+        self.feature_backend_label = QLabel("Features: unknown")
         # Worker queue / state
         self.worker_queue_label = QLabel("Queue: 0")
         self.worker_state_label = QLabel("Workers: 0")
@@ -710,18 +717,17 @@ class PhotoView(QMainWindow):
                 font-weight: 500;
             }
         """
-        for label in [self.det_backend_label, self.det_device_label, self.worker_queue_label, self.worker_state_label]:
+        for label in [self.det_backend_label, self.det_device_label, self.det_model_label, self.class_model_label, self.embed_model_label, self.feature_backend_label, self.worker_queue_label, self.worker_state_label]:
             label.setStyleSheet(info_style)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Arrange into two rows with spacing
+        # Arrange into multiple rows with spacing
         outer = QVBoxLayout()
-        outer.setSpacing(8)
+        outer.setSpacing(6)
+        
+        # Row 1: Dataset stats
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
-        bottom_row = QHBoxLayout()
-        bottom_row.setSpacing(8)
-
         top_row.addWidget(self.total_images_label)
         top_row.addWidget(self.labeled_images_label)
         top_row.addWidget(self.unlabeled_images_label)
@@ -741,13 +747,30 @@ class PhotoView(QMainWindow):
         """)
         self.selected_count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        bottom_row.addWidget(self.det_backend_label)
-        bottom_row.addWidget(self.det_device_label)
-        bottom_row.addWidget(self.worker_queue_label)
-        bottom_row.addWidget(self.worker_state_label)
+        # Row 2: Object Detection info
+        detection_row = QHBoxLayout()
+        detection_row.setSpacing(8)
+        detection_row.addWidget(self.det_backend_label)
+        detection_row.addWidget(self.det_device_label)
+        detection_row.addWidget(self.det_model_label)
+        
+        # Row 3: Classification, Embeddings, Features
+        ml_row = QHBoxLayout()
+        ml_row.setSpacing(8)
+        ml_row.addWidget(self.class_model_label)
+        ml_row.addWidget(self.embed_model_label)
+        ml_row.addWidget(self.feature_backend_label)
+        
+        # Row 4: Worker info
+        worker_row = QHBoxLayout()
+        worker_row.setSpacing(8)
+        worker_row.addWidget(self.worker_queue_label)
+        worker_row.addWidget(self.worker_state_label)
 
         outer.addLayout(top_row)
-        outer.addLayout(bottom_row)
+        outer.addLayout(detection_row)
+        outer.addLayout(ml_row)
+        outer.addLayout(worker_row)
         self.status_group.setLayout(outer)
 
         self.side_layout.addWidget(self.status_group)
@@ -804,30 +827,57 @@ class PhotoView(QMainWindow):
             self.unlabeled_images_label.setText(f"⚪ Unlabeled: {unlabeled_count}")
             self.selected_count_label.setText(f"🎯 Selected: {selected_count}")
 
-            # Show detection backend/device from viewmodel snapshot if available
+            # Show all computation models/devices from viewmodel snapshot if available
             try:
+                # Detection info
                 backend = getattr(self._state, "detection_backend", None) if self._state else None
                 device = getattr(self._state, "detection_device", None) if self._state else None
+                model = getattr(self._state, "detection_model", None) if self._state else None
                 if backend:
                     self.det_backend_label.setText(f"Detector: {backend}")
                 if device:
                     self.det_device_label.setText(f"Device: {device}")
+                if model:
+                    self.det_model_label.setText(f"Model: {model}")
 
-                # If state didn't include backend/device (model not loaded yet), try fallback to object_detection module
-                if not backend or not device:
+                # Classification info
+                class_type = getattr(self._state, "classification_model_type", None) if self._state else None
+                class_path = getattr(self._state, "classification_model_path", None) if self._state else None
+                if class_type != "unknown":
+                    self.class_model_label.setText(f"Classify: {class_type}")
+                elif class_path != "unknown":
+                    self.class_model_label.setText(f"Classify: {class_path}")
+
+                # Embedding info
+                embed_model = getattr(self._state, "embedding_model", None) if self._state else None
+                embed_device = getattr(self._state, "embedding_device", None) if self._state else None
+                if embed_model != "unknown":
+                    self.embed_model_label.setText(f"Embed: {embed_model} ({embed_device})")
+
+                # Feature extraction info
+                feature_backend = getattr(self._state, "feature_extraction_backend", None) if self._state else None
+                if feature_backend != "unknown":
+                    self.feature_backend_label.setText(f"Features: {feature_backend}")
+
+                # If state didn't include backend/device/model (model not loaded yet), try fallback to object_detection module
+                if not backend or not device or not model:
                     try:
                         from . import object_detection
 
                         ob_backend = getattr(object_detection, "DETECTION_BACKEND", None)
                         try:
                             ob_device = object_detection.get_loaded_device()
+                            ob_model = object_detection.get_loaded_model_name()
                         except Exception:
                             ob_device = None
+                            ob_model = None
                         if ob_backend:
                             self.det_backend_label.setText(f"Detector: {ob_backend}")
                         if ob_device is not None:
                             # device might be a torch.device or string
                             self.det_device_label.setText(f"Device: {str(ob_device)}")
+                        if ob_model:
+                            self.det_model_label.setText(f"Model: {ob_model}")
                     except Exception:
                         logging.exception("Failed to import object_detection for fallback detector/device")
                         pass

@@ -1035,17 +1035,54 @@ class PhotoViewModel(QObject):
             logging.warning(f"Failed to apply filters: {e}")
             # Continue even if filters fail
 
-        # Try to detect which detection backend/device is in use for UI display
+        # Try to detect which detection backend/device/model is in use for UI display
         detection_backend = "unknown"
         detection_device = "unknown"
+        detection_model = "unknown"
         try:
             from . import object_detection as _od
 
             detection_backend = getattr(_od, "DETECTION_BACKEND", detection_backend)
-            detection_device = getattr(_od, "_device", detection_device) or detection_device
+            detection_device = _od.get_loaded_device() or detection_device
+            detection_model = _od.get_loaded_model_name() or detection_model
         except Exception:
             # ignore if object_detection can't be imported
             pass
+
+        # Get classification model info
+        classification_model_type = "unknown"
+        classification_model_path = "unknown"
+        try:
+            from .inference import load_model
+            from .training_core import DEFAULT_MODEL_PATH
+            import os
+            
+            model_path = os.path.expanduser(DEFAULT_MODEL_PATH)
+            if os.path.isfile(model_path):
+                bundle = load_model(model_path)
+                if bundle:
+                    # Detect model type (XGBoost or CatBoost)
+                    model = bundle.model
+                    if hasattr(model, "named_steps"):
+                        if "cat" in model.named_steps:
+                            classification_model_type = "CatBoost"
+                        elif "xgb" in model.named_steps:
+                            classification_model_type = "XGBoost"
+                    classification_model_path = os.path.basename(model_path)
+        except Exception:
+            pass
+
+        # Get embedding model info (ResNet18 with device detection)
+        embedding_model = "ResNet18"
+        embedding_device = "unknown"
+        try:
+            from .inference import _get_embedding_device_used
+            embedding_device = _get_embedding_device_used().upper()
+        except Exception:
+            pass
+
+        # Get feature extraction backend info
+        feature_extraction_backend = "PIL/OpenCV/NumPy"
 
         snapshot = ImageBrowserState(
             images=list(self.images),
@@ -1067,6 +1104,12 @@ class PhotoViewModel(QObject):
             detected_objects=dict(self._detected_objects),
             detection_backend=detection_backend,
             detection_device=str(detection_device),
+            detection_model=detection_model,
+            classification_model_type=classification_model_type,
+            classification_model_path=classification_model_path,
+            embedding_model=embedding_model,
+            embedding_device=embedding_device,
+            feature_extraction_backend=feature_extraction_backend,
             group_info=self._group_info.copy(),  # Include grouping data
         )
         try:
