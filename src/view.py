@@ -2438,6 +2438,13 @@ class PhotoView(QMainWindow):
                     lines.append(f"  {key}: {exif[key]}")
         else:
             lines.append("\n📸 No EXIF data found.")
+            # Show the fallback date that's actually being used
+            try:
+                from .grouping_service import extract_timestamp
+                fallback_date = extract_timestamp(exif or {}, path)
+                lines.append(f"   Date used (fallback): {fallback_date.strftime('%Y-%m-%d %H:%M:%S')}")
+            except Exception:
+                pass  # Don't fail if date extraction fails
 
         # File info
         try:
