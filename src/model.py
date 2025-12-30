@@ -73,16 +73,18 @@ class ImageModel:
             return self._exif_cache[path]
         
         try:
-            img = Image.open(path)
-            exif_data = img._getexif() if hasattr(img, "_getexif") and callable(img._getexif) else None
-            if not exif_data or not isinstance(exif_data, dict):
-                result = {}
-            else:
-                exif = {}
-                for tag, value in exif_data.items():
-                    tag_name = ExifTags.TAGS.get(tag, str(tag))
-                    exif[tag_name] = value
-                result = exif
+            # OPTIMIZATION: Use context manager to ensure file is closed immediately
+            # This avoids keeping file handles open and reduces memory pressure
+            with Image.open(path) as img:
+                exif_data = img._getexif() if hasattr(img, "_getexif") and callable(img._getexif) else None
+                if not exif_data or not isinstance(exif_data, dict):
+                    result = {}
+                else:
+                    exif = {}
+                    for tag, value in exif_data.items():
+                        tag_name = ExifTags.TAGS.get(tag, str(tag))
+                        exif[tag_name] = value
+                    result = exif
             # Cache the result (even empty dict to avoid re-opening)
             self._exif_cache[path] = result
             return result

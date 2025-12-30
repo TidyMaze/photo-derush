@@ -67,14 +67,25 @@ class BadgeOverlayWidget(QWidget):
             # Invalidate cache when badge data changes
             self._cached_pixmap = None
             self._cache_key = None
+            # Ensure widget is visible and has geometry before updating
+            if not self.isVisible():
+                self.show()
+            if self.width() <= 0 or self.height() <= 0:
+                parent = self.parent()
+                if parent:
+                    self.setGeometry(0, 0, parent.width(), parent.height())
             self.update()
+            self.raise_()  # Ensure on top
         finally:
             self._updating = False
     
     def paintEvent(self, event):
         """Draw badge at display resolution."""
-        if not self.label_text:
+        # Always paint if widget is visible and has valid geometry
+        if not self.isVisible():
             return
+        if not self.label_text and self.probability is None:
+            return  # Nothing to draw
         
         # Badge dimensions in logical pixels (will be scaled by DPR automatically by Qt)
         # Badge spans 100% width of widget, positioned at bottom
