@@ -1938,10 +1938,12 @@ class PhotoView(QMainWindow):
                             if group_info:
                                 is_best = group_info.get("is_group_best", False)
                                 group_size = group_info.get("group_size", 1)
+                                group_id = group_info.get("group_id")
                                 
-                                if is_best or group_size > 1:
-                                    logging.info(f"[group-badge] Showing badge for {fname}: is_best={is_best}, group_size={group_size}")
-                                    group_badge_overlay.set_group_info(is_best=is_best, group_size=group_size)
+                                # Always show badge if we have group info (to show group_id)
+                                if group_id is not None or is_best or group_size > 1:
+                                    logging.debug(f"[group-badge] Showing badge for {fname}: is_best={is_best}, group_size={group_size}, group_id={group_id}")
+                                    group_badge_overlay.set_group_info(is_best=is_best, group_size=group_size, group_id=group_id)
                                     label_w = label.width()
                                     label_h = label.height()
                                     group_badge_overlay.setGeometry(0, 0, label_w, label_h)
