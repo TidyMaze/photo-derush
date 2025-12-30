@@ -19,6 +19,13 @@ class ImageItem:
     tags: list[str] = field(default_factory=list)
     label: str | None = None  # keep/trash
     objects: list[str] = field(default_factory=list)  # detected objects (person, cat, car, etc.)
+    # Grouping fields
+    session_id: int | None = None
+    burst_id: int | None = None
+    group_id: int | None = None  # Final grouping (burst or near-duplicate cluster)
+    group_size: int = 1  # Number of photos in this group
+    is_group_best: bool = False  # Is this the best pick in the group?
+    pick_score: float = 0.0  # Heuristic score for best-pick recommendation
 
     @classmethod
     def from_raw(cls, filename: str, path: str, details: dict):
@@ -30,6 +37,12 @@ class ImageItem:
             tags=details.get("tags", []),
             label=details.get("label"),
             objects=details.get("objects", []),
+            session_id=details.get("session_id"),
+            burst_id=details.get("burst_id"),
+            group_id=details.get("group_id"),
+            group_size=details.get("group_size", 1),
+            is_group_best=details.get("is_group_best", False),
+            pick_score=details.get("pick_score", 0.0),
         )
 
 
@@ -62,3 +75,5 @@ class ImageBrowserState:
     # Detection backend/device info (for UI display)
     detection_backend: str = "unknown"
     detection_device: str = "unknown"
+    # Grouping data
+    group_info: dict[str, dict] = field(default_factory=dict)  # filename -> {group_id, group_size, is_group_best, pick_score}

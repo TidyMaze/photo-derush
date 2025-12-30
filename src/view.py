@@ -1411,6 +1411,12 @@ class PhotoView(QMainWindow):
         badge_overlay = BadgeOverlayWidget(label)
         badge_overlay.hide()  # Hide until badge data is ready
         label._badge_overlay = badge_overlay  # type: ignore[attr-defined]
+        
+        # Add group badge overlay widget
+        from src.group_badge_widget import GroupBadgeWidget
+        group_badge_overlay = GroupBadgeWidget(label)
+        group_badge_overlay.hide()  # Hide until group data is ready
+        label._group_badge_overlay = group_badge_overlay  # type: ignore[attr-defined]
         label.setFixedSize(self.thumb_size, self.thumb_size)
         # Use scaled contents so Qt handles device pixel ratio automatically.
         # We provide square pixmaps exactly thumb_size x thumb_size.
@@ -1837,6 +1843,10 @@ class PhotoView(QMainWindow):
         try:
             # Repaint all thumbnails to show updated predictions
             state = getattr(self, "_last_browser_state", None)
+            if state:
+                group_info = getattr(state, "group_info", {})
+                if group_info:
+                    logging.info(f"[badge-refresh] Starting refresh with {len(group_info)} group_info entries, {len(self.label_refs)} labels")
             detected_objects = getattr(state, "detected_objects", {}) if state else {}
 
             repaint_count = 0
@@ -1917,6 +1927,28 @@ class PhotoView(QMainWindow):
                     # Force repaint if we have a prediction but badge wasn't painted yet
                     # OR if we have a prediction and it's the first time we're seeing it (even if badge was painted before)
                     needs_badge_paint = (current_prob is not None and not getattr(label, "_badge_painted", False)) or (current_prob is not None and is_first_load)
+                    
+                    # Always update group badges (independent of prediction changes)
+                    # Update group badge overlay BEFORE the continue check
+                    group_badge_overlay = getattr(label, "_group_badge_overlay", None)
+                    if group_badge_overlay and state:
+                        group_info_dict = getattr(state, "group_info", {})
+                        if group_info_dict:
+                            group_info = group_info_dict.get(fname, {})
+                            if group_info:
+                                is_best = group_info.get("is_group_best", False)
+                                group_size = group_info.get("group_size", 1)
+                                
+                                if is_best or group_size > 1:
+                                    logging.info(f"[group-badge] Showing badge for {fname}: is_best={is_best}, group_size={group_size}")
+                                    group_badge_overlay.set_group_info(is_best=is_best, group_size=group_size)
+                                    label_w = label.width()
+                                    label_h = label.height()
+                                    group_badge_overlay.setGeometry(0, 0, label_w, label_h)
+                                    group_badge_overlay.show()
+                                    group_badge_overlay.raise_()
+                                else:
+                                    group_badge_overlay.hide()
                     
                     if not (prob_changed or label_changed or objects_changed or is_first_load or needs_initial_display or needs_badge_paint):
                         continue  # Skip repaint if nothing changed
@@ -2009,6 +2041,9 @@ class PhotoView(QMainWindow):
                                 badge_overlay.raise_()
                             else:
                                 badge_overlay.hide()
+                        
+                        # Group badge overlay is updated above (before the continue check)
+                        # This ensures badges are always updated even if predictions haven't changed
 
                         # Paint rating stars
 
@@ -3132,6 +3167,14 @@ class PhotoView(QMainWindow):
             return
 
         self._last_browser_state = state
+        
+        # Debug: log group_info if present
+        group_info = getattr(state, "group_info", {})
+        if group_info:
+            group_count = len(set(g.get("group_id", 0) for g in group_info.values() if g.get("group_id") is not None))
+            best_count = sum(1 for g in group_info.values() if g.get("is_group_best", False))
+            multi_photo_groups = sum(1 for g in group_info.values() if g.get("group_size", 1) > 1)
+            logging.info(f"[view] Browser state updated: {len(group_info)} photos with group_info, {group_count} groups, {best_count} best picks, {multi_photo_groups} photos in multi-photo groups")
         pred_probs = getattr(state, "predicted_probabilities", {})
         pred_labels = getattr(state, "predicted_labels", {})
         detected_objects = getattr(state, "detected_objects", {})

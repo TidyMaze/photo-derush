@@ -16,6 +16,7 @@ from .services import ExifService, ThumbnailService  # type: ignore
 from .taskrunner import TaskRunner  # type: ignore
 from .vm_filters import FilterController  # type: ignore
 from .vm_labeling import LabelController  # type: ignore
+from .grouping_service import compute_grouping_for_photos  # type: ignore
 
 
 class PhotoViewModel(QObject):
@@ -42,6 +43,7 @@ class PhotoViewModel(QObject):
     model_stats_changed = Signal(dict)  # emits model performance metrics
     directory_changed = Signal(str)  # emits new directory path
     object_detection_ready = Signal(str)  # filename when detection completes
+    grouping_completed = Signal()  # emitted when grouping computation finishes
 
     def __init__(self, directory, max_images=10000):
         super().__init__()
@@ -77,6 +79,8 @@ class PhotoViewModel(QObject):
         self._loading_detections = False
         self._detection_task_running = False
         self._auto_selected_most_boxes = False
+        self._group_info: dict[str, dict] = {}  # filename -> grouping info
+        self._grouping_computed = False
 
         import threading
         self._retrain_lock = threading.Lock()
@@ -161,6 +165,7 @@ class PhotoViewModel(QObject):
         self._tasks.task_finished.connect(self.task_finished.emit)
         self._tasks.task_started.connect(self._on_task_started)
         self._tasks.task_finished.connect(self._on_task_finished)
+        self.grouping_completed.connect(self._on_grouping_completed)
         # Re-sort whenever predictions change
         self.prediction_updated.connect(self._on_prediction_updated)
         # Re-sort whenever labels change
@@ -684,6 +689,9 @@ class PhotoViewModel(QObject):
             delattr(self, "_image_basename_cache")
         files = self.model.get_image_files()
         self._progress_total = len(files)
+        # Reset grouping when images change
+        self._grouping_computed = False
+        self._group_info = {}
         self.images_changed.emit(self.images)
         self.progress_changed.emit(self._progress_current, self._progress_total)
         # Defer state snapshot to event loop to avoid blocking startup
@@ -717,6 +725,8 @@ class PhotoViewModel(QObject):
             self.progress_changed.emit(self._progress_current, self._progress_total)
 
         self._apply_filters()
+        # Compute grouping asynchronously (non-blocking)
+        self._compute_grouping_async()
         self._emit_state_snapshot()
         if (self._auto and self._auto.enabled) or getattr(self, "_auto_label_enabled", False):
             # Removed previous red/green color fallback; rely on model predictions only
@@ -752,6 +762,8 @@ class PhotoViewModel(QObject):
 
     def _finalize_image_loading(self):
         self._apply_filters()
+        # Compute grouping asynchronously (non-blocking)
+        self._compute_grouping_async()
         # Ensure at least one image is selected after loading completes
         self._ensure_selection()
         
@@ -1003,6 +1015,7 @@ class PhotoViewModel(QObject):
             detected_objects=dict(self._detected_objects),
             detection_backend=detection_backend,
             detection_device=str(detection_device),
+            group_info=self._group_info.copy(),  # Include grouping data
         )
         try:
             self.browser_state_changed.emit(snapshot)
@@ -1239,3 +1252,101 @@ class PhotoViewModel(QObject):
     def _refresh_auto_labels(self):
         """Backward-compatible wrapper calling AutoLabelManager.refresh_auto_labels."""
         self._auto.refresh_auto_labels()
+    
+    def _on_grouping_completed(self):
+        """Handle grouping completion - emit state snapshot from main thread."""
+        logging.info(f"[grouping] Signal received, emitting state snapshot (group_info has {len(self._group_info)} entries)")
+        try:
+            self._emit_state_snapshot()
+        except Exception as e:
+            logging.exception(f"[grouping] Failed to emit state snapshot: {e}")
+    
+    def _compute_grouping_async(self):
+        """Compute photo grouping asynchronously (non-blocking)."""
+        if self._grouping_computed:
+            logging.debug(f"[grouping] Already computed, skipping (images={len(self.images)})")
+            return
+        if not self.images:
+            logging.debug("[grouping] No images to group")
+            return
+        
+        # Mark as in-progress to avoid duplicate computation
+        self._grouping_computed = True
+        logging.info(f"[grouping] Starting async computation for {len(self.images)} photos")
+        
+        def compute_grouping(reporter=None):
+            try:
+                if reporter:
+                    reporter.set_total(8)  # 8 steps total
+                    reporter.detail("Starting grouping computation...")
+                
+                logging.info(f"[grouping] Computing grouping for {len(self.images)} photos")
+                
+                # Collect EXIF data
+                if reporter:
+                    reporter.update(1, 8)
+                    reporter.detail("Collecting EXIF data...")
+                exif_data: dict[str, dict] = {}
+                for idx, filename in enumerate(self.images):
+                    path = self.model.get_image_path(filename)
+                    if path:
+                        exif_data[filename] = self.model.load_exif(path)
+                    if reporter and (idx + 1) % 100 == 0:
+                        reporter.detail(f"Collected EXIF for {idx + 1}/{len(self.images)} photos...")
+                
+                # Get keep probabilities from auto-label manager
+                keep_probs: dict[str, float] = {}
+                if self._auto:
+                    keep_probs = {
+                        filename: self._auto.predicted_probabilities.get(filename, 0.5)
+                        for filename in self.images
+                    }
+                
+                # Compute grouping with progress reporting
+                if reporter:
+                    reporter.update(2, 8)
+                    reporter.detail("Computing photo groups...")
+                
+                group_info = compute_grouping_for_photos(
+                    filenames=self.images,
+                    image_dir=self.model.directory,
+                    exif_data=exif_data,
+                    keep_probabilities=keep_probs if keep_probs else None,
+                    quality_metrics=None,  # TODO: extract quality metrics from features if available
+                    progress_reporter=reporter,  # Pass reporter for progress updates
+                )
+                
+                # Update group_info
+                self._group_info = group_info
+                group_count = len(set(g.get('group_id', 0) for g in group_info.values() if g.get('group_id') is not None))
+                best_count = sum(1 for g in group_info.values() if g.get('is_group_best', False))
+                logging.info(f"[grouping] Computed grouping: {group_count} groups, {best_count} best picks")
+                
+                # Emit signal to update UI (signals are thread-safe in Qt)
+                try:
+                    self.grouping_completed.emit()
+                    logging.debug("[grouping] Signal emitted")
+                except RuntimeError as e:
+                    # Object deleted or signal not connected, log but don't fail
+                    logging.debug(f"[grouping] Signal emit failed (likely app closing): {e}")
+                except Exception as e:
+                    logging.warning(f"[grouping] Unexpected error emitting signal: {e}")
+            except Exception as e:
+                logging.exception(f"[grouping] Failed to compute grouping: {e}")
+                self._grouping_computed = False  # Allow retry on error
+        
+        # Run in background thread
+        if hasattr(self, "_tasks") and self._tasks:
+            try:
+                self._tasks.run("grouping", compute_grouping)
+            except Exception as e:
+                logging.warning(f"[grouping] Failed to submit task, using fallback: {e}")
+                # Fallback: run in background thread (without progress reporting)
+                import threading
+                thread = threading.Thread(target=lambda: compute_grouping(None), daemon=True)
+                thread.start()
+        else:
+            # Fallback: run in background thread if task runner not available
+            import threading
+            thread = threading.Thread(target=lambda: compute_grouping(None), daemon=True)
+            thread.start()

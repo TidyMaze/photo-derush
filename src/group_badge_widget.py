@@ -1,0 +1,133 @@
+"""Widget for displaying group badges (BEST pick, group size)."""
+
+from __future__ import annotations
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtWidgets import QWidget
+
+
+class GroupBadgeWidget(QWidget):
+    """Transparent overlay widget for displaying group badges (BEST, ×N).
+
+    Usage:
+        group_badge = GroupBadgeWidget(image_label)
+        group_badge.set_group_info(is_best=True, group_size=3)
+        group_badge.set_geometry(x, y, width, height)
+        group_badge.show()
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.is_best = False
+        self.group_size = 1
+        self._updating = False
+
+    def set_group_info(self, is_best: bool = False, group_size: int = 1):
+        """Set group badge information.
+
+        Args:
+            is_best: True if this is the best pick in the group
+            group_size: Number of photos in the group
+        """
+        if self._updating:
+            return
+
+        if self.is_best == is_best and self.group_size == group_size:
+            return
+
+        self._updating = True
+        try:
+            self.is_best = is_best
+            self.group_size = group_size
+            self.update()
+        finally:
+            self._updating = False
+
+    def paintEvent(self, event):
+        """Draw group badges at display resolution."""
+        if not self.is_best and self.group_size <= 1:
+            return  # Nothing to show
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+
+        # Get device pixel ratio
+        try:
+            from PySide6.QtGui import QGuiApplication
+            screen = QGuiApplication.primaryScreen()
+            dpr = float(screen.devicePixelRatio() or 1.0) if screen else 1.0
+        except Exception:
+            dpr = 1.0
+
+        widget_w = self.width()
+        widget_h = self.height()
+        if widget_w <= 0 or widget_h <= 0:
+            return
+
+        # Badge dimensions
+        badge_h = max(16, int(widget_h * 0.12))  # ~12% of height, minimum 16px
+        badge_w = max(40, int(widget_w * 0.3))  # ~30% of width, minimum 40px
+
+        # Position badges at top-left
+        x = 2
+        y = 2
+
+        # Font setup
+        font = QFont()
+        base_font_size = 8.0
+        font_pixel_size = max(10, int(base_font_size * dpr))
+        font.setPixelSize(font_pixel_size)
+        font.setBold(True)
+        painter.setFont(font)
+
+        badges_drawn = 0
+
+        # Draw "BEST" badge if applicable
+        if self.is_best:
+            best_x = x
+            best_y = y + badges_drawn * (badge_h + 2)
+
+            # Background (gold/yellow)
+            bg_color = QColor(255, 215, 0, 240)  # Gold with transparency
+            shadow_color = QColor(0, 0, 0, 100)
+
+            # Drop shadow
+            painter.fillRect(best_x + 1, best_y + 1, badge_w, badge_h, shadow_color)
+
+            # Background
+            painter.fillRect(best_x, best_y, badge_w, badge_h, bg_color)
+
+            # Text
+            painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
+            painter.drawText(best_x, best_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, "⭐ BEST")
+            painter.setPen(QPen(QColor(255, 255, 255)))
+            painter.drawText(best_x, best_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, "⭐ BEST")
+
+            badges_drawn += 1
+
+        # Draw group size badge if group_size > 1
+        if self.group_size > 1:
+            size_x = x
+            size_y = y + badges_drawn * (badge_h + 2)
+
+            # Background (blue/cyan)
+            bg_color = QColor(70, 130, 180, 220)  # Steel blue with transparency
+            shadow_color = QColor(0, 0, 0, 100)
+
+            # Drop shadow
+            painter.fillRect(size_x + 1, size_y + 1, badge_w, badge_h, shadow_color)
+
+            # Background
+            painter.fillRect(size_x, size_y, badge_w, badge_h, bg_color)
+
+            # Text
+            text = f"×{self.group_size}"
+            painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
+            painter.drawText(size_x, size_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, text)
+            painter.setPen(QPen(QColor(255, 255, 255)))
+            painter.drawText(size_x, size_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, text)
+
