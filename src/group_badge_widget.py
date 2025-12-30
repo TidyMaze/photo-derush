@@ -51,8 +51,8 @@ class GroupBadgeWidget(QWidget):
 
     def paintEvent(self, event):
         """Draw group badges at display resolution."""
-        # Always show something if we have group info
-        if self.group_id is None and not self.is_best and self.group_size <= 1:
+        # Show badges if we have group info (group_id, BEST, or ×N)
+        if self.group_id is None and not (self.is_best and self.group_size >= 2) and self.group_size <= 1:
             return  # Nothing to show
 
         painter = QPainter(self)
