@@ -1368,7 +1368,7 @@ class PhotoViewModel(QObject):
                     keep_probabilities=keep_probs if keep_probs else None,
                     quality_metrics=None,  # TODO: extract quality metrics from features if available
                     progress_reporter=reporter,  # Pass reporter for progress updates
-                    # phash_threshold uses default from PHASH_HAMMING_THRESHOLD constant (15)
+                    # phash_threshold uses default from PHASH_HAMMING_THRESHOLD constant (8)
                 )
                 
                 # Update group_info

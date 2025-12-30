@@ -78,7 +78,7 @@ def main():
         quality_metrics=None,
         session_gap_min=10,
         burst_gap_sec=15.0,
-        phash_threshold=21,
+        phash_threshold=8,
         progress_reporter=None,
     )
     
