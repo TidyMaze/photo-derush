@@ -16,6 +16,8 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Signal, Qt
 
+from .cache_config import is_cache_disabled
+
 
 class _LazyLoaderSignals(QObject):
     """Qt signals for marshaling thread pool callbacks to main thread."""
@@ -79,7 +81,10 @@ class LazyImageLoader:
 
         def _load_and_emit():
             try:
-                result = self._cached_exif(path)
+                if is_cache_disabled():
+                    result = self._load_exif_uncached(path)
+                else:
+                    result = self._cached_exif(path)
                 if not self._cancelled:
                     self._signals.exif_loaded.emit(path, result)
             except Exception as e:
@@ -108,7 +113,10 @@ class LazyImageLoader:
 
         def _load_and_emit():
             try:
-                result = self._cached_thumb(path)
+                if is_cache_disabled():
+                    result = self._load_thumb_uncached(path)
+                else:
+                    result = self._cached_thumb(path)
                 if not self._cancelled:
                     self._signals.thumbnail_loaded.emit(path, result)
             except Exception as e:
@@ -142,7 +150,10 @@ class LazyImageLoader:
                 for path in paths:
                     if self._cancelled:
                         break
-                    self._cached_exif(path)
+                    if is_cache_disabled():
+                        self._load_exif_uncached(path)
+                    else:
+                        self._cached_exif(path)
                     completed += 1
                     on_progress(completed, total)
             finally:

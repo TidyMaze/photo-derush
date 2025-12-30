@@ -217,9 +217,15 @@ class PhotoView(QMainWindow):
         return getattr(self, "_last_browser_state", None)
 
     def _pixmap_cache_get(self, key):
+        from src.cache_config import is_cache_disabled
+        if is_cache_disabled():
+            return None
         return self._pixmap_cache.get(key)
 
     def _pixmap_cache_set(self, key, value):
+        from src.cache_config import is_cache_disabled
+        if is_cache_disabled():
+            return
         self._pixmap_cache[key] = value
         if len(self._pixmap_cache) > self._pixmap_cache_max:
             self._pixmap_cache.pop(next(iter(self._pixmap_cache)))
@@ -241,6 +247,9 @@ class PhotoView(QMainWindow):
         self.viewmodel.model_stats_changed.connect(self._on_model_stats_changed)
         self.viewmodel.directory_changed.connect(self._on_directory_changed)
         self.viewmodel.browser_state_changed.connect(self._on_browser_state_changed)
+        # Refresh badges when grouping completes to show group badges
+        if hasattr(self.viewmodel, "grouping_completed"):
+            self.viewmodel.grouping_completed.connect(self._refresh_thumbnail_badges)
         self.viewmodel.object_detection_ready.connect(self._on_detection_ready)
         # Connect lazy loader signal
         # Note: Avoid double-connecting; view model already connects to thumbnail_loaded
@@ -1385,7 +1394,9 @@ class PhotoView(QMainWindow):
                 if label.parent() is None:
                     label.setParent(self.grid_widget)
                 self.grid_layout.addWidget(label, new_row, new_col)
-                label.show()  # Show after adding to layout
+                # OPTIMIZATION: Only call show() if widget is not already visible
+                if not label.isVisible():
+                    label.show()
                 self.label_refs[(new_row, new_col)] = label
 
                 label_filename = getattr(label, "_thumb_filename", "unknown")
@@ -1440,25 +1451,29 @@ class PhotoView(QMainWindow):
         row = idx // cols_per_row
         col = idx % cols_per_row
         label = QLabel(self.grid_widget)  # Ensure parent is set immediately
+        # Set label size FIRST so overlay widgets can use correct geometry
+        label.setFixedSize(self.thumb_size, self.thumb_size)
 
         # Add reusable bounding box overlay widget
         from src.bbox_overlay_widget import BoundingBoxOverlayWidget
         bbox_overlay = BoundingBoxOverlayWidget(label)
+        bbox_overlay.setGeometry(0, 0, self.thumb_size, self.thumb_size)
         bbox_overlay.hide()  # Hide until detections are ready
         label._bbox_overlay = bbox_overlay  # type: ignore[attr-defined]
 
         # Add reusable badge overlay widget
         from src.badge_overlay_widget import BadgeOverlayWidget
         badge_overlay = BadgeOverlayWidget(label)
+        badge_overlay.setGeometry(0, 0, self.thumb_size, self.thumb_size)
         badge_overlay.hide()  # Hide until badge data is ready
         label._badge_overlay = badge_overlay  # type: ignore[attr-defined]
 
         # Add group badge overlay widget
         from src.group_badge_widget import GroupBadgeWidget
         group_badge_overlay = GroupBadgeWidget(label)
+        group_badge_overlay.setGeometry(0, 0, self.thumb_size, self.thumb_size)
         group_badge_overlay.hide()  # Hide until group data is ready
         label._group_badge_overlay = group_badge_overlay  # type: ignore[attr-defined]
-        label.setFixedSize(self.thumb_size, self.thumb_size)
         # Use scaled contents so Qt handles device pixel ratio automatically.
         # We provide square pixmaps exactly thumb_size x thumb_size.
         label.setScaledContents(True)
@@ -1579,12 +1594,9 @@ class PhotoView(QMainWindow):
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-            # Single-line format: "76.5% K" or "24.5% T" (1 decimal precision)
+            # Single-line format: "76.5% K" or "24.5% T" (1 decimal precision) if probability available
+            # Otherwise just "✓ K" or "🤖 T" without percentage
             is_keep = label_text and label_text.lower() == "keep"
-            if probability is not None and probability == probability:  # Check for NaN
-                pct = probability * 100 if is_keep else (1 - probability) * 100
-            else:
-                pct = 0.0
             letter = "K" if is_keep else "T"
 
             # Emoji indicator for source: ✓ manual, 🤖 auto, no emoji for predicted
@@ -1594,7 +1606,13 @@ class PhotoView(QMainWindow):
             elif label_source == "auto":
                 emoji = "🤖 "
 
-            badge_text = f"{emoji}{pct:.1f}% {letter}"
+            # Only show percentage if we have a valid prediction probability
+            if probability is not None and probability == probability:  # Check for NaN
+                pct = probability * 100 if is_keep else (1 - probability) * 100
+                badge_text = f"{emoji}{pct:.1f}% {letter}"
+            else:
+                # No prediction available - show label only without percentage
+                badge_text = f"{emoji}{letter}"
 
             # Background color: different for manual vs auto
             # Manual: darker/more saturated, Auto: lighter/less saturated
@@ -1876,6 +1894,20 @@ class PhotoView(QMainWindow):
 
     def _refresh_thumbnail_badges(self):
         """Refresh label badges and bboxes on all thumbnail labels."""
+        # Debounce badge refresh to avoid excessive repaints
+        if not hasattr(self, "_badge_refresh_timer"):
+            from PySide6.QtCore import QTimer
+            self._badge_refresh_timer = QTimer(self)  # Parent to self to ensure it stays alive
+            self._badge_refresh_timer.setSingleShot(True)
+            self._badge_refresh_timer.timeout.connect(self._do_refresh_thumbnail_badges)
+            logging.debug("[badge-refresh] Timer created and connected")
+        
+        # Debounce: restart timer instead of immediate refresh
+        self._badge_refresh_timer.stop()
+        self._badge_refresh_timer.start(100)  # 100ms debounce
+    
+    def _do_refresh_thumbnail_badges(self):
+        """Actually perform badge refresh (called after debounce)."""
         # Don't purge caches on every refresh - only clear in-memory pixmap caches if needed
         # Detection cache file should persist across refreshes
 
@@ -1884,11 +1916,12 @@ class PhotoView(QMainWindow):
         try:
             # Repaint all thumbnails to show updated predictions
             state = getattr(self, "_last_browser_state", None)
-            if state:
-                group_info = getattr(state, "group_info", {})
-                if group_info:
-                    logging.info(f"[badge-refresh] Starting refresh with {len(group_info)} group_info entries, {len(self.label_refs)} labels")
             detected_objects = getattr(state, "detected_objects", {}) if state else {}
+            
+            # OPTIMIZATION: Batch visibility changes to avoid expensive show() calls (2.6s -> target <1s)
+            # Track which widgets need to be shown/hidden, apply at end in one batch
+            widgets_to_show = set()
+            widgets_to_hide = set()
 
             repaint_count = 0
             with_prob = 0
@@ -1902,7 +1935,62 @@ class PhotoView(QMainWindow):
                     primary_name = os.path.basename(primary)
                 except Exception:
                     primary_name = None
-            for (row, col), label in self.label_refs.items():
+            # OPTIMIZATION: Only refresh visible thumbnails (80-90% reduction in work)
+            # Get viewport visible region to filter labels
+            visible_labels = []
+            if hasattr(self, 'scroll_area') and self.scroll_area and hasattr(self.scroll_area, 'viewport'):
+                try:
+                    from PySide6.QtCore import QRect
+                    viewport = self.scroll_area.viewport()
+                    grid_widget = self.scroll_area.widget()
+                    if grid_widget:
+                        # Get visible region in viewport coordinates
+                        visible_rect = viewport.rect()
+                        # Map to grid widget coordinates
+                        top_left = grid_widget.mapFrom(self.scroll_area.viewport(), visible_rect.topLeft())
+                        bottom_right = grid_widget.mapFrom(self.scroll_area.viewport(), visible_rect.bottomRight())
+                        
+                        # Filter labels that intersect visible region
+                        for (row, col), label in self.label_refs.items():
+                            if label.isVisible():
+                                label_rect = label.geometry()
+                                # Check intersection (with margin for partial visibility)
+                                margin = 50  # Include labels slightly outside viewport
+                                if (label_rect.bottom() + margin >= top_left.y() and 
+                                    label_rect.top() - margin <= bottom_right.y() and
+                                    label_rect.right() + margin >= top_left.x() and 
+                                    label_rect.left() - margin <= bottom_right.x()):
+                                    visible_labels.append(((row, col), label))
+                    else:
+                        # Fallback: use all visible labels
+                        visible_labels = [((r, c), lbl) for (r, c), lbl in self.label_refs.items() if lbl.isVisible()]
+                except Exception:
+                    # Fallback on error: use all visible labels
+                    visible_labels = [((r, c), lbl) for (r, c), lbl in self.label_refs.items() if lbl.isVisible()]
+            else:
+                # Fallback: use all labels if no scroll area
+                visible_labels = list(self.label_refs.items())
+            
+            # OPTIMIZATION: Process group badges for ALL labels (not just visible) when group_info is present
+            # This ensures group badges appear even when scrolling to new thumbnails
+            # Other badge updates (predictions, labels) are limited to visible labels for performance
+            group_info_dict = getattr(state, "group_info", {}) if state else {}
+            process_all_for_groups = bool(group_info_dict)
+            
+            # Process group badges for all labels if group_info is present
+            if process_all_for_groups:
+                all_labels = list(self.label_refs.items())
+                logging.info(f"[badge-refresh] Processing ALL {len(all_labels)} labels for group badges (group_info present)")
+            else:
+                all_labels = visible_labels
+                logging.info(f"[badge-refresh] Processing {len(visible_labels)} visible labels out of {len(self.label_refs)} total")
+            
+            # Initialize counters for debugging
+            badges_updated = 0
+            bboxes_updated = 0
+            groups_updated = 0
+            
+            for (row, col), label in all_labels:
                 try:
                     # Use stored filename - fail fast if not set
                     fname = getattr(label, "_thumb_filename", None)
@@ -1973,7 +2061,7 @@ class PhotoView(QMainWindow):
                     # Update group badge overlay BEFORE the continue check
                     group_badge_overlay = getattr(label, "_group_badge_overlay", None)
                     if group_badge_overlay and state:
-                        group_info_dict = getattr(state, "group_info", {})
+                        # Use group_info_dict from above (already extracted)
                         if group_info_dict:
                             group_info = group_info_dict.get(fname, {})
                             if group_info:
@@ -1983,28 +2071,81 @@ class PhotoView(QMainWindow):
 
                                 # Always show badge if we have group info (to show group_id)
                                 if group_id is not None or is_best or group_size > 1:
-                                    logging.debug(f"[group-badge] Showing badge for {fname}: is_best={is_best}, group_size={group_size}, group_id={group_id}")
+                                    logging.info(f"[group-badge] Showing badge for {fname}: is_best={is_best}, group_size={group_size}, group_id={group_id}")
                                     group_badge_overlay.set_group_info(is_best=is_best, group_size=group_size, group_id=group_id)
                                     label_w = label.width()
                                     label_h = label.height()
                                     group_badge_overlay.setGeometry(0, 0, label_w, label_h)
-                                    group_badge_overlay.show()
+                                    # Batch visibility change (don't call show() directly)
+                                    widgets_to_show.add(group_badge_overlay)
+                                    widgets_to_hide.discard(group_badge_overlay)  # Remove from hide set if it was there
                                     group_badge_overlay.raise_()
+                                    group_badge_overlay.update()  # Force repaint
+                                    groups_updated += 1
                                 else:
-                                    group_badge_overlay.hide()
+                                    widgets_to_hide.add(group_badge_overlay)
+                                    widgets_to_show.discard(group_badge_overlay)
+                            else:
+                                # No group info for this file - hide badge
+                                widgets_to_hide.add(group_badge_overlay)
+                                widgets_to_show.discard(group_badge_overlay)
+                        else:
+                            # No group_info_dict in state - hide badge
+                            widgets_to_hide.add(group_badge_overlay)
+                            widgets_to_show.discard(group_badge_overlay)
+                    elif group_badge_overlay:
+                        # No state available - hide badge
+                        widgets_to_hide.add(group_badge_overlay)
+                        widgets_to_show.discard(group_badge_overlay)
 
-                    if not (prob_changed or label_changed or objects_changed or is_first_load or needs_initial_display or needs_badge_paint):
-                        continue  # Skip repaint if nothing changed
+                    # Skip pixmap repaint if nothing changed (but still update overlays if needed)
+                    needs_pixmap_repaint = (prob_changed or label_changed or objects_changed or is_first_load or 
+                                           needs_initial_display or needs_badge_paint)
+                    
+                    # Always update badge/bbox overlays (widgets) if we have a label or prediction
+                    # This ensures badges appear even when processing all labels for groups
+                    # Update badge overlay widget for labeled images, or predicted badge for unlabeled
+                    # Verify filename matches - fail fast on mismatch
+                    label_filename = getattr(label, "_thumb_filename", None)
+                    if label_filename != fname:
+                        raise ValueError(f"Filename mismatch in _refresh_thumbnail_badges badge: label._thumb_filename={label_filename}, state fname={fname}")
 
-                    # PERFORMANCE: Use getattr with default (already optimized, no change needed)
-                    # Use base_pixmap if available (loaded thumbnail), else use current pixmap
-                    source_pixmap = getattr(label, "base_pixmap", None) or label.pixmap()
-
-                    if source_pixmap and not source_pixmap.isNull():
-                        pixmap_copy = source_pixmap.copy()
-
-                        # Paint bboxes if available (use label's stored thumb dims if present)
-                        if objects:
+                    badge_overlay = getattr(label, "_badge_overlay", None)
+                    if badge_overlay:
+                        if current_label:
+                            is_auto = self._is_auto_labeled(fname)
+                            source = "auto" if is_auto else "manual"
+                            # Always show probability score, even for manual labels (but skip if NaN)
+                            prob = current_prob if current_prob is not None and current_prob == current_prob else None
+                            badge_overlay.set_badge(current_label, source, prob)
+                            # Position overlay to match label size (top-left corner)
+                            label_w = label.width() or self.thumb_size
+                            label_h = label.height() or self.thumb_size
+                            badge_overlay.setGeometry(0, 0, label_w, label_h)
+                            # Batch visibility change - always add to show set
+                            widgets_to_show.add(badge_overlay)
+                            widgets_to_hide.discard(badge_overlay)
+                            badge_overlay.raise_()
+                            badges_updated += 1
+                        elif current_prob is not None and current_prob == current_prob:  # not None and not NaN
+                            # Show predicted label for unlabeled images if we have a probability
+                            predicted_label = "keep" if current_prob > 0.5 else "trash"
+                            badge_overlay.set_badge(predicted_label, "predicted", current_prob)
+                            label_w = label.width()
+                            label_h = label.height()
+                            badge_overlay.setGeometry(0, 0, label_w, label_h)
+                            # Batch visibility change - always add to show set
+                            widgets_to_show.add(badge_overlay)
+                            widgets_to_hide.discard(badge_overlay)
+                            badge_overlay.raise_()
+                            badges_updated += 1
+                        else:
+                            widgets_to_hide.add(badge_overlay)
+                            widgets_to_show.discard(badge_overlay)
+                    
+                    # Always update bbox overlays if we have objects (similar to badge overlays)
+                    # Update bbox overlay if needed
+                    if objects:
                             thumb_w = getattr(label, "_thumb_width", self.thumb_size)
                             thumb_h = getattr(label, "_thumb_height", self.thumb_size)
                             offset_x = getattr(label, "_thumb_offset_x", 0)
@@ -2039,51 +2180,31 @@ class PhotoView(QMainWindow):
                                     label_w = label.width()
                                     label_h = label.height()
                                     bbox_overlay.setGeometry(0, 0, label_w, label_h)
-                                    bbox_overlay.show()
+                                    # Batch visibility change - only show if not already visible
+                                    if not bbox_overlay.isVisible():
+                                        widgets_to_show.add(bbox_overlay)
+                                    widgets_to_hide.discard(bbox_overlay)
                                     bbox_overlay.raise_()
-                                    logging.info(f"[BBOX-WIDGET] Updated overlay for {fname}: {len(objects)} objects with bboxes, label={label_w}x{label_h}, widget visible={bbox_overlay.isVisible()}")
+                                    bboxes_updated += 1
+                                    logging.debug(f"[BBOX-WIDGET] Updated overlay for {fname}: {len(objects)} objects with bboxes, label={label_w}x{label_h}, widget visible={bbox_overlay.isVisible()}")
                                 except Exception as e:
                                     logging.exception(f"[BBOX-WIDGET] Failed to update overlay for {fname}: {e}")
                             elif bbox_overlay:
                                 # Hide if no bboxes
-                                bbox_overlay.hide()
+                                widgets_to_hide.add(bbox_overlay)
+                                widgets_to_show.discard(bbox_overlay)
                                 bbox_overlay.set_detections([], original_image_size=None)
                                 if objects:
                                     logging.info(f"[BBOX-WIDGET] Hiding overlay for {fname}: {len(objects)} objects but no bbox data")
-                            # Keep pixmap painting as fallback for compatibility
-                            # pixmap_copy = self._paint_bboxes(pixmap_copy, objects, offset_x, offset_y, thumb_w, thumb_h)
 
-                        # Update badge overlay widget for labeled images, or predicted badge for unlabeled
-                        # Verify filename matches - fail fast on mismatch
-                        label_filename = getattr(label, "_thumb_filename", None)
-                        if label_filename != fname:
-                            raise ValueError(f"Filename mismatch in _refresh_thumbnail_badges badge: label._thumb_filename={label_filename}, state fname={fname}")
+                    # Only repaint pixmap if something actually changed (not just for group processing)
+                    if needs_pixmap_repaint:
+                        # PERFORMANCE: Use getattr with default (already optimized, no change needed)
+                        # Use base_pixmap if available (loaded thumbnail), else use current pixmap
+                        source_pixmap = getattr(label, "base_pixmap", None) or label.pixmap()
 
-                        badge_overlay = getattr(label, "_badge_overlay", None)
-                        if badge_overlay:
-                            if current_label:
-                                is_auto = self._is_auto_labeled(fname)
-                                source = "auto" if is_auto else "manual"
-                                # Always show probability score, even for manual labels (but skip if NaN)
-                                prob = current_prob if current_prob is not None and current_prob == current_prob else None
-                                badge_overlay.set_badge(current_label, source, prob)
-                                # Position overlay to match label size (top-left corner)
-                                label_w = label.width()
-                                label_h = label.height()
-                                badge_overlay.setGeometry(0, 0, label_w, label_h)
-                                badge_overlay.show()
-                                badge_overlay.raise_()
-                            elif current_prob is not None and current_prob == current_prob:  # not None and not NaN
-                                # Show predicted label for unlabeled images if we have a probability
-                                predicted_label = "keep" if current_prob > 0.5 else "trash"
-                                badge_overlay.set_badge(predicted_label, "predicted", current_prob)
-                                label_w = label.width()
-                                label_h = label.height()
-                                badge_overlay.setGeometry(0, 0, label_w, label_h)
-                                badge_overlay.show()
-                                badge_overlay.raise_()
-                            else:
-                                badge_overlay.hide()
+                        if source_pixmap and not source_pixmap.isNull():
+                            pixmap_copy = source_pixmap.copy()
 
                         # Group badge overlay is updated above (before the continue check)
                         # This ensures badges are always updated even if predictions haven't changed
@@ -2101,9 +2222,30 @@ class PhotoView(QMainWindow):
                 except Exception:
                     logging.exception(f"Failed to refresh thumbnail badge for label at ({row}, {col})")
 
+            # OPTIMIZATION: Apply all visibility changes in one batch to reduce Qt overhead
+            # Hide widgets first (faster), then show (triggers repaint)
+            for widget in widgets_to_hide:
+                if widget.isVisible():
+                    widget.hide()
+            for widget in widgets_to_show:
+                if not widget.isVisible():
+                    # Verify widget has valid geometry before showing
+                    if widget.width() <= 0 or widget.height() <= 0:
+                        parent = widget.parent()
+                        if parent:
+                            widget.setGeometry(0, 0, parent.width(), parent.height())
+                            logging.debug(f"[badge-refresh] Fixed geometry for {type(widget).__name__}: {widget.width()}x{widget.height()}")
+                    widget.show()
+                    widget.raise_()  # Ensure widget is on top after showing
+                    # Verify widget is actually visible
+                    if not widget.isVisible():
+                        parent = widget.parent()
+                        parent_visible = parent.isVisible() if parent else False
+                        logging.warning(f"[badge-refresh] Widget {type(widget).__name__} failed to show (parent visible: {parent_visible}, geometry: {widget.width()}x{widget.height()})")
+            
             t1 = time.perf_counter()
-            if repaint_count > 0:
-                logging.debug(f"[badge-refresh] Repainted {repaint_count}/{len(self.label_refs)} thumbnails")
+            if repaint_count > 0 or widgets_to_show or widgets_to_hide:
+                logging.info(f"[badge-refresh] Repainted {repaint_count}/{len(self.label_refs)} thumbnails, showing {len(widgets_to_show)} widgets (badges: {badges_updated}, bboxes: {bboxes_updated}, groups: {groups_updated}), hiding {len(widgets_to_hide)} widgets")
         except Exception:
             logging.exception("Failed in _refresh_thumbnail_badges")
             raise  # Fail fast - badge refresh errors should be visible
@@ -2210,7 +2352,8 @@ class PhotoView(QMainWindow):
                                     label_w = label.width()
                                     label_h = label.height()
                                     bbox_overlay.setGeometry(0, 0, label_w, label_h)
-                                    bbox_overlay.show()
+                                    # OPTIMIZATION: Batch visibility change (don't call show() directly)
+                                    # Visibility will be handled by badge refresh batching
                                     bbox_overlay.raise_()
                                     logging.info(f"[BBOX-WIDGET] Updated overlay for {fname}: {len(filtered_objects)} objects with bboxes, label={label_w}x{label_h}, widget visible={bbox_overlay.isVisible()}")
                                 except Exception as e:
@@ -2255,7 +2398,7 @@ class PhotoView(QMainWindow):
                             label_w = label.width()
                             label_h = label.height()
                             badge_overlay.setGeometry(0, 0, label_w, label_h)
-                            badge_overlay.show()
+                            # OPTIMIZATION: Don't call show() directly - let badge refresh handle visibility
                             badge_overlay.raise_()
                             label._last_label_state = current_label
                             label._last_prediction_prob = prob
@@ -2268,7 +2411,7 @@ class PhotoView(QMainWindow):
                             label_w = label.width()
                             label_h = label.height()
                             badge_overlay.setGeometry(0, 0, label_w, label_h)
-                            badge_overlay.show()
+                            # OPTIMIZATION: Don't call show() directly - let badge refresh handle visibility
                             badge_overlay.raise_()
                             label._last_label_state = None
                             label._last_prediction_prob = prob
@@ -3223,6 +3366,8 @@ class PhotoView(QMainWindow):
             best_count = sum(1 for g in group_info.values() if g.get("is_group_best", False))
             multi_photo_groups = sum(1 for g in group_info.values() if g.get("group_size", 1) > 1)
             logging.info(f"[view] Browser state updated: {len(group_info)} photos with group_info, {group_count} groups, {best_count} best picks, {multi_photo_groups} photos in multi-photo groups")
+            # Trigger badge refresh to show group badges when group_info is available
+            self._refresh_thumbnail_badges()
         pred_probs = getattr(state, "predicted_probabilities", {})
         pred_labels = getattr(state, "predicted_labels", {})
         detected_objects = getattr(state, "detected_objects", {})
@@ -3467,8 +3612,13 @@ class PhotoView(QMainWindow):
 
     def eventFilter(self, obj, event):
         # PERFORMANCE: Early return for unhandled events to avoid expensive checks
-        # Cache event type to avoid repeated calls (222k calls -> significant savings)
+        # Cache event type to avoid repeated calls (158k calls -> significant savings)
         event_type = event.type()
+        
+        # OPTIMIZATION: Fast path - return False immediately for unhandled event types
+        # Most events are not handled by this filter, so early return saves significant time
+        if event_type not in (QEvent.Type.Resize, QEvent.Type.Enter, QEvent.Type.Leave, QEvent.Type.ContextMenu):
+            return False
 
         # Handle resize events on scroll area viewport
         if obj == self.scroll_area.viewport() and event_type == QEvent.Type.Resize:
@@ -3484,7 +3634,7 @@ class PhotoView(QMainWindow):
             return False
 
         # PERFORMANCE: Only check for thumbnail events if object has _thumb_filename attribute
-        # This avoids hasattr() calls for most events (majority of 222k calls)
+        # This avoids hasattr() calls for most events (majority of 158k calls)
         if not hasattr(obj, "_thumb_filename"):
             return super().eventFilter(obj, event)
 

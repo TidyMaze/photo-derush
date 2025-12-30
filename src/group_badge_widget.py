@@ -37,22 +37,26 @@ class GroupBadgeWidget(QWidget):
         if self._updating:
             return
 
-        if self.is_best == is_best and self.group_size == group_size and self.group_id == group_id:
-            return
-
+        # Always update to ensure visibility (don't skip if values are the same)
+        # This ensures badges appear even if they were hidden before
         self._updating = True
         try:
             self.is_best = is_best
             self.group_size = group_size
             self.group_id = group_id
-            self.update()
+            self.update()  # Trigger repaint
         finally:
             self._updating = False
 
     def paintEvent(self, event):
         """Draw group badges at display resolution."""
         # Show badges if we have group info (group_id, BEST, or ×N)
-        if self.group_id is None and not (self.is_best and self.group_size >= 2) and self.group_size <= 1:
+        # Show if: group_id exists, OR (is_best AND group_size >= 2), OR group_size > 1
+        has_group_id = self.group_id is not None
+        has_best_badge = self.is_best and self.group_size >= 2
+        has_size_badge = self.group_size > 1
+        
+        if not (has_group_id or has_best_badge or has_size_badge):
             return  # Nothing to show
 
         painter = QPainter(self)

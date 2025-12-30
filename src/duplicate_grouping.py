@@ -13,6 +13,8 @@ import pickle
 import time
 from typing import Callable
 
+from .cache_config import is_cache_disabled
+
 try:
     import imagehash
     from PIL import Image
@@ -39,6 +41,8 @@ def _load_cached_groups(filenames: list[str], image_dir: str, cache_path: str) -
     1. Exact filename match
     2. File modification times (mtimes) match
     """
+    if is_cache_disabled():
+        return None
     if not os.path.exists(cache_path):
         return None
     try:
@@ -75,6 +79,8 @@ def _load_cached_groups(filenames: list[str], image_dir: str, cache_path: str) -
 
 def _save_cached_groups(filenames: list[str], groups: list[int], image_dir: str, cache_path: str):
     """Save groups to cache along with filenames and mtimes."""
+    if is_cache_disabled():
+        return
     try:
         # Collect mtimes for all files
         mtimes: dict[str, float] = {}
@@ -161,32 +167,51 @@ def create_duplicate_groups(
             filename_to_hash[fname] = phash_str
     
     # Second pass: assign groups (check similarity)
+    # OPTIMIZATION: Cache hash objects to avoid repeated hex_to_hash() calls
+    # Use separate dicts for ImageHash objects vs strings to avoid isinstance checks
+    filename_to_hash_obj: dict[str, imagehash.ImageHash | str] = {}
+    hash_obj_to_group: dict[imagehash.ImageHash | str, int] = {}
+    # Separate dict for ImageHash objects only (faster iteration, no isinstance checks)
+    imagehash_to_group: dict[imagehash.ImageHash, int] = {}
+    
     for fname, phash_str in filename_to_hash.items():
         if phash_str.startswith("fallback_"):
             # Fallback: assign unique group or use existing
-            if phash_str not in hash_to_group:
-                hash_to_group[phash_str] = group_id
+            if phash_str not in hash_obj_to_group:
+                hash_obj_to_group[phash_str] = group_id
                 group_id += 1
+            filename_to_hash_obj[fname] = phash_str
             continue
         
-        # Find existing group with similar hash
-        assigned = False
+        # Convert to hash object once and cache it
         phash = imagehash.hex_to_hash(phash_str)
-        for existing_hash_str, gid in hash_to_group.items():
-            if existing_hash_str.startswith("fallback_"):
-                continue
-            existing_hash = imagehash.hex_to_hash(existing_hash_str)
-            if phash - existing_hash <= hamming_threshold:
-                hash_to_group[phash_str] = gid
+        filename_to_hash_obj[fname] = phash
+        
+        # OPTIMIZATION: Compare only with ImageHash objects (no isinstance checks in hot loop)
+        # Use separate dict for faster iteration
+        assigned = False
+        for existing_hash_obj, gid in imagehash_to_group.items():
+            # Direct comparison without isinstance check (already filtered)
+            if phash - existing_hash_obj <= hamming_threshold:
+                hash_obj_to_group[phash] = gid
+                imagehash_to_group[phash] = gid  # Keep in sync
                 assigned = True
                 break
         
         if not assigned:
-            hash_to_group[phash_str] = group_id
+            hash_obj_to_group[phash] = group_id
+            imagehash_to_group[phash] = group_id  # Keep in sync
             group_id += 1
     
-    # Map filenames to group IDs
-    result = [hash_to_group.get(filename_to_hash[fname], group_id) for fname in filenames]
+    # Map filenames to group IDs (use cached hash objects)
+    result = []
+    for fname in filenames:
+        hash_obj = filename_to_hash_obj.get(fname)
+        if hash_obj is None:
+            result.append(group_id)
+            group_id += 1
+        else:
+            result.append(hash_obj_to_group.get(hash_obj, group_id))
     
     elapsed = time.perf_counter() - start_time
     logging.info(f"[duplicate_grouping] Created {len(set(result))} groups from {len(filenames)} images in {elapsed:.2f}s")

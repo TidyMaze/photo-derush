@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PIL import Image, ImageStat
 
+from src.cache_config import is_cache_disabled
 from src.feature_data import ImagePreprocessResult
 
 if TYPE_CHECKING:
@@ -131,6 +132,8 @@ def load_feature_cache() -> dict:
 
     Returns: {path: [features]} dict or {} if empty/invalid
     """
+    if is_cache_disabled():
+        return {}
     if not os.path.exists(FEATURE_CACHE_PATH):
         return {}
 
@@ -206,6 +209,8 @@ def load_feature_cache() -> dict:
 
 def save_feature_cache(cache: dict):
     """Save feature cache with metadata header for version detection."""
+    if is_cache_disabled():
+        return
     try:
         # Add metadata header for v2 format
         data = {
@@ -1218,7 +1223,7 @@ def extract_features(path: str) -> list[float] | None:
         t1 = time.perf_counter()
         if len(feats) != FEATURE_COUNT:
             logging.warning(f"[features] Length mismatch {len(feats)} expected {FEATURE_COUNT} path={path}")
-        if feature_cache is not None:
+        if not is_cache_disabled() and feature_cache is not None:
             feature_cache[ap] = feats
             # Save cache immediately after each extraction to prevent data loss
             try:
@@ -1233,7 +1238,18 @@ def extract_features(path: str) -> list[float] | None:
 
 
 def _extract_single_feature(path: str):
+    """Extract features for a single image. Called in multiprocessing workers."""
     import time
+    import os
+    # Profile worker if profiling is enabled
+    worker_profiler = None
+    if os.environ.get("PROFILING") == "1":
+        try:
+            from src.profiling_utils import init_worker_profiler, dump_worker_profile
+            worker_profiler = init_worker_profiler()
+        except Exception as e:
+            logging.debug(f"[PROFILING] Failed to init worker profiler: {e}")
+    
     t0 = time.perf_counter()
     ap = os.path.abspath(path)
     basename = os.path.basename(path)
@@ -1253,6 +1269,17 @@ def _extract_single_feature(path: str):
         # Log slow extractions (>1s) at INFO level, others at DEBUG
         if total_time > 1.0:
             logging.info(f"[features] SLOW extraction for {basename}: prep={prep_time*1000:.1f}ms, extract={extract_time*1000:.1f}ms, total={total_time:.2f}s")
+        
+        # Dump worker profile if profiling (only on last call to avoid spam)
+        if worker_profiler is not None:
+            try:
+                from src.profiling_utils import dump_worker_profile
+                # Only dump on occasional calls to avoid too many files
+                import random
+                if random.random() < 0.01:  # 1% chance
+                    dump_worker_profile(worker_profiler)
+            except Exception:
+                pass
         else:
             logging.debug(f"[features] Extracted {len(feats)} features for {basename}: prep={prep_time*1000:.1f}ms, extract={extract_time*1000:.1f}ms, total={total_time*1000:.1f}ms")
         return (ap, feats)
@@ -1368,7 +1395,13 @@ def _parallel_extract(paths: list[str], progress_callback, hits: int, total: int
                 _active_pool = None
             
             # Create new pool (ensures max 4 workers total across all extractions)
-            pool = Pool(processes=workers)
+            # OPTIMIZATION: Add profiling support for multiprocessing workers
+            initializer = None
+            if os.environ.get("PROFILING") == "1":
+                from src.profiling_utils import init_worker_profiler
+                initializer = init_worker_profiler
+            
+            pool = Pool(processes=workers, initializer=initializer)
             _active_pool = pool
             logging.info(f"[features] Created multiprocessing pool with {workers} workers (PID={os.getpid()})")
             
@@ -1435,7 +1468,7 @@ def batch_extract_features(paths: list[str], progress_callback=None) -> list[lis
     # Load feature cache
     cache_load_start = time.perf_counter()
     if feature_cache is None:
-        feature_cache = load_feature_cache()
+        feature_cache = load_feature_cache() if not is_cache_disabled() else {}
     cache_load_time = time.perf_counter() - cache_load_start
     logging.info(f"[features] Feature cache loaded in {cache_load_time*1000:.1f}ms: {len(feature_cache) if feature_cache else 0} entries")
 
@@ -1481,7 +1514,8 @@ def batch_extract_features(paths: list[str], progress_callback=None) -> list[lis
         for (apath, feats), orig_idx in zip(extracted, needed_idx):
             if feats:
                 results[orig_idx] = feats
-                feature_cache[apath] = feats
+                if not is_cache_disabled():
+                    feature_cache[apath] = feats
                 extracted_count += 1
                 # Save cache immediately after each extraction to prevent data loss
                 try:
@@ -1506,6 +1540,10 @@ def batch_extract_features(paths: list[str], progress_callback=None) -> list[lis
 def safe_initialize_feature_cache(preserve_empty: bool = True) -> dict:
     global feature_cache
     if feature_cache is not None:
+        return feature_cache
+
+    if is_cache_disabled():
+        feature_cache = {}
         return feature_cache
 
     if not os.path.exists(FEATURE_CACHE_PATH):

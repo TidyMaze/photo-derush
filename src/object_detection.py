@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import joblib
 from PIL import Image
 
+from src.cache_config import is_cache_disabled
 from src.constants import DETECTION_BACKEND, MIN_CONFIDENCE_KEEP_FRCNN, MIN_CONFIDENCE_KEEP_YOLO, YOLO_MODEL_NAME
 from src.detection_config import DetectionConfig
 
@@ -506,9 +507,20 @@ def _load_model(device: str = "auto"):
         try:
             from ultralytics import YOLO
 
+            # CRITICAL: Cache YOLO instance globally to avoid reloading weights
+            # The YOLO() constructor loads weights from disk, which is expensive
+            global _cached_yolo_instance
+            if '_cached_yolo_instance' not in globals():
+                _cached_yolo_instance = None
+            
+            if _cached_yolo_instance is None:
+                logging.info(f"[object_detection] Loading YOLO model weights (one-time, ~3-5s)")
+                _cached_yolo_instance = YOLO(YOLO_MODEL_NAME)
+                logging.info(f"[object_detection] YOLO model loaded and cached")
+
             class YOLOv8Wrapper:
-                def __init__(self, model_path_or_name="yolov8n"):
-                    self._yolo = YOLO(model_path_or_name)
+                def __init__(self, yolo_instance):
+                    self._yolo = yolo_instance
 
                 def eval(self):
                     return self
@@ -567,7 +579,7 @@ def _load_model(device: str = "auto"):
                     ]
 
             weights = None
-            model = YOLOv8Wrapper(YOLO_MODEL_NAME)
+            model = YOLOv8Wrapper(_cached_yolo_instance)
         except Exception as e:
             raise RuntimeError("Requested DETECTION_BACKEND=yolov8 but ultralytics is not available") from e
 
@@ -782,6 +794,8 @@ def get_cache_path() -> str:
 
 def load_object_cache() -> Dict[str, List[Dict]]:
     """Load cached object detections."""
+    if is_cache_disabled():
+        return {}
     cache_path = get_cache_path()
     if os.path.exists(cache_path):
         try:
@@ -801,6 +815,8 @@ def load_object_cache() -> Dict[str, List[Dict]]:
 
 def save_object_cache(detections: Dict[str, List[Dict]]):
     """Save object detections to cache."""
+    if is_cache_disabled():
+        return
     cache_path = get_cache_path()
     try:
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
@@ -846,15 +862,17 @@ def get_objects_for_image(
     basename = os.path.basename(image_path)
 
     # Try cache first - use module-level cache if available and still valid
-    cache_path = get_cache_path()
-    cache_mtime = os.path.getmtime(cache_path) if os.path.exists(cache_path) else 0
-    
-    if _object_cache_cache is None or cache_mtime != _object_cache_mtime:
-        cache = load_object_cache()
-        _object_cache_cache = cache
-        _object_cache_mtime = cache_mtime
-    else:
-        cache = _object_cache_cache
+    cache = {}
+    if not is_cache_disabled():
+        cache_path = get_cache_path()
+        cache_mtime = os.path.getmtime(cache_path) if os.path.exists(cache_path) else 0
+        
+        if _object_cache_cache is None or cache_mtime != _object_cache_mtime:
+            cache = load_object_cache()
+            _object_cache_cache = cache
+            _object_cache_mtime = cache_mtime
+        else:
+            cache = _object_cache_cache
     
     if basename in cache:
         detections = cache[basename]
@@ -878,11 +896,13 @@ def get_objects_for_image(
     detections = detect_objects(image_path, config)
 
     # Update cache
-    cache[basename] = detections
-    save_object_cache(cache)
-    # Update module-level cache to reflect new detection (don't invalidate - keep in memory)
-    _object_cache_cache = cache
-    _object_cache_mtime = os.path.getmtime(cache_path) if os.path.exists(cache_path) else 0
+    if not is_cache_disabled():
+        cache[basename] = detections
+        save_object_cache(cache)
+        # Update module-level cache to reflect new detection (don't invalidate - keep in memory)
+        cache_path = get_cache_path()
+        _object_cache_cache = cache
+        _object_cache_mtime = os.path.getmtime(cache_path) if os.path.exists(cache_path) else 0
 
     # Return unique class names with confidence scores, sorted by confidence
     detections.sort(key=lambda x: x["confidence"], reverse=True)
@@ -916,15 +936,17 @@ def get_objects_for_images(
     results = {}
 
     # Load existing cache - use module-level cache if available and still valid
-    cache_path = get_cache_path()
-    cache_mtime = os.path.getmtime(cache_path) if os.path.exists(cache_path) else 0
-    
-    if _object_cache_cache is None or cache_mtime != _object_cache_mtime:
-        cache = load_object_cache()
-        _object_cache_cache = cache
-        _object_cache_mtime = cache_mtime
-    else:
-        cache = _object_cache_cache
+    cache = {}
+    if not is_cache_disabled():
+        cache_path = get_cache_path()
+        cache_mtime = os.path.getmtime(cache_path) if os.path.exists(cache_path) else 0
+        
+        if _object_cache_cache is None or cache_mtime != _object_cache_mtime:
+            cache = load_object_cache()
+            _object_cache_cache = cache
+            _object_cache_mtime = cache_mtime
+        else:
+            cache = _object_cache_cache
 
     # Check cache hits
     to_process = []
@@ -954,7 +976,8 @@ def get_objects_for_images(
 
             basename = os.path.basename(path)
             detections = detect_objects(path, config)
-            cache[basename] = detections
+            if not is_cache_disabled():
+                cache[basename] = detections
 
             # Save cache immediately after each detection to prevent data loss
             try:
@@ -972,9 +995,10 @@ def get_objects_for_images(
                     seen_classes.add(d["class"])
             results[basename] = unique_classes
         # Update module-level cache to reflect new detections (don't invalidate - keep in memory)
-        cache_path = get_cache_path()
-        _object_cache_cache = cache
-        _object_cache_mtime = os.path.getmtime(cache_path) if os.path.exists(cache_path) else 0
+        if not is_cache_disabled():
+            cache_path = get_cache_path()
+            _object_cache_cache = cache
+            _object_cache_mtime = os.path.getmtime(cache_path) if os.path.exists(cache_path) else 0
 
     return results
 

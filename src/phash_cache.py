@@ -6,6 +6,7 @@ import logging
 import os
 
 from .cache import CACHE_DIR
+from .cache_config import is_cache_disabled
 
 
 def _phash_cache_key(path: str) -> str:
@@ -78,6 +79,8 @@ class PerceptualHashCache:
 
     def get_hash(self, path: str) -> str | None:
         """Get cached hash for a file, or None if not cached or invalid."""
+        if is_cache_disabled():
+            return None
         self._load_cache()
         cache_key = _phash_cache_key(path)
         result = self._cache.get(cache_key)
@@ -89,6 +92,8 @@ class PerceptualHashCache:
 
     def set_hash(self, path: str, hash_string: str):
         """Cache a hash for a file."""
+        if is_cache_disabled():
+            return
         self._load_cache()  # Ensure cache is loaded before adding
         cache_key = _phash_cache_key(path)
         old_size = len(self._cache)
@@ -100,6 +105,8 @@ class PerceptualHashCache:
 
     def save(self):
         """Explicitly save cache to disk."""
+        if is_cache_disabled():
+            return
         self._save_cache()
 
     def clear(self):

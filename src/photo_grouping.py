@@ -173,31 +173,49 @@ def group_near_duplicates(
             G.add_node(fname)
 
     # Add edges for similar hashes
-    # Convert hash strings to integers for Hamming distance calculation
+    # OPTIMIZATION: Cache hash objects to avoid repeated hex_to_hash() calls (76k calls -> 0)
     try:
         import imagehash
 
+        # Convert hash strings to hash objects once and cache them
+        filename_to_hash_obj: dict[str, imagehash.ImageHash | None] = {}
+        for fname, h_str in filename_to_hash.items():
+            if h_str.startswith("error_"):
+                filename_to_hash_obj[fname] = None
+            else:
+                try:
+                    filename_to_hash_obj[fname] = imagehash.hex_to_hash(h_str)
+                except Exception:
+                    filename_to_hash_obj[fname] = None
+
+        # Now compare cached hash objects directly (no hex_to_hash calls)
+        # OPTIMIZATION: Add progress reporting and early termination for large datasets
+        total_comparisons = len(filenames) * (len(filenames) - 1) // 2
+        comparisons_done = 0
+        last_progress_log = 0
+        
         for i, fname1 in enumerate(filenames):
-            h1_str = filename_to_hash[fname1]
-            if h1_str.startswith("error_"):
+            h1 = filename_to_hash_obj.get(fname1)
+            if h1 is None:
                 continue
 
-            try:
-                h1 = imagehash.hex_to_hash(h1_str)
-            except Exception:
-                continue
+            # Progress reporting for large datasets
+            if len(filenames) > 200 and (i + 1) % 50 == 0:
+                comparisons_done += 50 * (len(filenames) - i - 1)
+                progress_pct = (comparisons_done / total_comparisons * 100) if total_comparisons > 0 else 0
+                if progress_pct - last_progress_log >= 10:  # Log every 10%
+                    logging.info(f"[photo_grouping] Comparison progress: {progress_pct:.1f}% ({i+1}/{len(filenames)} photos)")
+                    last_progress_log = progress_pct
+                    if progress_reporter:
+                        progress_reporter.detail(f"Comparing hashes: {i+1}/{len(filenames)}...")
 
             for fname2 in filenames[i + 1 :]:
-                h2_str = filename_to_hash[fname2]
-                if h2_str.startswith("error_"):
+                h2 = filename_to_hash_obj.get(fname2)
+                if h2 is None:
                     continue
 
-                try:
-                    h2 = imagehash.hex_to_hash(h2_str)
-                    if h1 - h2 <= hamming_threshold:
-                        G.add_edge(fname1, fname2)
-                except Exception:
-                    continue
+                if h1 - h2 <= hamming_threshold:
+                    G.add_edge(fname1, fname2)
     except ImportError:
         # imagehash not available, use string comparison as fallback
         logging.warning("[photo_grouping] imagehash not available, using exact hash matching")

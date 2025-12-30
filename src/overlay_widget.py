@@ -6,6 +6,7 @@ from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import QWidget
 
+from src.cache_config import is_cache_disabled
 from src.constants import BADGE_COLORS, BADGE_ICONS, OVERLAY_CACHE_SIZE
 from src.view_helpers import overlay_state_hash, paint_bboxes
 
@@ -63,7 +64,9 @@ class OverlayWidget(QWidget):
         key = (w, h, round(dpr, 2), state_hash)
 
         # Try cached pixmap first
-        pm = _overlay_cache.get(key)
+        pm = None
+        if not is_cache_disabled():
+            pm = _overlay_cache.get(key)
         if pm is not None:
             qp = QPainter(self)
             qp.drawPixmap(0, 0, pm)
@@ -96,9 +99,10 @@ class OverlayWidget(QWidget):
         p.end()
 
         # Cache temp pixmap (FIFO eviction)
-        _overlay_cache[key] = temp
-        if len(_overlay_cache) > _overlay_cache_max:
-            _overlay_cache.pop(next(iter(_overlay_cache)))
+        if not is_cache_disabled():
+            _overlay_cache[key] = temp
+            if len(_overlay_cache) > _overlay_cache_max:
+                _overlay_cache.pop(next(iter(_overlay_cache)))
 
         # Blit to screen
         qp = QPainter(self)

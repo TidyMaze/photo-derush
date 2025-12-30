@@ -133,6 +133,8 @@ def compute_grouping_for_photos(
     if not filenames:
         return {}
 
+    import time
+    grouping_start_time = time.perf_counter()
     logging.info(f"[grouping_service] Computing grouping for {len(filenames)} photos")
 
     # Step 1: Build PhotoMetadata list
@@ -235,6 +237,23 @@ def compute_grouping_for_photos(
             error_hash = f"error_{filename}"
             # Don't cache errors
             return error_hash
+
+    # OPTIMIZATION: Pre-compute all hashes in parallel for better performance
+    # This helps when cache is cold or partially warm
+    sorted_filenames_for_grouping = [p.filename for p in photos]
+    if len(sorted_filenames_for_grouping) > 50:  # Only parallelize for larger datasets
+        from concurrent.futures import ThreadPoolExecutor
+        import os as os_module
+        
+        def compute_hash_parallel(filename: str) -> tuple[str, str]:
+            """Compute hash for a single file, returns (filename, hash_string)."""
+            return (filename, hash_fn(filename))
+        
+        logging.info(f"[grouping_service] Computing {len(sorted_filenames_for_grouping)} hashes in parallel...")
+        with ThreadPoolExecutor(max_workers=min(4, os_module.cpu_count() or 2)) as executor:
+            # Pre-compute all hashes in parallel
+            list(executor.map(compute_hash_parallel, sorted_filenames_for_grouping))
+        logging.info(f"[grouping_service] Hash computation complete (cache hits: {cache_hits}, misses: {cache_misses})")
 
     # Save cache after all hashes are computed
     hash_cache.save()
@@ -436,6 +455,9 @@ def compute_grouping_for_photos(
 
     final_group_count = len(set(g.get('group_id', 0) for g in result.values() if g.get('group_id') is not None))
     final_best_count = sum(1 for g in result.values() if g.get('is_group_best', False))
-    logging.info(f"[grouping_service] ✅ Completed: {final_group_count} groups, {final_best_count} best picks, {len(result)} total photos")
+    grouping_elapsed = time.perf_counter() - grouping_start_time
+    logging.info(f"[grouping_service] ✅ Completed: {final_group_count} groups, {final_best_count} best picks, {len(result)} total photos in {grouping_elapsed:.2f}s")
+    if grouping_elapsed > 60:
+        logging.warning(f"[grouping_service] ⚠️  Grouping took {grouping_elapsed:.2f}s (exceeds 60s limit)")
     return result
 

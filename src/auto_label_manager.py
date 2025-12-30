@@ -430,11 +430,11 @@ class AutoLabelManager:
                             if self._safe_set_auto_state(path, fname, label):
                                 self.auto_assigned.add(path)
                                 applied_auto += 1
-                                if self.callbacks.on_label_changed:
-                                    try:
-                                        self.callbacks.on_label_changed(fname, label)
-                                    except Exception:
-                                        logging.exception("[auto-label] on_label_changed callback failed for %s", fname)
+                            if self.callbacks.on_label_changed:
+                                try:
+                                    self.callbacks.on_label_changed(fname, label)
+                                except Exception:
+                                    logging.exception("[auto-label] on_label_changed callback failed for %s", fname)
         except Exception as e:
             logging.debug(f"[auto-label] predict_with_progress failed: {e}")
 

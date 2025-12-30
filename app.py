@@ -24,6 +24,7 @@ if not logging.getLogger().hasHandlers():
     logging.basicConfig(level=getattr(logging, _LOG_LEVEL, logging.INFO), format='%(levelname)s:%(name)s:%(message)s')
 
 from src.features import safe_initialize_feature_cache
+from src.timing import log_stats, reset_stats
 from src.view import PhotoView
 from src.viewmodel import PhotoViewModel
 
@@ -74,15 +75,35 @@ def save_last_dir(path):
         logging.warning("Could not save config: %s", e)
 
 def main():
-    # Enable profiling if PROFILING env var is set
-    profiler = None
+    # Non-intrusive profiling: Use external profilers (py-spy, scalene) that attach to process
+    # No code instrumentation needed - just run the app and attach profiler externally
+    # 
+    # Usage examples:
+    #   py-spy:   py-spy record -o /tmp/profile.json --pid $(pgrep -f "python.*app.py") --subprocesses
+    #   scalene:  scalene --profile-all --outfile /tmp/profile.html --pid $(pgrep -f "python.*app.py")
+    #
+    # For internal profiling (if PROFILING=1), enable memory profiling (tracemalloc) and CPU profiling (cProfile)
+    # Note: cProfile has higher overhead but works without root permissions
+    memory_tracer = None
+    cpu_profiler = None
     if os.environ.get("PROFILING") == "1":
-        import cProfile
-        profiler = cProfile.Profile()
-        profiler.enable()
-        logging.info("[PROFILING] Enabled cProfile")
+        # Enable memory profiling (lightweight, non-intrusive)
+        try:
+            import tracemalloc
+            tracemalloc.start()
+            memory_tracer = tracemalloc
+            logging.info("[PROFILING] Enabled tracemalloc for memory profiling (non-intrusive)")
+        except Exception as e:
+            logging.warning(f"[PROFILING] Failed to enable tracemalloc: {e}")
         
-        # Profile dump will be set up after QApplication is created
+        # Enable CPU profiling (higher overhead, but works without root)
+        try:
+            import cProfile
+            cpu_profiler = cProfile.Profile()
+            cpu_profiler.enable()
+            logging.info("[PROFILING] Enabled cProfile for CPU profiling (main thread only)")
+        except Exception as e:
+            logging.warning(f"[PROFILING] Failed to enable cProfile: {e}")
     try:
         # Parse CLI args early so logging can be configured to file if requested
         parser = argparse.ArgumentParser(description='Photo Derush - Qt desktop application')
@@ -106,6 +127,21 @@ def main():
 
         # Initialize feature cache after QApplication to avoid heavy work before GUI ready
         safe_initialize_feature_cache()
+        
+        # OPTIMIZATION: Pre-load YOLOv8 model in background thread to avoid 204s delay on first detection
+        def preload_model():
+            try:
+                from src.object_detection import _load_model
+                logging.info("[OPTIMIZATION] Pre-loading YOLOv8 model in background...")
+                _load_model("auto")
+                logging.info("[OPTIMIZATION] YOLOv8 model pre-loaded successfully")
+            except Exception as e:
+                logging.warning(f"[OPTIMIZATION] Failed to pre-load YOLOv8 model: {e}")
+        
+        # Pre-load model in background thread (non-blocking)
+        import threading
+        model_preload_thread = threading.Thread(target=preload_model, daemon=True)
+        model_preload_thread.start()
 
         # Install SIGINT and SIGTERM handlers for clean shutdown
         def _handle_signal(signum, frame):
@@ -129,20 +165,37 @@ def main():
         timer.timeout.connect(lambda: None)
         timer.start()
         
-        # Setup profiling dump timer if profiling is enabled (after QApplication is created)
-        if profiler:
+        # Log PID for external profiler attachment (non-intrusive)
+        if memory_tracer:
+            pid = os.getpid()
+            logging.info(f"[PROFILING] App PID: {pid} - Attach external profiler with:")
+            logging.info(f"[PROFILING]   py-spy (CPU): py-spy record -o /tmp/app_profile_pyspy.json --pid {pid} --subprocesses --threads --rate 100")
+            logging.info(f"[PROFILING]   Memory: tracemalloc enabled (snapshots in /tmp/app_memory_*.txt)")
+            logging.info(f"[PROFILING]   Or use: ./scripts/profile_app.sh py-spy 60")
+        
+        # Setup memory profiling dump timer if enabled
+        if memory_tracer:
             def dump_profile():
-                if profiler:
-                    try:
-                        profiler.dump_stats("/tmp/app_profile.prof")
-                        logging.info("[PROFILING] Dumped stats to /tmp/app_profile.prof")
-                    except Exception as e:
-                        logging.warning(f"[PROFILING] Failed to dump stats: {e}")
+                try:
+                    snapshot = memory_tracer.take_snapshot()
+                    top_stats = snapshot.statistics('lineno')
+                    
+                    with open("/tmp/app_memory_snapshot.txt", "w") as f:
+                        f.write("===== MEMORY SNAPSHOT =====\n")
+                        f.write(f"Total allocated: {sum(stat.size for stat in top_stats) / 1024 / 1024:.2f} MB\n\n")
+                        f.write("Top 50 memory allocations:\n")
+                        for index, stat in enumerate(top_stats[:50], 1):
+                            f.write(f"{index}. {stat}\n")
+                    
+                    snapshot.dump("/tmp/app_memory_snapshot.pkl")
+                    logging.info("[PROFILING] Dumped memory snapshot to /tmp/app_memory_snapshot.txt")
+                except Exception as e:
+                    logging.warning(f"[PROFILING] Failed to dump memory stats: {e}")
             
             profile_timer = QTimer()
             profile_timer.timeout.connect(dump_profile)
             profile_timer.start(30000)  # Every 30 seconds
-            logging.info("[PROFILING] Profile dump timer started (30s interval)")
+            logging.info("[PROFILING] Memory profile dump timer started (30s interval)")
 
         if qdarktheme is not None:
             try:
@@ -198,14 +251,40 @@ def main():
             pass
         exit_code = app.exec()
         
-        # Save final profile on exit if profiling was enabled
-        if profiler:
+        # Save final memory profile on exit if profiling was enabled
+        # Note: External CPU profilers (py-spy, scalene) handle their own cleanup
+        
+        if memory_tracer:
             try:
-                profiler.disable()
-                profiler.dump_stats("/tmp/app_profile.prof")
-                logging.info(f"[PROFILING] Final profile saved to /tmp/app_profile.prof")
+                snapshot = memory_tracer.take_snapshot()
+                top_stats = snapshot.statistics('lineno')
+                
+                with open("/tmp/app_memory_final.txt", "w") as f:
+                    f.write("===== FINAL MEMORY SNAPSHOT =====\n")
+                    total_mb = sum(stat.size for stat in top_stats) / 1024 / 1024
+                    f.write(f"Total allocated: {total_mb:.2f} MB\n\n")
+                    f.write("Top 100 memory allocations:\n")
+                    for index, stat in enumerate(top_stats[:100], 1):
+                        f.write(f"{index}. {stat}\n")
+                
+                snapshot.dump("/tmp/app_memory_final.pkl")
+                logging.info(f"[PROFILING] Final memory snapshot saved ({total_mb:.2f} MB total)")
             except Exception as e:
-                logging.warning(f"[PROFILING] Failed to save final profile: {e}")
+                logging.warning(f"[PROFILING] Failed to save final memory snapshot: {e}")
+        
+        # Log timing statistics
+        log_stats()
+        
+        # Save CPU profile if enabled
+        if cpu_profiler:
+            try:
+                profile_path = "/tmp/app_profile.prof"
+                cpu_profiler.disable()
+                cpu_profiler.dump_stats(profile_path)
+                logging.info(f"[PROFILING] CPU profile saved to {profile_path}")
+            except Exception as e:
+                logging.warning(f"[PROFILING] Failed to save CPU profile: {e}")
+        
         logging.info("Qt event loop exited. Performing final cleanup.")
         sys.exit(exit_code)
     except Exception as e:

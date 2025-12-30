@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 
@@ -27,6 +27,19 @@ class BadgeOverlayWidget(QWidget):
         self.label_source = ""  # "manual", "auto", or "predicted"
         self.probability = None
         self._updating = False  # Guard against recursive updates
+        self._cached_pixmap = None  # Cache rendered badge to avoid repainting
+        self._cache_key = None  # Key for cache invalidation
+        # Ensure widget fills parent when parent is resized
+        if parent:
+            # Use thumb_size if parent not yet sized (labels are setFixedSize after creation)
+            initial_size = parent.width() or 200
+            self.setGeometry(0, 0, initial_size, initial_size)
+    
+    def resizeEvent(self, event):
+        """Resize widget to match parent size."""
+        super().resizeEvent(event)
+        # Don't call setGeometry here - it's handled by badge refresh when needed
+        # This just ensures widget updates its cached pixmap when resized
     
     def set_badge(self, label_text="", label_source="", probability=None):
         """Set the badge to display.
@@ -51,18 +64,27 @@ class BadgeOverlayWidget(QWidget):
             self.label_text = new_label_text
             self.label_source = new_label_source
             self.probability = probability
+            # Invalidate cache when badge data changes
+            self._cached_pixmap = None
+            self._cache_key = None
             self.update()
         finally:
             self._updating = False
     
     def paintEvent(self, event):
         """Draw badge at display resolution."""
+        import logging
         if not self.label_text:
+            logging.debug(f"[BADGE-WIDGET] paintEvent: no label_text, skipping paint")
             return
+        logging.debug(f"[BADGE-WIDGET] paintEvent: label_text={self.label_text}, size={self.width()}x{self.height()}, visible={self.isVisible()}")
         
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        # Badge dimensions in logical pixels (will be scaled by DPR automatically by Qt)
+        # Badge spans 100% width of widget, positioned at bottom
+        widget_w = self.width()
+        widget_h = self.height()
+        if widget_w <= 0 or widget_h <= 0:
+            return
         
         # Get device pixel ratio for sharp rendering
         # Use primary screen to avoid potential recursion from self.screen()
@@ -73,12 +95,21 @@ class BadgeOverlayWidget(QWidget):
         except Exception:
             dpr = 1.0
         
-        # Badge dimensions in logical pixels (will be scaled by DPR automatically by Qt)
-        # Badge spans 100% width of widget, positioned at bottom
-        widget_w = self.width()
-        widget_h = self.height()
-        if widget_w <= 0 or widget_h <= 0:
+        # OPTIMIZATION: Cache rendered badge pixmap to avoid expensive repaints
+        # Cache key includes widget size, DPR, and badge content
+        cache_key = (widget_w, widget_h, round(dpr, 2), self.label_text, self.label_source, self.probability)
+        if self._cached_pixmap is not None and self._cache_key == cache_key:
+            # Use cached pixmap
+            painter = QPainter(self)
+            painter.drawPixmap(0, 0, self._cached_pixmap)
             return
+        
+        # Render badge to pixmap
+        pixmap = QPixmap(widget_w, widget_h)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         
         # Badge spans full width, height based on font size
         badge_w_logical = widget_w
@@ -90,18 +121,6 @@ class BadgeOverlayWidget(QWidget):
         
         # Determine badge content
         is_keep = self.label_text.lower() == "keep"
-        # Show prediction probability if available (even for manual/auto labels)
-        # This allows users to see model confidence even after manual override
-        # Only show 100% if no probability is available (manual label without prediction)
-        if self.probability is not None and self.probability == self.probability:  # Check for NaN
-            # Show probability aligned with the label (keep or trash)
-            pct = self.probability * 100 if is_keep else (1 - self.probability) * 100
-        elif self.label_source in ("manual", "auto"):
-            # Manual/auto label but no prediction available - show 100% confidence in the label
-            pct = 100.0
-        else:
-            # Predicted label but no probability (shouldn't happen, but handle gracefully)
-            pct = 0.0
         letter = "K" if is_keep else "T"
         
         # Emoji indicator for source
@@ -111,7 +130,15 @@ class BadgeOverlayWidget(QWidget):
         elif self.label_source == "auto":
             emoji = "🤖 "
         
-        badge_text = f"{emoji}{pct:.1f}% {letter}"
+        # Only show percentage if we have a valid prediction probability
+        # If no probability, just show the label without percentage (e.g., "✓ K" or "🤖 T")
+        if self.probability is not None and self.probability == self.probability:  # Check for NaN
+            # Show probability aligned with the label (keep or trash)
+            pct = self.probability * 100 if is_keep else (1 - self.probability) * 100
+            badge_text = f"{emoji}{pct:.1f}% {letter}"
+        else:
+            # No prediction available - show label only without percentage
+            badge_text = f"{emoji}{letter}"
         
         # Background color based on source
         if self.label_source == "manual":
@@ -141,4 +168,14 @@ class BadgeOverlayWidget(QWidget):
         painter.drawText(x, y, badge_w_logical, badge_h_logical, Qt.AlignmentFlag.AlignCenter, badge_text)
         painter.setPen(QPen(QColor(255, 255, 255)))
         painter.drawText(x, y, badge_w_logical, badge_h_logical, Qt.AlignmentFlag.AlignCenter, badge_text)
+        
+        painter.end()
+        
+        # Cache the rendered pixmap
+        self._cached_pixmap = pixmap
+        self._cache_key = cache_key
+        
+        # Draw cached pixmap to widget
+        widget_painter = QPainter(self)
+        widget_painter.drawPixmap(0, 0, pixmap)
 

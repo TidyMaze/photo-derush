@@ -4,6 +4,8 @@ import os
 
 from PIL import Image, PngImagePlugin
 
+from .cache_config import is_cache_disabled
+
 CACHE_DIR = os.path.expanduser("~/.photo-derush-cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -16,6 +18,15 @@ def _thumbnail_cache_key(path):
     # Cache stat results for 1 second to avoid repeated I/O
     import time
     current_time = time.time()
+    
+    if is_cache_disabled():
+        # When cache disabled, always compute fresh stat
+        try:
+            stat = os.stat(path)
+            key = f"{path}:{stat.st_mtime}:{stat.st_size}"
+            return hashlib.sha256(key.encode()).hexdigest()
+        except Exception:
+            return hashlib.sha256(path.encode()).hexdigest()
     
     if path in _stat_cache_time and (current_time - _stat_cache_time[path]) < 1.0:
         stat = _stat_cache[path]
@@ -42,6 +53,8 @@ class ThumbnailCache:
         return os.path.join(self.cache_dir, f"{key}.png")
 
     def get_thumbnail(self, path):
+        if is_cache_disabled():
+            return None
         cache_path = self.get_cache_path(path)
         if os.path.exists(cache_path):
             try:
@@ -60,6 +73,8 @@ class ThumbnailCache:
         return None
 
     def set_thumbnail(self, path, image):
+        if is_cache_disabled():
+            return
         cache_path = self.get_cache_path(path)
         try:
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
