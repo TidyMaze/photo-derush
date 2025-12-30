@@ -1,4 +1,4 @@
-# Final Security Audit Report
+# Security Audit Report
 
 **Date:** 2025-01-27  
 **Repository:** photo-derush
@@ -7,7 +7,7 @@
 
 ### Environment Files
 - ✅ `.env` file is **NOT** tracked in git (verified via `git ls-files`)
-- ✅ `.env` exists locally but is properly excluded in `.gitignore`
+- ✅ `.env` is properly excluded in `.gitignore`
 - ✅ No `.env` history found in git commits
 
 ### Database Files
@@ -57,6 +57,12 @@ authors = ["Yann Rolland"]
 - ✅ All personal username references removed from source code
 - ✅ All personal username references removed from documentation
 
+**Files Fixed:**
+- Shell scripts now use `$SCRIPT_DIR` or `$(pwd)` instead of hardcoded paths
+- Python scripts use `os.path.expanduser("~")`, `os.getcwd()`, or environment variables
+- Dataset paths use `PHOTO_DATASET_DIR` environment variable (defaults to `~/Pictures/photo-dataset`)
+- Dead API code removed (`api/` directory deleted)
+
 ## 📋 SUMMARY
 
 **Security Status:** ✅ **SAFE** - No secrets or credentials exposed
@@ -78,4 +84,20 @@ All checks passed:
 - ✅ No personal information leaks (except optional author name)
 - ✅ Environment files properly excluded
 - ✅ Database files properly excluded
+
+## 🔍 VERIFICATION COMMANDS
+
+```bash
+# Verify .env is not tracked
+git ls-files .env
+
+# Verify database is not tracked
+git ls-files *.db
+
+# Search for personal paths (replace with your username pattern)
+grep -r "/Users/username" --exclude-dir=.git --exclude-dir=.venv
+
+# Search for secrets
+grep -ri "password\|secret\|api_key\|token" --exclude-dir=.git --exclude-dir=.venv
+```
 

@@ -1,95 +1,57 @@
-.idea
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-
-# Environment
-.env
-.venv/
-venv/
-ENV/
-
-# Database
-*.db
-*.db-journal
-photoderush.db
-
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Frontend build
-web/dist/
-web/build/
-
-# Storage
-storage/
-
 # IDE
-.vscode/
-*.swp
 .idea
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-
-# Environment
-.env
-.venv/
-venv/
-ENV/
-
-# Database
-*.db
-*.db-journal
-photoderush.db
-
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Frontend build
-web/dist/
-web/build/
-
-# Storage
-storage/
-
-# IDE
 .vscode/
 *.swp
 *.swo
 .DS_Store
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
 
-notebooks/.cache/notebook_explore/overlays/*.png
-.cache/notebook_explore/overlays/*.png
+# Environment
+.env
+.venv/
+venv/
+ENV/
 
-# Large logs
-logs/
+# Database
+*.db
+*.db-journal
+photoderush.db
 
-.cache
-.cursor
-.cursor/debug.log
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Frontend build
+web/dist/
+web/build/
+
+# Storage
+storage/
 
 # Cache files
 *.pkl
 feature_cache.pkl
+.cache
+notebooks/.cache/notebook_explore/overlays/*.png
+.cache/notebook_explore/overlays/*.png
+
+# Training artifacts
+catboost_info/
+
+# Large logs
+logs/
+
+# Cursor
+.cursor
+.cursor/debug.log
