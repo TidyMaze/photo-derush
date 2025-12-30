@@ -295,6 +295,8 @@ class PhotoView(QMainWindow):
         self.side_panel = QWidget()
         # Allow the side panel to shrink horizontally; don't force a large min width
         self.side_panel.setMinimumWidth(0)
+        # Set maximum width to prevent panel from being too wide
+        self.side_panel.setMaximumWidth(350)
         self.side_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.side_layout = QVBoxLayout(self.side_panel)
         self.side_scroll = QScrollArea()
@@ -371,8 +373,8 @@ class PhotoView(QMainWindow):
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍 Search by filename...")
-        # Prevent search input from forcing panel width
-        self.search_input.setMaximumWidth(400)
+        # Prevent search input from forcing panel width (match side panel max width)
+        self.search_input.setMaximumWidth(350)
         self.search_input.setStyleSheet("""
             QLineEdit {
                 padding: 4px 8px;
