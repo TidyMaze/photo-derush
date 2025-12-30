@@ -30,7 +30,7 @@ def load_last_dir():
     return os.path.expanduser('~/Pictures/photo-dataset')
 
 
-def visualize_hierarchical(group_info: dict, image_dir: str, exif_data: dict, output_path: str = "bursts_sessions_hierarchical.png"):
+def visualize_hierarchical(group_info: dict, image_dir: str, exif_data: dict, output_path: str = "studies/outputs/bursts_sessions_hierarchical.png"):
     """Visualize images grouped by session -> burst with colored rectangles."""
 
     # Organize by session -> burst -> images

@@ -65,7 +65,7 @@ def load_results_from_log(log_path: str):
     
     return results
 
-def create_comprehensive_report(results: dict, output_path: str = "plots/hyperparameter_study_report.png"):
+def create_comprehensive_report(results: dict, output_path: str = "studies/outputs/hyperparameter_study_report.png"):
     """Create a comprehensive single-image report."""
     fig = plt.figure(figsize=(20, 16))
     gs = GridSpec(4, 3, figure=fig, hspace=0.3, wspace=0.3)
@@ -267,7 +267,7 @@ def main():
     print(f"Loaded {len(results['max_iterations'])} max iterations results")
     print(f"Loaded {len(results['patience'])} patience results")
     
-    output_path = "plots/hyperparameter_study_report.png"
+    output_path = "studies/outputs/hyperparameter_study_report.png"
     create_comprehensive_report(results, output_path)
     print(f"\n✅ Comprehensive report generated: {output_path}")
 

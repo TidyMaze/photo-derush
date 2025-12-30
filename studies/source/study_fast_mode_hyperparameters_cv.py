@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Study the independent impact of learning rate, max iterations, and patience on fast mode performance."""
+"""Study the independent impact of learning rate, max iterations, and patience WITH CV enabled."""
 
 import logging
 import os
@@ -27,12 +27,13 @@ def test_hyperparameter(
     base_iterations: int = 1000,
     base_patience: int = 100,
 ):
-    """Test a single hyperparameter with other params fixed."""
+    """Test a single hyperparameter with other params fixed. Uses CV (fast_mode=False)."""
     results = []
     
     print(f"\nTesting {param_name}...")
     print(f"Base settings: LR={base_lr}, iterations={base_iterations}, patience={base_patience}")
     print(f"Testing {len(param_values)} values: {param_values[:3]}...{param_values[-3:]}")
+    print("Using CV (5-fold) for robust evaluation")
     print()
     
     for i, param_value in enumerate(param_values):
@@ -68,7 +69,7 @@ def test_hyperparameter(
             n_handcrafted_features: int = 78, fast_mode: bool = False
         ):
             """Modified _build_pipeline with custom hyperparameters."""
-            if use_catboost and fast_mode:
+            if use_catboost:
                 try:
                     from catboost import CatBoostClassifier
                     from sklearn.pipeline import Pipeline
@@ -108,37 +109,61 @@ def test_hyperparameter(
         
         try:
             t_start = time.perf_counter()
+            # Use fast_mode=False to enable CV
             result = train_keep_trash_model(
                 image_dir=image_dir,
                 repo=repo,
                 model_path=DEFAULT_MODEL_PATH.replace(".joblib", f"_test_{param_name}_{i}.joblib"),
-                fast_mode=True,
+                fast_mode=False,  # Enable CV for robust evaluation
                 early_stopping_rounds=patience,
             )
             t_time = time.perf_counter() - t_start
             
             if result:
+                # Use CV metrics if available, otherwise fall back to test metrics
+                cv_acc = result.cv_accuracy_mean or 0.0
+                cv_std = result.cv_accuracy_std or 0.0
+                roc_auc = result.roc_auc or 0.0
+                f1 = result.f1 or 0.0
+                
+                # Get keep-loss rate from aggregated_metrics if available
+                keep_loss = None
+                if result.aggregated_metrics:
+                    keep_loss = result.aggregated_metrics.get('keep_loss_rate_mean')
+                
                 results.append({
                     "param_value": param_value,
-                    "roc_auc": result.roc_auc or 0.0,
-                    "f1": result.f1 or 0.0,
+                    "cv_accuracy": cv_acc,
+                    "cv_std": cv_std,
+                    "roc_auc": roc_auc,
+                    "f1": f1,
+                    "keep_loss_rate": keep_loss,
                     "training_time": t_time,
                 })
-                print(f"ROC-AUC={result.roc_auc:.4f}, F1={result.f1:.4f}, time={t_time:.2f}s")
+                if keep_loss:
+                    print(f"CV-Acc={cv_acc:.2%}±{cv_std:.2%}, ROC-AUC={roc_auc:.4f}, F1={f1:.4f}, Keep-Loss={keep_loss:.2%}, time={t_time:.1f}s")
+                else:
+                    print(f"CV-Acc={cv_acc:.2%}±{cv_std:.2%}, ROC-AUC={roc_auc:.4f}, F1={f1:.4f}, time={t_time:.1f}s")
             else:
                 print("FAILED")
                 results.append({
                     "param_value": param_value,
+                    "cv_accuracy": 0.0,
+                    "cv_std": 0.0,
                     "roc_auc": 0.0,
                     "f1": 0.0,
+                    "keep_loss_rate": None,
                     "training_time": 0.0,
                 })
         except Exception as e:
             print(f"ERROR: {e}")
             results.append({
                 "param_value": param_value,
+                "cv_accuracy": 0.0,
+                "cv_std": 0.0,
                 "roc_auc": 0.0,
                 "f1": 0.0,
+                "keep_loss_rate": None,
                 "training_time": 0.0,
             })
         finally:
@@ -156,59 +181,77 @@ def test_hyperparameter(
 
 def plot_results(param_name: str, results: list, output_dir: str = "plots"):
     """Plot results for a hyperparameter."""
+    output_dir = "studies/outputs"
     os.makedirs(output_dir, exist_ok=True)
     
     param_values = [r["param_value"] for r in results]
+    cv_accs = [r["cv_accuracy"] for r in results]
+    cv_stds = [r["cv_std"] for r in results]
     roc_aucs = [r["roc_auc"] for r in results]
     f1_scores = [r["f1"] for r in results]
+    keep_loss_rates = [r["keep_loss_rate"] if r["keep_loss_rate"] is not None else 0.0 for r in results]
     training_times = [r["training_time"] for r in results]
     
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    
+    # CV Accuracy plot with error bars
+    axes[0, 0].errorbar(param_values, cv_accs, yerr=cv_stds, fmt='o-', linewidth=1.5, markersize=4, capsize=3)
+    axes[0, 0].set_xlabel(param_name.replace('_', ' ').title())
+    axes[0, 0].set_ylabel('CV Accuracy')
+    axes[0, 0].set_title(f'CV Accuracy vs {param_name.replace("_", " ").title()} (with std)')
+    axes[0, 0].grid(True, alpha=0.3)
+    axes[0, 0].set_ylim([0, 1])
+    if param_name == "learning_rate":
+        axes[0, 0].set_xscale('log')
     
     # ROC-AUC plot
-    axes[0].plot(param_values, roc_aucs, 'o-', linewidth=1.5, markersize=4)
-    axes[0].set_xlabel(param_name.replace('_', ' ').title())
-    axes[0].set_ylabel('ROC-AUC')
-    axes[0].set_title(f'ROC-AUC vs {param_name.replace("_", " ").title()}')
-    axes[0].grid(True, alpha=0.3)
-    axes[0].set_ylim([0, 1])
+    axes[0, 1].plot(param_values, roc_aucs, 'o-', color='green', linewidth=1.5, markersize=4)
+    axes[0, 1].set_xlabel(param_name.replace('_', ' ').title())
+    axes[0, 1].set_ylabel('ROC-AUC')
+    axes[0, 1].set_title(f'ROC-AUC vs {param_name.replace("_", " ").title()}')
+    axes[0, 1].grid(True, alpha=0.3)
+    axes[0, 1].set_ylim([0, 1])
     if param_name == "learning_rate":
-        axes[0].set_xscale('log')
+        axes[0, 1].set_xscale('log')
     
-    # F1 Score plot
-    axes[1].plot(param_values, f1_scores, 'o-', color='green', linewidth=1.5, markersize=4)
-    axes[1].set_xlabel(param_name.replace('_', ' ').title())
-    axes[1].set_ylabel('F1 Score')
-    axes[1].set_title(f'F1 Score vs {param_name.replace("_", " ").title()}')
-    axes[1].grid(True, alpha=0.3)
-    axes[1].set_ylim([0, 1])
+    # Keep-Loss Rate plot (lower is better)
+    axes[1, 0].plot(param_values, keep_loss_rates, 'o-', color='red', linewidth=1.5, markersize=4)
+    axes[1, 0].set_xlabel(param_name.replace('_', ' ').title())
+    axes[1, 0].set_ylabel('Keep-Loss Rate')
+    axes[1, 0].set_title(f'Keep-Loss Rate vs {param_name.replace("_", " ").title()} (lower is better)')
+    axes[1, 0].grid(True, alpha=0.3)
+    axes[1, 0].axhline(y=0.02, color='orange', linestyle='--', label='2% target')
+    axes[1, 0].legend()
     if param_name == "learning_rate":
-        axes[1].set_xscale('log')
+        axes[1, 0].set_xscale('log')
     
     # Training time plot
-    axes[2].plot(param_values, training_times, 'o-', color='red', linewidth=1.5, markersize=4)
-    axes[2].set_xlabel(param_name.replace('_', ' ').title())
-    axes[2].set_ylabel('Training Time (s)')
-    axes[2].set_title(f'Training Time vs {param_name.replace("_", " ").title()}')
-    axes[2].grid(True, alpha=0.3)
-    axes[2].axhline(y=5.0, color='orange', linestyle='--', label='5s target')
-    axes[2].legend()
+    axes[1, 1].plot(param_values, training_times, 'o-', color='purple', linewidth=1.5, markersize=4)
+    axes[1, 1].set_xlabel(param_name.replace('_', ' ').title())
+    axes[1, 1].set_ylabel('Training Time (s)')
+    axes[1, 1].set_title(f'Training Time vs {param_name.replace("_", " ").title()}')
+    axes[1, 1].grid(True, alpha=0.3)
+    axes[1, 1].axhline(y=5.0, color='orange', linestyle='--', label='5s target')
+    axes[1, 1].legend()
     if param_name == "learning_rate":
-        axes[2].set_xscale('log')
+        axes[1, 1].set_xscale('log')
     
     plt.tight_layout()
-    output_path = os.path.join(output_dir, f"fast_mode_{param_name}_study.png")
+    output_path = os.path.join(output_dir, f"fast_mode_{param_name}_study_cv.png")
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"\nSaved plot: {output_path}")
     plt.close()
     
     # Find best values
+    best_cv_idx = np.argmax(cv_accs)
     best_roc_idx = np.argmax(roc_aucs)
-    best_f1_idx = np.argmax(f1_scores)
+    best_keep_loss_idx = np.argmin([k for k in keep_loss_rates if k > 0]) if any(k > 0 for k in keep_loss_rates) else 0
     
-    print(f"\nBest ROC-AUC: {roc_aucs[best_roc_idx]:.4f} at {param_name}={param_values[best_roc_idx]}")
-    print(f"Best F1: {f1_scores[best_f1_idx]:.4f} at {param_name}={param_values[best_f1_idx]}")
-    print(f"Training time at best ROC-AUC: {training_times[best_roc_idx]:.2f}s")
+    print(f"\nBest CV Accuracy: {cv_accs[best_cv_idx]:.4f}±{cv_stds[best_cv_idx]:.4f} at {param_name}={param_values[best_cv_idx]}")
+    print(f"Best ROC-AUC: {roc_aucs[best_roc_idx]:.4f} at {param_name}={param_values[best_roc_idx]}")
+    if keep_loss_rates[best_keep_loss_idx] > 0:
+        print(f"Best Keep-Loss Rate: {keep_loss_rates[best_keep_loss_idx]:.2%} at {param_name}={param_values[best_keep_loss_idx]}")
+    print(f"Training time at best CV: {training_times[best_cv_idx]:.1f}s")
 
 def main():
     # Use default dataset path
@@ -225,18 +268,21 @@ def main():
     repo = RatingsTagsRepository(repo_path)
     
     print("=" * 80)
-    print("FAST MODE HYPERPARAMETER STUDY")
+    print("FAST MODE HYPERPARAMETER STUDY WITH CV (ROBUST EVALUATION)")
     print("=" * 80)
-    print("\nThis will test each hyperparameter independently with wide ranges.")
+    print("\nThis will test each hyperparameter independently with CV enabled.")
     print("Base settings: LR=0.05, iterations=1000, patience=100")
+    print("Ranges: LR=0.0001-0.5 (log scale), iterations=10-2000, patience=1-200")
+    print("~50 points per parameter, using 5-fold CV for robust evaluation")
+    print("\n⚠️  WARNING: This will take much longer (~50x per parameter)")
     print()
     
-    # Test 1: Learning Rate (0.0001 to 0.5, log scale for wide range)
+    # Test 1: Learning Rate (0.0001 to 0.5, log scale)
     print("\n" + "=" * 80)
-    print("STUDY 1: Learning Rate Impact (0.0001 to 0.5)")
+    print("STUDY 1: Learning Rate Impact (0.0001 to 0.5) - WITH CV")
     print("=" * 80)
-    # Use log scale for such a wide range (0.0001 to 0.5)
-    lr_values = np.logspace(np.log10(0.0001), np.log10(0.5), 50)
+    # Use fewer points for CV version (takes longer)
+    lr_values = np.logspace(np.log10(0.0001), np.log10(0.5), 20)  # Reduced to 20 for speed
     lr_results = test_hyperparameter(
         image_dir, repo, "learning_rate", lr_values,
         base_lr=0.05, base_iterations=1000, base_patience=100
@@ -245,10 +291,10 @@ def main():
     
     # Test 2: Max Iterations (10 to 2000, linear scale)
     print("\n" + "=" * 80)
-    print("STUDY 2: Max Iterations Impact (10 to 2000)")
+    print("STUDY 2: Max Iterations Impact (10 to 2000) - WITH CV")
     print("=" * 80)
-    # Start from 10 (0 doesn't make sense), linear scale
-    iterations_values = np.linspace(10, 2000, 50, dtype=int)
+    # Use fewer points for CV version
+    iterations_values = np.linspace(10, 2000, 20, dtype=int)  # Reduced to 20 for speed
     iterations_results = test_hyperparameter(
         image_dir, repo, "max_iterations", iterations_values,
         base_lr=0.05, base_iterations=1000, base_patience=100
@@ -257,9 +303,10 @@ def main():
     
     # Test 3: Patience (1 to 200, linear scale)
     print("\n" + "=" * 80)
-    print("STUDY 3: Patience Impact (1 to 200)")
+    print("STUDY 3: Patience Impact (1 to 200) - WITH CV")
     print("=" * 80)
-    patience_values = np.linspace(1, 200, 50, dtype=int)
+    # Use fewer points for CV version
+    patience_values = np.linspace(1, 200, 20, dtype=int)  # Reduced to 20 for speed
     patience_results = test_hyperparameter(
         image_dir, repo, "patience", patience_values,
         base_lr=0.05, base_iterations=1000, base_patience=100
@@ -270,10 +317,12 @@ def main():
     print("STUDY COMPLETE")
     print("=" * 80)
     print("\nPlots saved in plots/ directory:")
-    print("  - plots/fast_mode_learning_rate_study.png")
-    print("  - plots/fast_mode_max_iterations_study.png")
-    print("  - plots/fast_mode_patience_study.png")
+    print("  - plots/fast_mode_learning_rate_study_cv.png")
+    print("  - plots/fast_mode_max_iterations_study_cv.png")
+    print("  - plots/fast_mode_patience_study_cv.png")
+    print("\nThese plots show CV metrics (more robust than single test set)")
 
 if __name__ == "__main__":
     main()
+
 

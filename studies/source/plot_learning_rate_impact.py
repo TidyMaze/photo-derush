@@ -129,7 +129,7 @@ def main():
         plt.tight_layout()
         
         # Save plot
-        output_path = Path(__file__).parent.parent / "learning_rate_impact_cv.png"
+        output_path = Path(__file__).parent.parent / "studies" / "outputs" / "learning_rate_impact_cv.png"
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
         print(f"\nPlot saved to: {output_path}")
         

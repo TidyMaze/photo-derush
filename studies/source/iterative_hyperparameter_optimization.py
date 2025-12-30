@@ -353,7 +353,7 @@ def iterative_optimization(
     
     return current_lr, current_iterations, current_patience, history
 
-def plot_optimization_history(history: list, output_path: str = "plots/iterative_optimization_history.png"):
+def plot_optimization_history(history: list, output_path: str = "studies/outputs/iterative_optimization_history.png"):
     """Plot the optimization history."""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     

@@ -1008,7 +1008,7 @@ def generate_pdf_report(output_path: Path):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Generate comprehensive technical report")
-    parser.add_argument("--output", default="technical_report.md", help="Output file (default: .md, can be .pdf)")
+    parser.add_argument("--output", default="studies/outputs/technical_report.md", help="Output file (default: .md, can be .pdf)")
     parser.add_argument("--format", choices=["markdown", "pdf", "auto"], default="auto", 
                        help="Output format (auto detects from file extension)")
     args = parser.parse_args()

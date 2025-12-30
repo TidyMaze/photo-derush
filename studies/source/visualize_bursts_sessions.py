@@ -30,7 +30,7 @@ def load_last_dir():
     return os.path.expanduser('~/Pictures/photo-dataset')
 
 
-def visualize_by_burst(group_info: dict, image_dir: str, output_path: str = "bursts.png"):
+def visualize_by_burst(group_info: dict, image_dir: str, output_path: str = "studies/outputs/bursts.png"):
     """Visualize images grouped by burst."""
     # Group images by burst_id
     bursts: dict[int, list[tuple[str, dict]]] = defaultdict(list)
@@ -129,7 +129,7 @@ def visualize_by_burst(group_info: dict, image_dir: str, output_path: str = "bur
     plt.close()
 
 
-def visualize_by_session(group_info: dict, image_dir: str, output_path: str = "sessions.png"):
+def visualize_by_session(group_info: dict, image_dir: str, output_path: str = "studies/outputs/sessions.png"):
     """Visualize images grouped by session."""
     sessions: dict[int, list[tuple[str, dict]]] = defaultdict(list)
     for filename, info in group_info.items():
@@ -222,7 +222,7 @@ def visualize_by_session(group_info: dict, image_dir: str, output_path: str = "s
     plt.close()
 
 
-def visualize_by_date(group_info: dict, image_dir: str, exif_data: dict, output_path: str = "dates.png"):
+def visualize_by_date(group_info: dict, image_dir: str, exif_data: dict, output_path: str = "studies/outputs/dates.png"):
     """Visualize images grouped by date (YYYY-MM-DD)."""
     dates: dict[str, list[tuple[str, dict]]] = defaultdict(list)
     

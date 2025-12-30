@@ -502,7 +502,7 @@ def main():
     parser.add_argument("--cache-dir", default=".cache", help="Cache directory")
     parser.add_argument("--max-samples", type=int, default=None, help="Max AVA samples to evaluate")
     parser.add_argument("--threshold", type=float, default=6.0, help="Score threshold for keep/trash (default: 6.0)")
-    parser.add_argument("--output", default="model_evaluation_report.html", help="Output HTML report path")
+    parser.add_argument("--output", default="studies/outputs/model_evaluation_report.html", help="Output HTML report path")
     args = parser.parse_args()
     
     cache_dir = Path(args.cache_dir)

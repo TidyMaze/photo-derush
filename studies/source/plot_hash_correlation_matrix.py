@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.phash_cache import PerceptualHashCache
 
 
-def compute_hash_matrix(image_dir: str, output_path: str = "hash_correlation_matrix.png"):
+def compute_hash_matrix(image_dir: str, output_path: str = "studies/outputs/hash_correlation_matrix.png"):
     """Compute and plot hash distance matrix for all images."""
     
     # Get all image files
@@ -394,7 +394,7 @@ def main():
         sys.exit(1)
     
     image_dir = sys.argv[1]
-    output_path = sys.argv[2] if len(sys.argv) > 2 else "hash_correlation_matrix.png"
+    output_path = sys.argv[2] if len(sys.argv) > 2 else "studies/outputs/hash_correlation_matrix.png"
     
     if not os.path.isdir(image_dir):
         print(f"Directory not found: {image_dir}")

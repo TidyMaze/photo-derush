@@ -85,7 +85,7 @@ def get_top_groups(group_info: dict, top_n: int = 10):
     return sorted_groups[:top_n]
 
 
-def visualize_groups(top_groups: list, image_dir: str, output_path: str = "group_visualization.png"):
+def visualize_groups(top_groups: list, image_dir: str, output_path: str = "studies/outputs/group_visualization.png"):
     """Create visualization of top groups with their images."""
     n_groups = len(top_groups)
     
@@ -251,7 +251,7 @@ def main():
         print(f"  Group {group_id}: {len(images)} images, best: {os.path.basename(best_pick) if best_pick else 'N/A'}")
     
     # Create visualization
-    visualize_groups(top_groups, image_dir, "top_10_groups.png")
+    visualize_groups(top_groups, image_dir, "studies/outputs/top_10_groups.png")
     print("\n✅ Visualization complete!")
 
 
