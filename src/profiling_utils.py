@@ -114,13 +114,12 @@ def aggregate_profiles(output_dir: str = "/tmp") -> cProfile.Profile | None:
         for thread_id, profiler in _thread_profilers.items():
             try:
                 profiler.disable()
-                # Dump to string and create Stats object
-                stream = StringIO()
-                profiler.print_stats(stream=stream)
-                stream.seek(0)
+                # Dump individual profile first, then add to aggregated
+                temp_file = Path(output_dir) / f"app_profile_thread_{thread_id}_temp.prof"
+                profiler.dump_stats(str(temp_file))
                 
-                # Create Stats from profiler
-                stats = pstats.Stats(profiler)
+                # Create Stats from dumped file
+                stats = pstats.Stats(str(temp_file))
                 
                 if aggregated_stats is None:
                     aggregated_stats = stats

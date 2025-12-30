@@ -2548,15 +2548,44 @@ class PhotoView(QMainWindow):
             # Note: Qt stylesheets don't support box-shadow, removed to avoid warnings
 
         # OPTIMIZATION: Cache stylesheet to avoid redundant setStyleSheet calls
+        # Store last style on label object to avoid expensive styleSheet() getter
         new_style = " ".join(styles)
-        current_style = label.styleSheet()
-        if current_style != new_style:
+        last_style = getattr(label, "_last_style", None)
+        if last_style != new_style:
             label.setStyleSheet(new_style)
+            label._last_style = new_style  # type: ignore[attr-defined]
 
     def _update_all_highlights(self):
+        # OPTIMIZATION: Batch style updates to reduce Qt overhead (setStyleSheet is expensive)
+        # Collect all style changes first, then apply in one pass
+        style_updates = []
         for (row, col), label in self.label_refs.items():
             full_path = label.toolTip()
-            self._update_label_highlight(label, full_path)
+            current_label = self.viewmodel.model.get_state(full_path) if full_path else None
+            is_selected = full_path in getattr(self, "selected_filenames", set())
+            
+            border_color, border_width = self._get_label_color(current_label)
+            if is_selected:
+                border_color = COLOR_SELECTED
+                border_width = "4px"
+            
+            styles = [
+                f"border: {border_width} solid {border_color};",
+                "border-radius: 4px;",
+            ]
+            if is_selected:
+                styles.append(f"background: {COLOR_BG_SELECTED};")
+            
+            new_style = " ".join(styles)
+            current_style = label.styleSheet()
+            if current_style != new_style:
+                style_updates.append((label, new_style))
+        
+        # Apply all style updates in one batch (reduces Qt overhead)
+        for label, style in style_updates:
+            label.setStyleSheet(style)
+            label._last_style = style  # type: ignore[attr-defined]  # Cache for next check
+        
         # Update status bar to reflect selection count
         self._update_status_bar()
         # Show/hide batch toolbar based on selection count
