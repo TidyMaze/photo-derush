@@ -550,13 +550,13 @@ class PhotoViewModel(QObject):
             
             # Debug: log first few items to verify sorting
             if len(filtered) > 0:
-                logging.debug(f"[sorting] First 5 items after group sort:")
+                logging.info(f"[sorting] First 5 items after group sort:")
                 for i, fname in enumerate(filtered[:5]):
                     ginfo = group_info.get(fname, {})
                     gid = ginfo.get("group_id")
                     ps = ginfo.get("pick_score", 0.0)
                     gdate = group_earliest_date.get(gid, datetime.now())
-                    logging.debug(f"[sorting]   {i+1}. {fname[:40]:40s} group={gid} date={gdate} score={ps:.4f}")
+                    logging.info(f"[sorting]   {i+1}. {fname[:40]:40s} group={gid} date={gdate} score={ps:.4f}")
         
         # Check if selected image is filtered out, and mark for selection update
         selected_was_filtered = False
