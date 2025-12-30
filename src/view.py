@@ -2234,14 +2234,8 @@ class PhotoView(QMainWindow):
                         parent = widget.parent()
                         if parent:
                             widget.setGeometry(0, 0, parent.width(), parent.height())
-                            logging.debug(f"[badge-refresh] Fixed geometry for {type(widget).__name__}: {widget.width()}x{widget.height()}")
                     widget.show()
                     widget.raise_()  # Ensure widget is on top after showing
-                    # Verify widget is actually visible
-                    if not widget.isVisible():
-                        parent = widget.parent()
-                        parent_visible = parent.isVisible() if parent else False
-                        logging.warning(f"[badge-refresh] Widget {type(widget).__name__} failed to show (parent visible: {parent_visible}, geometry: {widget.width()}x{widget.height()})")
             
             t1 = time.perf_counter()
             if repaint_count > 0 or widgets_to_show or widgets_to_hide:

@@ -73,11 +73,8 @@ class BadgeOverlayWidget(QWidget):
     
     def paintEvent(self, event):
         """Draw badge at display resolution."""
-        import logging
         if not self.label_text:
-            logging.debug(f"[BADGE-WIDGET] paintEvent: no label_text, skipping paint")
             return
-        logging.debug(f"[BADGE-WIDGET] paintEvent: label_text={self.label_text}, size={self.width()}x{self.height()}, visible={self.isVisible()}")
         
         # Badge dimensions in logical pixels (will be scaled by DPR automatically by Qt)
         # Badge spans 100% width of widget, positioned at bottom
