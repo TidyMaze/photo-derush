@@ -182,7 +182,7 @@ class PhotoViewModel(QObject):
         self._snapshot_timer.setSingleShot(True)
         self._snapshot_timer.timeout.connect(self._emit_state_snapshot_immediate)
         self._snapshot_pending = False
-        self._snapshot_debounce_ms = 200  # Debounce to max 5 calls/sec
+        self._snapshot_debounce_ms = 500  # Debounce to max 2 calls/sec (reduced from 5 to reduce signal overhead)
         
         # PERFORMANCE: Debounce _apply_filters to reduce excessive calls (1,196 calls -> ~10/sec max)
         self._apply_filters_timer = QTimer()
@@ -1411,14 +1411,20 @@ class PhotoViewModel(QObject):
                     reporter.update(1, 8)
                     reporter.detail("Collecting EXIF data...")
                 # OPTIMIZATION: Use EXIF cache to speed up EXIF collection
+                # OPTIMIZATION: Batch EXIF loading to reduce overhead
                 exif_data: dict[str, dict] = {}
-                for idx, filename in enumerate(self.images):
-                    path = self.model.get_image_path(filename)
-                    if path:
-                        # load_exif uses internal cache, so this should be fast
-                        exif_data[filename] = self.model.load_exif(path)
-                    if reporter and (idx + 1) % 100 == 0:
-                        reporter.detail(f"Collected EXIF for {idx + 1}/{len(self.images)} photos...")
+                # Pre-warm cache by loading EXIF in batches (reduces per-call overhead)
+                batch_size = 50
+                for batch_start in range(0, len(self.images), batch_size):
+                    batch_end = min(batch_start + batch_size, len(self.images))
+                    for idx in range(batch_start, batch_end):
+                        filename = self.images[idx]
+                        path = self.model.get_image_path(filename)
+                        if path:
+                            # load_exif uses internal cache, so this should be fast
+                            exif_data[filename] = self.model.load_exif(path)
+                    if reporter:
+                        reporter.detail(f"Collected EXIF for {batch_end}/{len(self.images)} photos...")
                 
                 # Get keep probabilities from auto-label manager
                 keep_probs: dict[str, float] = {}

@@ -97,13 +97,22 @@ def main():
             logging.warning(f"[PROFILING] Failed to enable tracemalloc: {e}")
         
         # Enable CPU profiling (higher overhead, but works without root)
+        # OPTIMIZATION: Enable multi-thread profiling to capture all threads (Qt threads, workers, etc.)
+        cpu_profiler = None  # Will be set if multi-thread profiling fails
         try:
-            import cProfile
-            cpu_profiler = cProfile.Profile()
-            cpu_profiler.enable()
-            logging.info("[PROFILING] Enabled cProfile for CPU profiling (main thread only)")
+            from src.profiling_utils import enable_thread_profiling
+            enable_thread_profiling()
+            logging.info("[PROFILING] Enabled cProfile for CPU profiling (all threads via threading.setprofile)")
         except Exception as e:
-            logging.warning(f"[PROFILING] Failed to enable cProfile: {e}")
+            logging.warning(f"[PROFILING] Failed to enable multi-thread profiling: {e}")
+            # Fallback to main thread only
+            try:
+                import cProfile
+                cpu_profiler = cProfile.Profile()
+                cpu_profiler.enable()
+                logging.info("[PROFILING] Enabled cProfile for CPU profiling (main thread only - fallback)")
+            except Exception as e2:
+                logging.warning(f"[PROFILING] Failed to enable cProfile: {e2}")
     try:
         # Parse CLI args early so logging can be configured to file if requested
         parser = argparse.ArgumentParser(description='Photo Derush - Qt desktop application')
@@ -250,6 +259,16 @@ def main():
         except (ValueError, TypeError):
             pass
         exit_code = app.exec()
+        
+        # Aggregate and save all thread profiles before exit
+        try:
+            from src.profiling_utils import aggregate_profiles, dump_all_profiles
+            aggregated = aggregate_profiles("/tmp")
+            if aggregated:
+                logging.info("[PROFILING] Aggregated multi-thread profile saved to /tmp/app_profile_aggregated.prof")
+            dump_all_profiles("/tmp")  # Also save individual thread profiles
+        except Exception as e:
+            logging.warning(f"[PROFILING] Failed to aggregate thread profiles: {e}")
         
         # Save final memory profile on exit if profiling was enabled
         # Note: External CPU profilers (py-spy, scalene) handle their own cleanup

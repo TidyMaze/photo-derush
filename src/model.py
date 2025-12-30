@@ -99,12 +99,22 @@ class ImageModel:
         # Check cache first
         thumb = self.cache.get_thumbnail(path)
         if thumb:
+            # OPTIMIZATION: Extract and cache original image size from thumbnail metadata
+            if hasattr(thumb, "info") and "original_width" in thumb.info:
+                # Size already cached in thumbnail metadata
+                pass
             return thumb
         try:
-            img = Image.open(path)
-            # Preserve aspect ratio: use thumbnail() instead of square crop + resize
-            img_thumb = img.copy().convert("RGBA")
-            img_thumb.thumbnail((size, size), resample=Image.Resampling.LANCZOS)
+            with Image.open(path) as img:
+                # OPTIMIZATION: Store original size in thumbnail metadata for bbox overlay
+                orig_w, orig_h = img.size
+                # Preserve aspect ratio: use thumbnail() instead of square crop + resize
+                img_thumb = img.copy().convert("RGBA")
+                img_thumb.thumbnail((size, size), resample=Image.Resampling.LANCZOS)
+                
+                # Store original size in thumbnail metadata for bbox overlay
+                img_thumb.info["original_width"] = str(orig_w)
+                img_thumb.info["original_height"] = str(orig_h)
 
             # Center on square canvas to maintain consistent thumbnail grid
             canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))

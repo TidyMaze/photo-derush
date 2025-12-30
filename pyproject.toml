@@ -54,6 +54,7 @@ pyinstrument = "^5.1.1"
 lightgbm = "^4.6.0"
 catboost = "^1.2.8"
 py-spy = "^0.4.1"
+scalene = "^2.0.1"
 
 [tool.ruff]
 line-length = 120

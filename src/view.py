@@ -2138,9 +2138,29 @@ class PhotoView(QMainWindow):
 
                             try:
                                 from PIL import Image
-                                img = Image.open(label_path)
-                                orig_w, orig_h = img.size
-                                bbox_overlay.set_detections(objects, original_image_size=(orig_w, orig_h))
+                                # OPTIMIZATION: Get original size from thumbnail metadata to avoid redundant Image.open
+                                # Thumbnails store original size in their metadata
+                                orig_w, orig_h = None, None
+                                thumb = label.pixmap()
+                                if thumb:
+                                    # Try to get size from thumbnail metadata (stored during thumbnail creation)
+                                    # Check if we cached it on the label
+                                    cached_size = getattr(label, "_cached_image_size", None)
+                                    if cached_size:
+                                        orig_w, orig_h = cached_size
+                                    else:
+                                        # Fallback: open image to get size (only if not cached)
+                                        with Image.open(label_path) as img:
+                                            orig_w, orig_h = img.size
+                                            # Cache for future use
+                                            label._cached_image_size = (orig_w, orig_h)  # type: ignore[attr-defined]
+                                
+                                if orig_w and orig_h:
+                                    bbox_overlay.set_detections(objects, original_image_size=(orig_w, orig_h))
+                                else:
+                                    # Last resort: open image
+                                    with Image.open(label_path) as img:
+                                        bbox_overlay.set_detections(objects, original_image_size=img.size)
                                 # With setScaledContents(True), pixmap fills entire label
                                 # So overlay should match label size, not thumbnail dimensions
                                 label_w = label.width()
@@ -2223,10 +2243,13 @@ class PhotoView(QMainWindow):
 
             # OPTIMIZATION: Apply all visibility changes in one batch to reduce Qt overhead
             # Hide widgets first (faster), then show (triggers repaint)
-            for widget in widgets_to_hide:
-                if widget.isVisible():
-                    widget.hide()
-            for widget in widgets_to_show:
+            # OPTIMIZATION: Only process widgets that actually need state change
+            widgets_to_hide_filtered = {w for w in widgets_to_hide if w.isVisible()}
+            widgets_to_show_filtered = {w for w in widgets_to_show if not w.isVisible()}
+            
+            for widget in widgets_to_hide_filtered:
+                widget.hide()
+            for widget in widgets_to_show_filtered:
                 # Verify widget has valid geometry before showing
                 parent = widget.parent()
                 if not parent:
@@ -2524,7 +2547,11 @@ class PhotoView(QMainWindow):
             styles.append(f"background: {COLOR_BG_SELECTED};")
             # Note: Qt stylesheets don't support box-shadow, removed to avoid warnings
 
-        label.setStyleSheet(" ".join(styles))
+        # OPTIMIZATION: Cache stylesheet to avoid redundant setStyleSheet calls
+        new_style = " ".join(styles)
+        current_style = label.styleSheet()
+        if current_style != new_style:
+            label.setStyleSheet(new_style)
 
     def _update_all_highlights(self):
         for (row, col), label in self.label_refs.items():

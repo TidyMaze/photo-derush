@@ -20,14 +20,25 @@ def _thread_profile_func(frame, event, arg):
         profiler = _thread_profilers.get(thread_id)
         if profiler:
             # Use the profiler's internal dispatch
-            return profiler.trace_dispatch(frame, event, arg)
+            try:
+                return profiler.trace_dispatch(frame, event, arg)
+            except ValueError:
+                # Another profiler is already active (e.g., main thread profiler)
+                # This can happen if threading.setprofile conflicts with cProfile.Profile.enable()
+                # Just return None to skip profiling this thread
+                return None
         else:
             # Create profiler for this thread on first call
-            profiler = cProfile.Profile()
-            profiler.enable()
-            _thread_profilers[thread_id] = profiler
-            logging.debug(f"[PROFILING] Created profiler for thread {thread_id}")
-            return profiler.trace_dispatch(frame, event, arg)
+            try:
+                profiler = cProfile.Profile()
+                profiler.enable()
+                _thread_profilers[thread_id] = profiler
+                logging.debug(f"[PROFILING] Created profiler for thread {thread_id}")
+                return profiler.trace_dispatch(frame, event, arg)
+            except ValueError:
+                # Another profiler is already active - skip this thread
+                logging.debug(f"[PROFILING] Skipping thread {thread_id} (profiler conflict)")
+                return None
     return None
 
 
@@ -93,25 +104,46 @@ def aggregate_profiles(output_dir: str = "/tmp") -> cProfile.Profile | None:
     if os.environ.get("PROFILING") != "1":
         return None
     
-    aggregated = cProfile.Profile()
+    import pstats
+    from io import StringIO
+    
+    # Use pstats.Stats to merge profiles (cProfile.Profile doesn't have add method)
+    aggregated_stats = None
     
     with _thread_profilers_lock:
         for thread_id, profiler in _thread_profilers.items():
             try:
                 profiler.disable()
-                # Add stats from this profiler to aggregated
-                aggregated.add(profiler)
+                # Dump to string and create Stats object
+                stream = StringIO()
+                profiler.print_stats(stream=stream)
+                stream.seek(0)
+                
+                # Create Stats from profiler
+                stats = pstats.Stats(profiler)
+                
+                if aggregated_stats is None:
+                    aggregated_stats = stats
+                else:
+                    aggregated_stats.add(stats)
                 logging.debug(f"[PROFILING] Aggregated thread {thread_id} profile")
             except Exception as e:
                 logging.warning(f"[PROFILING] Failed to aggregate thread {thread_id} profile: {e}")
     
-    # Dump aggregated profile
+    if aggregated_stats is None:
+        logging.warning("[PROFILING] No thread profiles to aggregate")
+        return None
+    
+    # Save aggregated profile
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     aggregated_file = output_path / "app_profile_aggregated.prof"
-    aggregated.dump_stats(str(aggregated_file))
+    aggregated_stats.dump_stats(str(aggregated_file))
     logging.info(f"[PROFILING] Aggregated profile saved to {aggregated_file}")
     
+    # Create a Profile object for return (for compatibility)
+    aggregated = cProfile.Profile()
+    aggregated.load_stats(str(aggregated_file))
     return aggregated
 
 
