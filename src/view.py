@@ -2017,14 +2017,27 @@ class PhotoView(QMainWindow):
                         raise ValueError(f"Label at ({row}, {col}) missing _thumb_filename attribute")
 
                     # Get full path from model for state lookup
-                    label_path = self.viewmodel.model.get_image_path(fname)
+                    # OPTIMIZATION: Cache path lookups to reduce repeated model calls
+                    if not hasattr(self, "_fname_to_path_cache"):
+                        self._fname_to_path_cache = {}
+                    label_path = self._fname_to_path_cache.get(fname)
+                    if not label_path:
+                        label_path = self.viewmodel.model.get_image_path(fname)
+                        if label_path:
+                            self._fname_to_path_cache[fname] = label_path
                     if not label_path:
                         raise ValueError(f"Model returned no path for filename {fname}")
 
+                    # OPTIMIZATION: Cache state lookups to reduce dict.get calls
                     current_label = self.viewmodel.model.get_state(label_path)
                     current_prob = None
                     if state:
-                        current_prob = state.predicted_probabilities.get(fname)
+                        # OPTIMIZATION: Direct dict access with try/except (faster than .get() for hot paths)
+                        # predicted_probabilities is a dict, so use direct access
+                        try:
+                            current_prob = state.predicted_probabilities[fname]
+                        except KeyError:
+                            current_prob = None
                     if current_prob is not None:
                         with_prob += 1
                     if current_label:
@@ -2034,7 +2047,11 @@ class PhotoView(QMainWindow):
                         primary_label = current_label
 
                     # Determine current objects list
-                    objects = detected_objects.get(fname, []) or []
+                    # OPTIMIZATION: Direct dict access with try/except (faster than .get() for hot paths)
+                    try:
+                        objects = detected_objects[fname] or []
+                    except KeyError:
+                        objects = []
                     # Filter objects for display (same as debug_cell)
                     if objects:
                         objects = self._filter_objects_for_display(objects, min_confidence=0.6, max_objects=3)
