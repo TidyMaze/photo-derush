@@ -3248,9 +3248,10 @@ class PhotoView(QMainWindow):
 
     def _on_task_progress(self, name, current, total, detail=None):
         # PERFORMANCE: Debounce progress bar updates to avoid excessive setValue calls (1,903 calls -> reduced)
+        # This method is called from main thread via Qt signals (thread-safe)
         if not hasattr(self, "_progress_update_timer"):
             from PySide6.QtCore import QTimer
-            self._progress_update_timer = QTimer()
+            self._progress_update_timer = QTimer(self)  # Parent to self to ensure main thread
             self._progress_update_timer.setSingleShot(True)
             self._progress_update_pending = {}
             self._progress_update_timer.timeout.connect(self._apply_progress_update)
@@ -3264,8 +3265,13 @@ class PhotoView(QMainWindow):
         }
 
         # Restart timer (debounce to max 10 updates/sec)
-        if not self._progress_update_timer.isActive():
-            self._progress_update_timer.start(100)
+        # Timer operations are safe here since this is called from main thread via signals
+        try:
+            if not self._progress_update_timer.isActive():
+                self._progress_update_timer.start(100)
+        except RuntimeError:
+            # Timer was deleted (app closing), ignore
+            pass
 
     def _apply_progress_update(self):
         """Apply debounced progress bar update."""

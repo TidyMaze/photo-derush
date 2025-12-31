@@ -159,8 +159,8 @@ def create_duplicate_groups(
             if img is None:
                 return None
             phash = imagehash.phash(img)
-                phash_str = str(phash)
-                filename_to_hash[fname] = phash_str
+            phash_str = str(phash)
+            filename_to_hash[fname] = phash_str
         except Exception as e:
             logging.debug(f"[duplicate_grouping] Failed to hash {fname}: {e}")
             # Use fallback for this file

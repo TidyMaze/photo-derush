@@ -13,10 +13,11 @@ Design goals:
   into the callable.
 """
 import logging
+import time
 import traceback
 from collections.abc import Callable
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
 
 class ProgressReporter:
@@ -58,21 +59,20 @@ class _RunnableTask(QRunnable):
         self._fn = fn
         self._runner = runner
         # OPTIMIZATION: Debounce progress updates to reduce signal emissions
+        # Use time-based rate limiting instead of Qt timer (works from any thread)
         self._pending_progress = None
-        self._progress_timer = None
+        self._last_emit_time = 0.0
+        self._emit_debounce_sec = 0.05  # 50ms debounce
 
     def _emit_progress(self, name: str, current: int, total: int, detail: str):
-        # OPTIMIZATION: Batch progress updates with 50ms debounce
+        # OPTIMIZATION: Batch progress updates with time-based debounce (thread-safe)
         self._pending_progress = (name, current, total, detail)
         
-        if self._progress_timer is None:
-            self._progress_timer = QTimer()
-            self._progress_timer.setSingleShot(True)
-            self._progress_timer.timeout.connect(self._flush_progress)
-        
-        # Restart timer to debounce rapid updates
-        self._progress_timer.stop()
-        self._progress_timer.start(50)  # 50ms debounce
+        # Check if enough time has passed since last emit
+        now = time.perf_counter()
+        if now - self._last_emit_time >= self._emit_debounce_sec:
+            self._flush_progress()
+            self._last_emit_time = now
     
     def _flush_progress(self):
         """Emit the pending progress update."""
@@ -97,8 +97,6 @@ class _RunnableTask(QRunnable):
             reporter = ProgressReporter(self, self._name)
             self._fn(reporter)
             # OPTIMIZATION: Flush any pending progress before task completes
-            if self._progress_timer:
-                self._progress_timer.stop()
             self._flush_progress()
             logging.debug(f"[TaskRunner] Task '{self._name}' completed successfully")
         except Exception as e:  # pragma: no cover - defensive path
