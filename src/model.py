@@ -23,6 +23,9 @@ class ImageModel:
         self.cache = cache or ThumbnailCache()
         self.allowed_exts = allowed_exts or [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff"]
         self._repo = repo or RatingsTagsRepository()
+        # Metadata-only caches (small, in-memory)
+        self._exif_cache: dict[str, dict] = {}  # EXIF metadata dict per path (~1-5KB each)
+        self._image_path_cache: dict[str, str] = {}  # Path strings (~100-200 bytes each)
 
     def set_allowed_exts(self, exts):
         is_valid_list = isinstance(exts, list) and all(isinstance(e, str) for e in exts)
@@ -66,11 +69,8 @@ class ImageModel:
         return os.path.basename(path)
 
     def load_exif(self, path):
-        # OPTIMIZATION: Cache EXIF data to avoid repeated file opens (2.5s -> ~0.1s)
-        # Use getattr instead of hasattr (faster)
-        if not hasattr(self, "_exif_cache"):
-            self._exif_cache = {}
-        
+        # OPTIMIZATION: Cache EXIF metadata only (not full images) to avoid repeated file opens
+        # EXIF cache stores only metadata dict (~1-5KB per image), not full decoded images
         # Check cache first
         if path in self._exif_cache:
             # Cache hit - return immediately (no file I/O)
