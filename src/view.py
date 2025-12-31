@@ -315,7 +315,7 @@ class PhotoView(QMainWindow):
         self.side_layout = QVBoxLayout(self.side_panel)
         # Minimize margins to reduce wasted space
         self.side_layout.setContentsMargins(3, 3, 3, 3)
-        self.side_layout.setSpacing(3)
+        self.side_layout.setSpacing(6)  # Increased spacing between sections
         self.side_scroll = QScrollArea()
         self.side_scroll.setWidgetResizable(True)
         # Remove margins from scroll area to eliminate gap
@@ -342,6 +342,7 @@ class PhotoView(QMainWindow):
     def _build_directory_selector(self):
         """Build directory selection controls."""
         dir_layout = QHBoxLayout()
+        dir_layout.setSpacing(6)  # Added spacing between directory label and switch button
         dir_label = QLabel("Directory:")
         dir_label.setStyleSheet("font-size: 9px;")
         self.dir_display = QLabel()
@@ -352,6 +353,7 @@ class PhotoView(QMainWindow):
         self.switch_dir_btn.setStyleSheet("""
             QPushButton {
                 padding: 3px 6px;
+                margin: 2px;
                 border: 1px solid #4a5a6a;
                 border-radius: 3px;
                 background: #3a4a5a;
@@ -379,8 +381,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 4px;
-                padding-top: 4px;
+                margin-top: 2px;
+                padding-top: 2px;
+                padding-left: 2px;
+                padding-right: 2px;
+                padding-bottom: 2px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -414,7 +419,7 @@ class PhotoView(QMainWindow):
 
         # Quick filter buttons
         quick_filters = QHBoxLayout()
-        quick_filters.setSpacing(6)
+        quick_filters.setSpacing(8)  # Increased spacing between filter buttons
         self.btn_unlabeled = QPushButton("Unlabeled")
         self.btn_keep = QPushButton("Keep")
         self.btn_trash = QPushButton("Trash")
@@ -426,6 +431,7 @@ class PhotoView(QMainWindow):
         self.btn_unlabeled.setStyleSheet("""
             QPushButton {
                 padding: 3px 6px;
+                margin: 2px;
                 border: 1px solid #4a4a4a;
                 border-radius: 3px;
                 background: #3a3a3a;
@@ -444,6 +450,7 @@ class PhotoView(QMainWindow):
         self.btn_keep.setStyleSheet("""
             QPushButton {
                 padding: 3px 6px;
+                margin: 2px;
                 border: 1px solid #4a5a4a;
                 border-radius: 3px;
                 background: #3a4a3a;
@@ -462,6 +469,7 @@ class PhotoView(QMainWindow):
         self.btn_trash.setStyleSheet("""
             QPushButton {
                 padding: 3px 6px;
+                margin: 2px;
                 border: 1px solid #5a4a4a;
                 border-radius: 3px;
                 background: #4a3a3a;
@@ -546,6 +554,7 @@ class PhotoView(QMainWindow):
             }
             QPushButton {
                 padding: 6px 12px;
+                margin: 3px;
                 border-radius: 4px;
                 font-weight: 500;
                 background: #3a3a3a;
@@ -672,8 +681,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 4px;
-                padding-top: 4px;
+                margin-top: 2px;
+                padding-top: 2px;
+                padding-left: 2px;
+                padding-right: 2px;
+                padding-bottom: 2px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -763,7 +775,8 @@ class PhotoView(QMainWindow):
 
         # Arrange into multiple rows with spacing (compact)
         outer = QVBoxLayout()
-        outer.setSpacing(3)
+        outer.setSpacing(2)  # Reduced spacing
+        outer.setContentsMargins(2, 2, 2, 2)  # Reduced margins
         
         # Row 1: Dataset stats
         top_row = QHBoxLayout()
@@ -951,8 +964,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 4px;
-                padding-top: 4px;
+                margin-top: 2px;
+                padding-top: 2px;
+                padding-left: 2px;
+                padding-right: 2px;
+                padding-bottom: 2px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -963,6 +979,8 @@ class PhotoView(QMainWindow):
             }
         """)
         exif_layout = QVBoxLayout(exif_group)
+        exif_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
+        exif_layout.setSpacing(2)  # Reduced spacing
 
         # Enhanced EXIF display with better formatting
         self.exif_view = QTextEdit()
@@ -996,8 +1014,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 4px;
-                padding-top: 4px;
+                margin-top: 2px;
+                padding-top: 2px;
+                padding-left: 2px;
+                padding-right: 2px;
+                padding-bottom: 2px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -1008,6 +1029,8 @@ class PhotoView(QMainWindow):
             }
         """)
         self.object_detection_layout = QVBoxLayout()
+        self.object_detection_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
+        self.object_detection_layout.setSpacing(2)  # Reduced spacing
         self.object_detection_group.setLayout(self.object_detection_layout)
 
         # Replace plain text with a chip-style list for better UX
@@ -1033,6 +1056,7 @@ class PhotoView(QMainWindow):
         self.open_btn.setStyleSheet("""
             QPushButton {
                 padding: 4px 8px;
+                margin: 2px;
                 border: 1px solid #ced4da;
                 border-radius: 3px;
                 background: #ffffff;
@@ -1053,7 +1077,7 @@ class PhotoView(QMainWindow):
 
         # Keep/Trash buttons - small and at top
         self.label_layout = QHBoxLayout()
-        self.label_layout.setSpacing(4)
+        self.label_layout.setSpacing(8)  # Increased spacing between Keep/Trash buttons
         self.keep_btn = QPushButton("Keep")
         self.trash_btn = QPushButton("Trash")
         self.keep_btn.clicked.connect(lambda: self.viewmodel.set_label("keep"))
@@ -1065,10 +1089,11 @@ class PhotoView(QMainWindow):
                 color: #d0e0d0;
                 border: 1px solid #5a7a5a;
                 border-radius: 2px;
-                padding: 3px 6px;
+                padding: 2px 5px;
+                margin: 2px;
                 font-weight: 500;
-                font-size: 9px;
-                min-height: 24px;
+                font-size: 8px;
+                min-height: 20px;
             }
             QPushButton:hover {
                 background: #5a7a5a;
@@ -1083,10 +1108,11 @@ class PhotoView(QMainWindow):
                 color: #e0d0d0;
                 border: 1px solid #7a5a5a;
                 border-radius: 2px;
-                padding: 3px 6px;
+                padding: 2px 5px;
+                margin: 2px;
                 font-weight: 500;
-                font-size: 9px;
-                min-height: 24px;
+                font-size: 8px;
+                min-height: 20px;
             }
             QPushButton:hover {
                 background: #7a5a5a;
@@ -1103,14 +1129,15 @@ class PhotoView(QMainWindow):
         self.train_btn = QPushButton("Train Model")
         self.train_btn.setStyleSheet("""
             QPushButton {
-                padding: 4px 8px;
+                padding: 2px 6px;
+                margin: 2px;
                 border: 1px solid #5a6a7a;
-                border-radius: 3px;
+                border-radius: 2px;
                 background: #4a5a6a;
                 color: #d0d0e0;
                 font-weight: 500;
-                font-size: 9px;
-                min-height: 24px;
+                font-size: 8px;
+                min-height: 20px;
             }
             QPushButton:hover:enabled {
                 background: #5a6a7a;
@@ -1125,14 +1152,15 @@ class PhotoView(QMainWindow):
         self.cancel_train_btn = QPushButton("Cancel")
         self.cancel_train_btn.setStyleSheet("""
             QPushButton {
-                padding: 4px 8px;
+                padding: 2px 6px;
+                margin: 2px;
                 border: 1px solid #5a5a5a;
-                border-radius: 3px;
+                border-radius: 2px;
                 background: #4a4a4a;
                 color: #c0c0c0;
                 font-weight: 500;
-                font-size: 9px;
-                min-height: 24px;
+                font-size: 8px;
+                min-height: 20px;
             }
             QPushButton:hover:enabled {
                 background: #5a5a5a;
@@ -1148,7 +1176,7 @@ class PhotoView(QMainWindow):
         self.train_btn.clicked.connect(self._on_train_clicked)
         self.cancel_train_btn.clicked.connect(self._on_cancel_train_clicked)
         train_layout = QHBoxLayout()
-        train_layout.setSpacing(4)
+        train_layout.setSpacing(8)  # Increased spacing between Train/Cancel buttons
         train_layout.addWidget(self.train_btn)
         train_layout.addWidget(self.cancel_train_btn)
         self.side_layout.addLayout(train_layout)
@@ -1183,8 +1211,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 4px;
-                padding-top: 4px;
+                margin-top: 2px;
+                padding-top: 2px;
+                padding-left: 2px;
+                padding-right: 2px;
+                padding-bottom: 2px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -1195,6 +1226,8 @@ class PhotoView(QMainWindow):
             }
         """)
         self.model_stats_layout = QVBoxLayout()
+        self.model_stats_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
+        self.model_stats_layout.setSpacing(2)  # Reduced spacing
         self.model_stats_group.setLayout(self.model_stats_layout)
         # Prevent the model stats group from forcing a wide minimum width
         self.model_stats_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
@@ -1202,8 +1235,8 @@ class PhotoView(QMainWindow):
         # Metrics in 2 rows (3 columns) to avoid truncation and use space better
         from PySide6.QtWidgets import QGridLayout
         metrics_grid = QGridLayout()
-        metrics_grid.setSpacing(3)
-        metrics_grid.setContentsMargins(2, 2, 2, 2)
+        metrics_grid.setSpacing(2)  # Reduced spacing
+        metrics_grid.setContentsMargins(1, 1, 1, 1)  # Reduced margins
         
         self.metric_auc = QLabel("AUC: —")
         self.metric_precision = QLabel("Precision: —")
