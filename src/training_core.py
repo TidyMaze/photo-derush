@@ -241,7 +241,8 @@ def _build_pipeline(
                 # Optimized via iterative hyperparameter search with CV:
                 # - LR=0.0430, iterations=932, patience=10 → CV-Acc=77.66%±3.29%, Keep-Loss=2.85%
                 max_iterations = 932  # Optimized via iterative search
-                effective_patience = max(early_stopping_rounds, 10)  # Optimized: low patience sufficient
+                # Increased patience from 10 to 50 for better stability (reduces variation in scores/features)
+                effective_patience = max(early_stopping_rounds, 50)  # Increased for stability
             else:
                 max_iterations = 200  # Optimal value from CV study
                 effective_patience = None
@@ -884,7 +885,7 @@ def train_keep_trash_model(
     min_samples: int = 2,
     progress_callback=None,
     displayed_filenames: list[str] | None = None,
-    early_stopping_rounds: int | None = 50,  # Default: 50 rounds patience
+    early_stopping_rounds: int | None = 100,  # Default: 100 rounds patience (increased for stability)
     cancellation_token=None,
     fast_mode: bool = False,  # Fast mode for app retraining: skip CV, use fewer iterations
 ) -> TrainingResult | None:

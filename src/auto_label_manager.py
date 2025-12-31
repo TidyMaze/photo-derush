@@ -850,6 +850,7 @@ class AutoLabelManager:
                         repo=repo,
                         n_estimators=120,
                         progress_callback=progress_cb,
+                        early_stopping_rounds=100,  # Increased patience for stability (reduces variation)
                         fast_mode=True,  # Use fast mode for app retraining (<5s target)
                     )
                     result = train_keep_trash_model(**kwargs)  # type: ignore[arg-type]
