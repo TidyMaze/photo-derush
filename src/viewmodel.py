@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from datetime import datetime
 
 from PySide6.QtCore import QObject, Signal
 
@@ -77,6 +78,8 @@ class PhotoViewModel(QObject):
         self._progress_total = 0
         self._loading_detections = False
         self._detection_task_running = False
+        self._detection_task_complete = False  # Track when detection task completes
+        self._pending_predictions = False  # Track if predictions are waiting for detection
         self._auto_selected_most_boxes = False
         self._group_info: dict[str, dict] = {}  # filename -> grouping info
         self._grouping_computed = False
@@ -353,13 +356,28 @@ class PhotoViewModel(QObject):
                             raise
                     finally:
                         self._detection_task_running = False
+                        self._detection_task_complete = True
+                        logging.info("[viewmodel] Object detection task completed")
+                        # Start pending predictions if they were waiting
+                        if self._pending_predictions:
+                            logging.info("[viewmodel] Starting pending predictions after object detection completes")
+                            self._pending_predictions = False
+                            if self._auto:
+                                self._auto.update_predictions_async()
 
                 # run detection in background task runner
                 try:
                     self._tasks.run("detect-objects", _detect_task)
                 except Exception:
                     # Fallback: run inline but keep UI safe
-                    _detect_task()
+                    # Create a dummy reporter for inline execution
+                    class DummyReporter:
+                        def detail(self, text): pass
+                        def set_total(self, total): pass
+                        def update(self, current, total): pass
+                    _detect_task(DummyReporter())
+                    # Mark complete if run inline
+                    self._detection_task_complete = True
         except Exception as e:
             # Propagate ValueError (sanitizer fail-fast) to callers/tests.
             if isinstance(e, ValueError):
@@ -914,7 +932,13 @@ class PhotoViewModel(QObject):
         if getattr(self, "_auto_label_enabled", False) or (self._auto and self._auto.enabled):
             self._auto.auto_label_unlabeled_async()
 
-        self._auto.update_predictions_async()
+        # Wait for object detection to complete before starting predictions
+        # Predictions use object detection results (person detection feature) in feature extraction
+        if self._detection_task_running or not self._detection_task_complete:
+            logging.info("[viewmodel] Waiting for object detection to complete before starting predictions...")
+            self._pending_predictions = True
+        else:
+            self._auto.update_predictions_async()
 
         self._progress_current = self._progress_total
         self.progress_changed.emit(self._progress_current, self._progress_total)
