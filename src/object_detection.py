@@ -653,7 +653,13 @@ def detect_objects(
         pass
 
     # Load and preprocess image
-    image = Image.open(image_path).convert("RGB")
+    # OPTIMIZATION: Use shared image cache to avoid repeated file opens
+    # This reduces PIL.Image.open overhead (39.2s -> ~10-15s expected)
+    from .image_cache import get_cached_image
+    cached_img = get_cached_image(image_path)
+    if cached_img is None:
+        return []
+    image = cached_img.convert("RGB")
 
     # Resize image to ensure the largest side equals max_size while
     # preserving aspect ratio. This upsamples small images and downsamples

@@ -153,8 +153,12 @@ def create_duplicate_groups(
     for fname in filenames:
         img_path = os.path.join(image_dir, fname)
         try:
-            with Image.open(img_path) as img:
-                phash = imagehash.phash(img)
+            # OPTIMIZATION: Use shared image cache to avoid repeated file opens
+            from src.image_cache import get_cached_image
+            img = get_cached_image(img_path)
+            if img is None:
+                return None
+            phash = imagehash.phash(img)
                 phash_str = str(phash)
                 filename_to_hash[fname] = phash_str
         except Exception as e:

@@ -367,13 +367,18 @@ def _compute_histograms(arr: np.ndarray, bins: int) -> np.ndarray:
 
 def _preprocess_image(path: str) -> ImagePreprocessResult | None:
     import time
+    from .image_cache import get_cached_image
+    
     prep_start = time.perf_counter()
     basename = os.path.basename(path)
     try:
         # Open image with lazy loading - don't decode until needed
         open_start = time.perf_counter()
-        # Use verify=False for faster loading (skip format verification)
-        img_original = Image.open(path)
+        # OPTIMIZATION: Use shared image cache to avoid repeated file opens
+        # This reduces PIL.Image.open overhead (39.2s -> ~10-15s expected)
+        img_original = get_cached_image(path)
+        if img_original is None:
+            return None
         # Extract EXIF BEFORE resizing (EXIF data is lost after resize)
         # Also extract BEFORE load() to avoid decoding if EXIF extraction fails early
         exif_start = time.perf_counter()

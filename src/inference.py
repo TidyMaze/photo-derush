@@ -593,7 +593,12 @@ def _compute_image_embeddings(image_paths: list[str], device: str = "auto") -> n
                 model = _embedding_model_cache[effective_device]
 
         def _embed(p):
-            img = Image.open(p).convert("RGB")
+            # OPTIMIZATION: Use shared image cache to avoid repeated file opens
+            from .image_cache import get_cached_image
+            cached_img = get_cached_image(p)
+            if cached_img is None:
+                return None
+            img = cached_img.convert("RGB")
             tf = transforms.Compose(
                 [
                     transforms.Resize(256),

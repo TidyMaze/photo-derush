@@ -4,6 +4,7 @@ import os
 from PIL import ExifTags, Image
 
 from .cache import ThumbnailCache
+from .image_cache import get_cached_image, get_cached_image_for_exif
 from .repository import RatingsTagsRepository
 
 
@@ -75,10 +76,13 @@ class ImageModel:
             return self._exif_cache[path]
         
         try:
-            # OPTIMIZATION: Use context manager to ensure file is closed immediately
-            # This avoids keeping file handles open and reduces memory pressure
-            with Image.open(path) as img:
-                exif_data = img._getexif() if hasattr(img, "_getexif") and callable(img._getexif) else None
+            # OPTIMIZATION: Use shared image cache to avoid repeated file opens
+            # This reduces PIL.Image.open overhead (39.2s -> ~10-15s expected)
+            img = get_cached_image_for_exif(path)
+            if img is None:
+                result = {}
+            else:
+                exif_data = img._getexif() if hasattr(img, "_getexif") and callable(img._getexif) else None  # type: ignore[attr-defined]
                 if not exif_data or not isinstance(exif_data, dict):
                     result = {}
                 else:
@@ -107,16 +111,21 @@ class ImageModel:
                 pass
             return thumb
         try:
-            with Image.open(path) as img:
-                # OPTIMIZATION: Store original size in thumbnail metadata for bbox overlay
-                orig_w, orig_h = img.size
-                # Preserve aspect ratio: use thumbnail() instead of square crop + resize
-                img_thumb = img.copy().convert("RGBA")
-                img_thumb.thumbnail((size, size), resample=Image.Resampling.LANCZOS)
-                
-                # Store original size in thumbnail metadata for bbox overlay
-                img_thumb.info["original_width"] = str(orig_w)
-                img_thumb.info["original_height"] = str(orig_h)
+            # OPTIMIZATION: Use shared image cache to avoid repeated file opens
+            # This reduces PIL.Image.open overhead (39.2s -> ~10-15s expected)
+            img = get_cached_image(path)
+            if img is None:
+                return None
+            
+            # OPTIMIZATION: Store original size in thumbnail metadata for bbox overlay
+            orig_w, orig_h = img.size
+            # Preserve aspect ratio: use thumbnail() instead of square crop + resize
+            img_thumb = img.copy().convert("RGBA")
+            img_thumb.thumbnail((size, size), resample=Image.Resampling.LANCZOS)
+            
+            # Store original size in thumbnail metadata for bbox overlay
+            img_thumb.info["original_width"] = str(orig_w)
+            img_thumb.info["original_height"] = str(orig_h)
 
             # Center on square canvas to maintain consistent thumbnail grid
             canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
