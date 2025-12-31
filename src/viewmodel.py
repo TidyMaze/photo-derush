@@ -1528,6 +1528,9 @@ class PhotoViewModel(QObject):
                         "roc_auc": result.roc_auc,
                         "f1": result.f1,
                         "confusion": result.confusion,
+                        "final_loss": result.final_loss,
+                        "iterations": result.iterations,
+                        "patience": result.patience,
                     }
                     # Add model metadata for feature name mapping (interactions, embeddings)
                     # Also extract feature importances from model (top 20 for better COCO visibility)

@@ -44,6 +44,9 @@ class TrainingResult:
     confusion: tuple[int, int, int, int] | None = None  # tn, fp, fn, tp
     training_history: dict[str, list[float]] | None = None
     aggregated_metrics: dict[str, float] | None = None  # CV metrics: keep_loss_rate_mean, pr_auc_mean, etc.
+    final_loss: float | None = None  # Final training loss value
+    iterations: int | None = None  # Number of iterations trained
+    patience: int | None = None  # Early stopping patience used
 
 
 class CancelledTraining(Exception):
@@ -1070,7 +1073,41 @@ def train_keep_trash_model(
         fit_time = time.perf_counter() - fit_start
         logging.info("[train] Model fitting completed in %.2fs", fit_time)
         _check_cancel("fit-done")
-
+        
+        # Extract training metrics (loss, iterations, patience) from model
+        final_loss = None
+        iterations = None
+        patience_used = early_stopping_rounds
+        try:
+            cat_model = clf.named_steps.get("cat")
+            if cat_model:
+                # Get iteration count
+                if hasattr(cat_model, "tree_count_"):
+                    iterations = int(cat_model.tree_count_)
+                
+                # Get final loss from evals_result
+                if hasattr(cat_model, "evals_result_"):
+                    evals = cat_model.evals_result_
+                    if evals:
+                        # Find validation loss (usually "validation" or "test" key)
+                        for key in evals:
+                            if "validation" in key.lower() or "test" in key.lower():
+                                # Look for Logloss metric
+                                if "Logloss" in evals[key]:
+                                    loss_values = evals[key]["Logloss"]
+                                    if loss_values:
+                                        final_loss = float(loss_values[-1])  # Last value
+                                        break
+                                # Fallback to first metric
+                                elif evals[key]:
+                                    first_metric = list(evals[key].keys())[0]
+                                    loss_values = evals[key][first_metric]
+                                    if loss_values:
+                                        final_loss = float(loss_values[-1])
+                                        break
+        except Exception as e:
+            logging.debug(f"[train] Failed to extract training metrics: {e}")
+        
         # Compute metrics on holdout set (model hasn't seen this)
         # Tune threshold on validation set (if available) or use default
         eval_start = time.perf_counter()
@@ -1193,6 +1230,9 @@ def train_keep_trash_model(
             confusion=confusion_vals,
             training_history=training_history,
             aggregated_metrics=cv_metrics,
+            final_loss=final_loss,
+            iterations=iterations,
+            patience=patience_used,
         )
     except CancelledTraining as c:
         logging.info(f"[train] Training cancelled at stage={c}")

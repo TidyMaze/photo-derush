@@ -885,6 +885,10 @@ class AutoLabelManager:
                         "keep_threshold_eff": keep_eff,
                         "trash_threshold_eff": trash_eff,
                         "weighted_mode": self.weighted_mode,
+                        # Training metrics
+                        "final_loss": result.final_loss,
+                        "iterations": result.iterations,
+                        "patience": result.patience,
                     }
                     # Include per-epoch training history if available
                     try:

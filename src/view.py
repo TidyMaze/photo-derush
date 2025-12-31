@@ -1178,16 +1178,37 @@ class PhotoView(QMainWindow):
         # Prevent the model stats group from forcing a wide minimum width
         self.model_stats_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
-        # Top summary row with key metrics
-        summary_layout = QHBoxLayout()
+        # Metrics in 2 rows (3 columns) to avoid truncation and use space better
+        from PySide6.QtWidgets import QGridLayout
+        metrics_grid = QGridLayout()
+        metrics_grid.setSpacing(4)
+        
         self.metric_auc = QLabel("AUC: —")
         self.metric_precision = QLabel("Precision: —")
         self.metric_f1 = QLabel("F1: —")
-        for w in (self.metric_auc, self.metric_precision, self.metric_f1):
-            w.setStyleSheet("QLabel { font-weight: 600; padding: 3px; font-size: 9px; }")
-            summary_layout.addWidget(w)
+        self.metric_loss = QLabel("Loss: —")
+        self.metric_iterations = QLabel("Iterations: —")
+        self.metric_patience = QLabel("Patience: —")
+        
+        # Style all metrics
+        for w in (self.metric_auc, self.metric_precision, self.metric_f1, self.metric_loss, self.metric_iterations, self.metric_patience):
+            w.setStyleSheet("QLabel { font-weight: 600; padding: 2px; font-size: 9px; }")
+            w.setWordWrap(False)  # Prevent text wrapping
+        
+        # Arrange in 2 rows x 3 columns
+        metrics_grid.addWidget(self.metric_auc, 0, 0)
+        metrics_grid.addWidget(self.metric_precision, 0, 1)
+        metrics_grid.addWidget(self.metric_f1, 0, 2)
+        metrics_grid.addWidget(self.metric_loss, 1, 0)
+        metrics_grid.addWidget(self.metric_iterations, 1, 1)
+        metrics_grid.addWidget(self.metric_patience, 1, 2)
+        
+        # Set column stretch to use available space
+        metrics_grid.setColumnStretch(0, 1)
+        metrics_grid.setColumnStretch(1, 1)
+        metrics_grid.setColumnStretch(2, 1)
 
-        self.model_stats_layout.addLayout(summary_layout)
+        self.model_stats_layout.addLayout(metrics_grid)
 
         # Top features list (compact)
         self.top_features_label = QLabel("Top features:")
@@ -3364,6 +3385,34 @@ class PhotoView(QMainWindow):
                     self.metric_f1.setText(f"F1: {float(f1) * 100:.2f}%")
                 except Exception:
                     self.metric_f1.setText(f"F1: {f1}")
+
+            # Training metrics (loss, iterations, patience)
+            final_loss = stats.get("final_loss")
+            if final_loss is None:
+                self.metric_loss.setText("Loss: —")
+            else:
+                try:
+                    self.metric_loss.setText(f"Loss: {float(final_loss):.6f}")
+                except Exception:
+                    self.metric_loss.setText(f"Loss: {final_loss}")
+
+            iterations = stats.get("iterations")
+            if iterations is None:
+                self.metric_iterations.setText("Iterations: —")
+            else:
+                try:
+                    self.metric_iterations.setText(f"Iterations: {int(iterations)}")
+                except Exception:
+                    self.metric_iterations.setText(f"Iterations: {iterations}")
+
+            patience = stats.get("patience")
+            if patience is None:
+                self.metric_patience.setText("Patience: —")
+            else:
+                try:
+                    self.metric_patience.setText(f"Patience: {int(patience)}")
+                except Exception:
+                    self.metric_patience.setText(f"Patience: {patience}")
 
             # Top features
             self._clear_layout(self.top_features_list_layout)
