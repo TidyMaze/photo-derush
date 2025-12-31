@@ -260,6 +260,17 @@ class PhotoViewModel(QObject):
             # Background detection task will handle missing detections.
             self._detected_objects = results
 
+            # If all detections are cached, mark detection as complete immediately
+            if len(to_process) == 0:
+                self._detection_task_complete = True
+                logging.debug(f"[DETECTION] All {len(self.images)} images already cached, detection complete")
+                # Start pending predictions if they were waiting
+                if self._pending_predictions:
+                    logging.info("[viewmodel] Starting pending predictions (all detections cached)")
+                    self._pending_predictions = False
+                    if self._auto:
+                        self._auto.update_predictions_async()
+
             # Schedule background detection for missing images to avoid blocking UI
             if len(to_process) > 0:
                 logging.debug(f"[DETECTION] {len(to_process)} images need detection, task_running={getattr(self, '_detection_task_running', False)}")
