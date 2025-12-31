@@ -1226,16 +1226,17 @@ class PhotoViewModel(QObject):
             # ignore if object_detection can't be imported
             pass
 
-        # Get classification model info
+        # Get classification model info and load initial stats
         classification_model_type = "unknown"
         classification_model_path = "unknown"
         try:
-            from .inference import load_model
+            from .inference import load_model, check_model_health
             from .training_core import DEFAULT_MODEL_PATH
-            import os
+            import joblib
+            import numpy as np
             
             model_path = os.path.expanduser(DEFAULT_MODEL_PATH)
-            if os.path.isfile(model_path):
+            if check_model_health(model_path):
                 bundle = load_model(model_path)
                 if bundle:
                     # Detect model type (XGBoost or CatBoost)
@@ -1246,7 +1247,53 @@ class PhotoViewModel(QObject):
                         elif "xgb" in model.named_steps:
                             classification_model_type = "XGBoost"
                     classification_model_path = os.path.basename(model_path)
-        except Exception:
+                    
+                    # Load and emit initial model stats with feature importances
+                    if bundle.meta:
+                        stats = {
+                            "n_samples": bundle.meta.get("n_samples", 0),
+                            "n_keep": bundle.meta.get("n_keep", 0),
+                            "n_trash": bundle.meta.get("n_trash", 0),
+                            "cv_accuracy_mean": bundle.meta.get("cv_accuracy_mean"),
+                            "cv_accuracy_std": bundle.meta.get("cv_accuracy_std"),
+                            "precision": bundle.meta.get("precision"),
+                            "roc_auc": bundle.meta.get("roc_auc"),
+                            "f1": bundle.meta.get("f1"),
+                            "model_metadata": bundle.meta,
+                        }
+                        # Extract feature importances from model (top 20 for better COCO visibility)
+                        if bundle.model and hasattr(bundle.model, "named_steps"):
+                            cat_model = bundle.model.named_steps.get("cat")
+                            xgb_model = bundle.model.named_steps.get("xgb")
+                            classifier = cat_model or xgb_model
+                            if classifier and hasattr(classifier, "feature_importances_"):
+                                importances = classifier.feature_importances_
+                                order = np.argsort(importances)[::-1][:20]
+                                fi = [(int(i), float(importances[i])) for i in order]
+                                stats["feature_importances"] = fi
+                        # Fallback: try loading from saved file
+                        elif os.path.isfile(model_path):
+                            data = joblib.load(model_path)
+                            fi = data.get("feature_importances")
+                            if fi and len(fi) <= 10:
+                                # If only top 10 saved, extract top 20 from model
+                                model = data.get("model")
+                                if model and hasattr(model, "named_steps"):
+                                    cat_model = model.named_steps.get("cat")
+                                    xgb_model = model.named_steps.get("xgb")
+                                    classifier = cat_model or xgb_model
+                                    if classifier and hasattr(classifier, "feature_importances_"):
+                                        importances = classifier.feature_importances_
+                                        order = np.argsort(importances)[::-1][:20]
+                                        fi = [(int(i), float(importances[i])) for i in order]
+                            if fi:
+                                stats["feature_importances"] = fi
+                        # Emit stats signal (will be connected to UI in _connect_signals)
+                        # Use QTimer to emit after initialization is complete
+                        from PySide6.QtCore import QTimer
+                        QTimer.singleShot(100, lambda: self.model_stats_changed.emit(stats))
+        except Exception as e:
+            logging.debug(f"[viewmodel] Failed to load initial model stats: {e}")
             pass
 
         # Get embedding model info (ResNet18 with device detection)
