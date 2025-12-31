@@ -18,28 +18,28 @@ def _thread_profile_func(frame, event, arg):
     thread_id = threading.get_ident()
     with _thread_profilers_lock:
         profiler = _thread_profilers.get(thread_id)
-        if profiler:
-            # Use the profiler's internal dispatch
-            try:
-                return profiler.trace_dispatch(frame, event, arg)
-            except ValueError:
-                # Another profiler is already active (e.g., main thread profiler)
-                # This can happen if threading.setprofile conflicts with cProfile.Profile.enable()
-                # Just return None to skip profiling this thread
-                return None
-        else:
+        if not profiler:
             # Create profiler for this thread on first call
             try:
                 profiler = cProfile.Profile()
                 profiler.enable()
                 _thread_profilers[thread_id] = profiler
                 logging.debug(f"[PROFILING] Created profiler for thread {thread_id}")
-                return profiler.trace_dispatch(frame, event, arg)
             except ValueError:
                 # Another profiler is already active - skip this thread
                 logging.debug(f"[PROFILING] Skipping thread {thread_id} (profiler conflict)")
                 return None
-    return None
+            except AttributeError:
+                # Profiler method not available - skip this thread
+                logging.debug(f"[PROFILING] Skipping thread {thread_id} (profiler method unavailable)")
+                return None
+        
+        # Record the event using profiler's internal mechanism
+        # Note: cProfile.Profile doesn't expose trace_dispatch, so we use enable() which
+        # sets up sys.setprofile internally. threading.setprofile works differently.
+        # For now, we'll let the profiler handle it via its enabled state.
+        # The profiler will automatically record events when enabled.
+        return None
 
 
 def enable_thread_profiling():
@@ -140,10 +140,8 @@ def aggregate_profiles(output_dir: str = "/tmp") -> cProfile.Profile | None:
     aggregated_stats.dump_stats(str(aggregated_file))
     logging.info(f"[PROFILING] Aggregated profile saved to {aggregated_file}")
     
-    # Create a Profile object for return (for compatibility)
-    aggregated = cProfile.Profile()
-    aggregated.load_stats(str(aggregated_file))
-    return aggregated
+    # Return None (caller should use pstats.Stats to load the file)
+    return None
 
 
 # Multiprocessing worker profiling
@@ -152,7 +150,6 @@ def init_worker_profiler():
     if os.environ.get("PROFILING") != "1":
         return None
     
-    import os
     worker_id = os.getpid()
     profiler = cProfile.Profile()
     profiler.enable()
@@ -166,7 +163,6 @@ def dump_worker_profile(profiler: cProfile.Profile | None, worker_id: int | None
         return
     
     if worker_id is None:
-        import os
         worker_id = os.getpid()
     
     try:

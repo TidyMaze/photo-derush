@@ -132,6 +132,7 @@ class PhotoView(QMainWindow):
         self.resize(1000, 700)
         self.selected_filenames = set()
         self.label_refs = {}  # Maps (row, col) -> QLabel for widgets currently in grid
+        self._label_to_grid_pos = {}  # Reverse mapping: QLabel -> (row, col) for O(1) lookup
         self._all_widgets = {}  # Maps filename -> QLabel for ALL widgets (including hidden)
         self._last_browser_state = None
         self._hover_tooltip = None  # Track current hover tooltip to prevent multiple windows
@@ -832,7 +833,8 @@ class PhotoView(QMainWindow):
             unlabeled_count = total_images - labeled_count
 
             # Count selected images
-            selected_count = len(self.selected_filenames) if hasattr(self, "selected_filenames") else 0
+            # OPTIMIZATION: selected_filenames is always set, use direct access
+            selected_count = len(self.selected_filenames)
 
             # Update labels with icons
             self.total_images_label.setText(f"📊 Total: {total_images}")
@@ -1378,6 +1380,7 @@ class PhotoView(QMainWindow):
 
             # Clear label_refs before re-adding (but widgets are preserved in _all_widgets)
             self.label_refs.clear()
+            self._label_to_grid_pos.clear()  # Clear reverse mapping
 
             # Re-add widgets in new positions
             # Track which labels we've already added to prevent duplicates
@@ -1400,6 +1403,7 @@ class PhotoView(QMainWindow):
                 if not label.isVisible():
                     label.show()
                 self.label_refs[(new_row, new_col)] = label
+                self._label_to_grid_pos[label] = (new_row, new_col)  # Update reverse mapping
 
                 # Removed frequent logging.debug - called for every label positioning (performance optimization)
                 # label_filename = getattr(label, "_thumb_filename", "unknown")
@@ -1919,9 +1923,10 @@ class PhotoView(QMainWindow):
         try:
             # Repaint all thumbnails to show updated predictions
             # OPTIMIZATION: Cache state access to avoid repeated getattr calls
-            state = self._last_browser_state if hasattr(self, "_last_browser_state") else None
-            detected_objects = state.detected_objects if state and hasattr(state, "detected_objects") else {}
-            group_info_dict = state.group_info if state and hasattr(state, "group_info") else {}
+            # Use getattr with default instead of hasattr (faster)
+            state = getattr(self, "_last_browser_state", None)
+            detected_objects = getattr(state, "detected_objects", {}) if state else {}
+            group_info_dict = getattr(state, "group_info", {}) if state else {}
             
             # State data is available (logged at debug level if needed)
             
@@ -1936,7 +1941,9 @@ class PhotoView(QMainWindow):
             primary_prob = None
             primary_label = None
             primary_name = None
-            primary = self.viewmodel.selection_model.primary() if hasattr(self.viewmodel, "selection_model") else None
+            # OPTIMIZATION: Use getattr instead of hasattr (faster)
+            selection_model = getattr(self.viewmodel, "selection_model", None)
+            primary = selection_model.primary() if selection_model else None
             if primary:
                 try:
                     primary_name = os.path.basename(primary)
@@ -2000,8 +2007,12 @@ class PhotoView(QMainWindow):
             
             for (row, col), label in all_labels:
                 try:
-                    # OPTIMIZATION: Direct attribute access (faster than getattr)
-                    fname = label._thumb_filename if hasattr(label, "_thumb_filename") else None
+                    # OPTIMIZATION: Direct attribute access (faster than hasattr + attribute)
+                    # _thumb_filename is always set, so use direct access with try/except
+                    try:
+                        fname = label._thumb_filename
+                    except AttributeError:
+                        fname = None
                     if not fname:
                         raise ValueError(f"Label at ({row}, {col}) missing _thumb_filename attribute")
 
@@ -2462,7 +2473,8 @@ class PhotoView(QMainWindow):
                         label._badge_painted = True  # type: ignore[attr-defined]
                     else:
                         # No badge painted yet (no label, no prediction) - ensure flag is False
-                        if not hasattr(label, "_badge_painted"):
+                        # Use getattr instead of hasattr (faster)
+                        if not getattr(label, "_badge_painted", False):
                             label._badge_painted = False  # type: ignore[attr-defined]
 
                     # Paint rating stars
@@ -2591,7 +2603,8 @@ class PhotoView(QMainWindow):
         # Update status bar to reflect selection count
         self._update_status_bar()
         # Show/hide batch toolbar based on selection count
-        selected_count = len(self.selected_filenames) if hasattr(self, "selected_filenames") else 0
+        # OPTIMIZATION: selected_filenames is always set, use direct access
+        selected_count = len(self.selected_filenames)
         if hasattr(self, "batch_toolbar"):
             self.batch_toolbar.setVisible(selected_count > 1)
 
@@ -2879,6 +2892,7 @@ class PhotoView(QMainWindow):
 
     def _on_thumbnail_loaded(self, path, thumb=None):
         try:
+            # OPTIMIZATION: Cache basename (was called twice)
             path_filename = os.path.basename(path)
             # Log the actual path to track if same path is being loaded multiple times
             logging.debug(f"[THUMBNAIL] Loading thumbnail for path={path}, filename={path_filename}, has_thumb={thumb is not None}, thumb_id={id(thumb) if thumb else None}, _all_widgets_count={len(self._all_widgets)}")
@@ -2887,11 +2901,17 @@ class PhotoView(QMainWindow):
                 return
 
             # Use direct lookup in _all_widgets (maps filename -> label)
-            path_filename = os.path.basename(path)
             label = self._all_widgets.get(path_filename)
 
             # If label not found, try multiple fallback strategies
             if not label:
+                # OPTIMIZATION: Cache abspath results to avoid repeated calls
+                path_abspath = None
+                try:
+                    path_abspath = os.path.abspath(str(path))
+                except Exception:
+                    pass
+                
                 # Strategy 1: Match by _thumb_filename attribute
                 for candidate_label in self._all_widgets.values():
                     candidate_filename = getattr(candidate_label, "_thumb_filename", None)
@@ -2901,12 +2921,13 @@ class PhotoView(QMainWindow):
                         break
 
                 # Strategy 2: Match by tooltip (full path)
-                if not label:
+                if not label and path_abspath:
                     for candidate_label in self._all_widgets.values():
                         tooltip_path = candidate_label.toolTip()
                         if tooltip_path:
                             try:
-                                if os.path.abspath(str(tooltip_path)) == os.path.abspath(str(path)):
+                                tooltip_abspath = os.path.abspath(str(tooltip_path))
+                                if tooltip_abspath == path_abspath:
                                     label = candidate_label
                                     logging.debug(f"[THUMBNAIL] Found label for {path_filename} via tooltip match")
                                     break
@@ -2945,33 +2966,17 @@ class PhotoView(QMainWindow):
                 logging.error(f"[THUMBNAIL] FILENAME MISMATCH: Thumbnail for {path_filename} found label with _thumb_filename={label_filename}. Skipping to prevent wrong assignment.")
                 return
 
-            # Safety check: if label already has a pixmap, verify it's for the same image
-            # (This catches race conditions where filename might have changed)
+            # OPTIMIZATION: Get grid position using O(1) reverse lookup instead of O(n) iteration
+            grid_pos = self._label_to_grid_pos.get(label)
+
+            # OPTIMIZATION: Combine pixmap checks to avoid redundant calls
             try:
                 existing_pixmap = label.pixmap()
                 if existing_pixmap and not existing_pixmap.isNull():
                     # Double-check filename still matches (race condition protection)
                     current_filename = getattr(label, "_thumb_filename", None)
                     if current_filename != path_filename:
-                        logging.error(f"[THUMBNAIL] Race condition: Label _thumb_filename changed from {path_filename} to {current_filename} during load. Skipping.")
-                        return
-            except Exception:
-                pass
-
-            # Find grid position for this label
-            grid_pos = None
-            for (r, c), lbl in self.label_refs.items():
-                if lbl == label:
-                    grid_pos = (r, c)
-                    break
-
-            # Check if this label already has a pixmap for a different image
-            try:
-                existing_pixmap = label.pixmap()
-                if existing_pixmap and not existing_pixmap.isNull():
-                    existing_filename = getattr(label, "_thumb_filename", None)
-                    if existing_filename and existing_filename != path_filename:
-                        logging.error(f"[THUMBNAIL] Label at {grid_pos} already displays {existing_filename}, rejecting {path_filename}")
+                        logging.error(f"[THUMBNAIL] Label at {grid_pos} already displays {current_filename}, rejecting {path_filename} (race condition or mismatch)")
                         return
             except Exception:
                 pass

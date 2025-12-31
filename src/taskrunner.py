@@ -16,7 +16,7 @@ import logging
 import traceback
 from collections.abc import Callable
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 
 
 class ProgressReporter:
@@ -57,8 +57,29 @@ class _RunnableTask(QRunnable):
         self._name = name
         self._fn = fn
         self._runner = runner
+        # OPTIMIZATION: Debounce progress updates to reduce signal emissions
+        self._pending_progress = None
+        self._progress_timer = None
 
     def _emit_progress(self, name: str, current: int, total: int, detail: str):
+        # OPTIMIZATION: Batch progress updates with 50ms debounce
+        self._pending_progress = (name, current, total, detail)
+        
+        if self._progress_timer is None:
+            self._progress_timer = QTimer()
+            self._progress_timer.setSingleShot(True)
+            self._progress_timer.timeout.connect(self._flush_progress)
+        
+        # Restart timer to debounce rapid updates
+        self._progress_timer.stop()
+        self._progress_timer.start(50)  # 50ms debounce
+    
+    def _flush_progress(self):
+        """Emit the pending progress update."""
+        if self._pending_progress is None:
+            return
+        name, current, total, detail = self._pending_progress
+        self._pending_progress = None
         try:
             self._runner.task_progress.emit(name, current, total, detail)
         except RuntimeError:
@@ -75,6 +96,10 @@ class _RunnableTask(QRunnable):
         try:
             reporter = ProgressReporter(self, self._name)
             self._fn(reporter)
+            # OPTIMIZATION: Flush any pending progress before task completes
+            if self._progress_timer:
+                self._progress_timer.stop()
+            self._flush_progress()
             logging.debug(f"[TaskRunner] Task '{self._name}' completed successfully")
         except Exception as e:  # pragma: no cover - defensive path
             ok = False

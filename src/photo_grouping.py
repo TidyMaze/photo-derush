@@ -38,6 +38,9 @@ SESSION_GAP_MIN = 10  # minutes
 BURST_GAP_SEC = 15.0  # seconds
 PHASH_HAMMING_THRESHOLD = 8  # bits (for near-duplicate detection) - balanced to avoid over-grouping
 
+# Feature flag for LSH optimization
+USE_LSH_OPTIMIZATION = True  # Set to False to use naive O(n²) approach
+
 
 def detect_sessions(
     photos: list[PhotoMetadata], session_gap_min: int = SESSION_GAP_MIN
@@ -118,6 +121,141 @@ def detect_bursts(
     return bursts
 
 
+def _add_edges_naive(
+    G: "nx.Graph",
+    filenames: list[str],
+    filename_to_hash_obj: dict[str, "imagehash.ImageHash | None"],
+    hamming_threshold: int,
+    progress_reporter=None,
+) -> None:
+    """Add edges using naive O(n²) comparison (for small datasets or when LSH is disabled)."""
+    import imagehash
+    
+    total_comparisons = len(filenames) * (len(filenames) - 1) // 2
+    comparisons_done = 0
+    last_progress_log = 0
+    
+    for i, fname1 in enumerate(filenames):
+        h1 = filename_to_hash_obj.get(fname1)
+        if h1 is None:
+            continue
+
+        # Progress reporting for large datasets
+        if len(filenames) > 200 and (i + 1) % 50 == 0:
+            comparisons_done += 50 * (len(filenames) - i - 1)
+            progress_pct = (comparisons_done / total_comparisons * 100) if total_comparisons > 0 else 0
+            if progress_pct - last_progress_log >= 10:  # Log every 10%
+                logging.info(f"[photo_grouping] Comparison progress: {progress_pct:.1f}% ({i+1}/{len(filenames)} photos)")
+                last_progress_log = progress_pct
+                if progress_reporter:
+                    progress_reporter.detail(f"Comparing hashes: {i+1}/{len(filenames)}...")
+
+        for fname2 in filenames[i + 1 :]:
+            h2 = filename_to_hash_obj.get(fname2)
+            if h2 is None:
+                continue
+
+            if h1 - h2 <= hamming_threshold:
+                G.add_edge(fname1, fname2)
+
+
+def _add_edges_lsh(
+    G: "nx.Graph",
+    filenames: list[str],
+    filename_to_hash_obj: dict[str, "imagehash.ImageHash | None"],
+    hamming_threshold: int,
+    progress_reporter=None,
+) -> None:
+    """Add edges using Locality-Sensitive Hashing (LSH) for O(n log n) complexity.
+    
+    Uses multi-index hashing: split hash into segments and only compare hashes
+    that share at least one segment.
+    """
+    import imagehash
+    
+    # Multi-index LSH: split 64-bit hash into segments
+    hash_bits = 64  # pHash is 64 bits
+    num_segments = 4
+    segment_size = hash_bits // num_segments  # 16 bits per segment
+    
+    # Build LSH index: segment_index -> segment_value -> list of (filename, hash_obj)
+    lsh_index: dict[int, dict[int, list[tuple[str, imagehash.ImageHash]]]] = {}
+    for idx in range(num_segments):
+        lsh_index[idx] = {}
+    
+    # Index all hashes by each segment
+    for fname, hash_obj in filename_to_hash_obj.items():
+        if hash_obj is None:
+            continue
+        
+        try:
+            hash_int = int(str(hash_obj), 16)  # Convert to integer
+            
+            for seg_idx in range(num_segments):
+                # Extract segment (16 bits)
+                shift = seg_idx * segment_size
+                mask = (1 << segment_size) - 1
+                segment_value = (hash_int >> shift) & mask
+                
+                # Add to index
+                if segment_value not in lsh_index[seg_idx]:
+                    lsh_index[seg_idx][segment_value] = []
+                lsh_index[seg_idx][segment_value].append((fname, hash_obj))
+        except (ValueError, AttributeError):
+            # Skip invalid hashes
+            continue
+    
+    # Build graph using LSH (only compare within same buckets)
+    compared_pairs = set()  # Track comparisons to avoid duplicates
+    comparisons_made = 0
+    
+    for fname1, hash1 in filename_to_hash_obj.items():
+        if hash1 is None:
+            continue
+        
+        # Find candidate matches using LSH
+        candidates = set()
+        
+        try:
+            hash1_int = int(str(hash1), 16)
+            
+            # Check each segment - if any segment matches, add to candidates
+            for seg_idx in range(num_segments):
+                shift = seg_idx * segment_size
+                mask = (1 << segment_size) - 1
+                segment_value = (hash1_int >> shift) & mask
+                
+                # Get all hashes in this bucket
+                bucket = lsh_index[seg_idx].get(segment_value, [])
+                for fname2, hash2 in bucket:
+                    if fname2 != fname1:
+                        candidates.add((fname2, hash2))
+        except (ValueError, AttributeError):
+            continue
+        
+        # Compare only with candidates (much smaller set)
+        for fname2, hash2 in candidates:
+            # Avoid duplicate comparisons
+            pair = tuple(sorted([fname1, fname2]))
+            if pair in compared_pairs:
+                continue
+            compared_pairs.add(pair)
+            
+            comparisons_made += 1
+            try:
+                if hash1 - hash2 <= hamming_threshold:
+                    G.add_edge(fname1, fname2)
+            except (ValueError, TypeError):
+                continue
+    
+    naive_comparisons = len(filenames) * (len(filenames) - 1) // 2
+    reduction_pct = (1 - comparisons_made / naive_comparisons) * 100 if naive_comparisons > 0 else 0
+    logging.info(
+        f"[photo_grouping] LSH: {comparisons_made} comparisons "
+        f"(vs {naive_comparisons} naive, {reduction_pct:.1f}% reduction)"
+    )
+
+
 def group_near_duplicates(
     filenames: list[str],
     hash_fn: Callable[[str], str],
@@ -173,7 +311,7 @@ def group_near_duplicates(
             G.add_node(fname)
 
     # Add edges for similar hashes
-    # OPTIMIZATION: Cache hash objects to avoid repeated hex_to_hash() calls (76k calls -> 0)
+    # OPTIMIZATION: Use LSH (Locality-Sensitive Hashing) for O(n²) → O(n log n)
     try:
         import imagehash
 
@@ -188,34 +326,11 @@ def group_near_duplicates(
                 except Exception:
                     filename_to_hash_obj[fname] = None
 
-        # Now compare cached hash objects directly (no hex_to_hash calls)
-        # OPTIMIZATION: Add progress reporting and early termination for large datasets
-        total_comparisons = len(filenames) * (len(filenames) - 1) // 2
-        comparisons_done = 0
-        last_progress_log = 0
-        
-        for i, fname1 in enumerate(filenames):
-            h1 = filename_to_hash_obj.get(fname1)
-            if h1 is None:
-                continue
-
-            # Progress reporting for large datasets
-            if len(filenames) > 200 and (i + 1) % 50 == 0:
-                comparisons_done += 50 * (len(filenames) - i - 1)
-                progress_pct = (comparisons_done / total_comparisons * 100) if total_comparisons > 0 else 0
-                if progress_pct - last_progress_log >= 10:  # Log every 10%
-                    logging.info(f"[photo_grouping] Comparison progress: {progress_pct:.1f}% ({i+1}/{len(filenames)} photos)")
-                    last_progress_log = progress_pct
-                    if progress_reporter:
-                        progress_reporter.detail(f"Comparing hashes: {i+1}/{len(filenames)}...")
-
-            for fname2 in filenames[i + 1 :]:
-                h2 = filename_to_hash_obj.get(fname2)
-                if h2 is None:
-                    continue
-
-                if h1 - h2 <= hamming_threshold:
-                    G.add_edge(fname1, fname2)
+        # Use LSH for large datasets, naive for small ones
+        if USE_LSH_OPTIMIZATION and len(filenames) > 20:
+            _add_edges_lsh(G, filenames, filename_to_hash_obj, hamming_threshold, progress_reporter)
+        else:
+            _add_edges_naive(G, filenames, filename_to_hash_obj, hamming_threshold, progress_reporter)
     except ImportError:
         # imagehash not available, use string comparison as fallback
         logging.warning("[photo_grouping] imagehash not available, using exact hash matching")

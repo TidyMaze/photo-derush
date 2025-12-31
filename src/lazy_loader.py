@@ -246,5 +246,70 @@ class LazyImageLoader:
             "thumb_misses": self._cached_thumb.cache_info().misses,
         }
 
+    def preload_exif_silent(self, paths: list[str]) -> None:
+        """Pre-load EXIF for paths in background (silent, no callbacks).
+        
+        Args:
+            paths: List of image paths to pre-load
+        """
+        if self._cancelled:
+            return
+        
+        def _load_silent(p: str):
+            """Load EXIF silently in background thread."""
+            try:
+                if self._cancelled:
+                    return
+                if is_cache_disabled():
+                    self._load_exif_uncached(p)
+                else:
+                    self._cached_exif(p)  # Populates LRU cache
+            except Exception:
+                pass  # Silent failure
+        
+        # Submit all paths to thread pool
+        for path in paths:
+            self.executor.submit(_load_silent, path)
+
+    def preload_exif_batch(
+        self,
+        paths: list[str],
+        priority_paths: list[str] | None = None,
+        callback: Callable[[str, dict], None] | None = None,
+    ) -> None:
+        """Pre-load EXIF for multiple paths with optional priority and callback.
+        
+        Args:
+            paths: List of image paths to pre-load
+            priority_paths: Paths to load first (e.g., visible images)
+            callback: Optional callback called for each loaded EXIF (path, exif_dict)
+        """
+        if self._cancelled:
+            return
+        
+        # Load priority paths first
+        if priority_paths:
+            for path in priority_paths:
+                if path in paths:
+                    if callback:
+                        self.get_exif_lazy(path, callback)
+                    else:
+                        self.preload_exif_silent([path])
+            
+            # Then load remaining paths
+            remaining = [p for p in paths if p not in priority_paths]
+            if callback:
+                for path in remaining:
+                    self.get_exif_lazy(path, callback)
+            else:
+                self.preload_exif_silent(remaining)
+        else:
+            # Load all paths
+            if callback:
+                for path in paths:
+                    self.get_exif_lazy(path, callback)
+            else:
+                self.preload_exif_silent(paths)
+
 
 __all__ = ["LazyImageLoader"]
