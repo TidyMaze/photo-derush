@@ -1260,6 +1260,9 @@ class PhotoViewModel(QObject):
                             "roc_auc": bundle.meta.get("roc_auc"),
                             "f1": bundle.meta.get("f1"),
                             "model_metadata": bundle.meta,
+                            "final_loss": bundle.meta.get("final_loss"),  # Include training metrics
+                            "iterations": bundle.meta.get("iterations"),
+                            "patience": bundle.meta.get("patience"),
                         }
                         # Extract feature importances from model (top 20 for better COCO visibility)
                         if bundle.model and hasattr(bundle.model, "named_steps"):
@@ -1288,6 +1291,13 @@ class PhotoViewModel(QObject):
                                         fi = [(int(i), float(importances[i])) for i in order]
                             if fi:
                                 stats["feature_importances"] = fi
+                            # Also load training metrics from saved file if not already in stats
+                            if stats.get("final_loss") is None:
+                                stats["final_loss"] = data.get("final_loss")
+                            if stats.get("iterations") is None:
+                                stats["iterations"] = data.get("iterations")
+                            if stats.get("patience") is None:
+                                stats["patience"] = data.get("patience")
                         # Emit stats signal (will be connected to UI in _connect_signals)
                         # Use QTimer to emit after initialization is complete
                         from PySide6.QtCore import QTimer

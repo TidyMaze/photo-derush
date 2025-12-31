@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 
@@ -79,14 +79,6 @@ class GroupBadgeWidget(QWidget):
         if widget_w <= 0 or widget_h <= 0:
             return
 
-        # Badge dimensions
-        badge_h = max(14, int(widget_h * 0.10))  # ~10% of height, minimum 14px (smaller)
-        badge_w = max(35, int(widget_w * 0.25))  # ~25% of width, minimum 35px (smaller)
-
-        # Position badges at top-left
-        x = 2
-        y = 2
-
         # Font setup - consistent smaller font for all badges
         font = QFont()
         base_font_size = 5.5  # Smaller font for all badges
@@ -94,6 +86,43 @@ class GroupBadgeWidget(QWidget):
         font.setPixelSize(font_pixel_size)
         font.setBold(True)
         painter.setFont(font)
+        
+        # Use QFontMetrics to calculate text width for proper badge sizing
+        font_metrics = QFontMetrics(font)
+        
+        # Calculate required width for each badge text
+        best_text = "⭐ BEST"
+        best_text_width = font_metrics.horizontalAdvance(best_text)
+        
+        # Calculate max group size text width (e.g., "×999" for very large groups)
+        max_size_text = f"×{self.group_size}"
+        max_size_text_width = font_metrics.horizontalAdvance(max_size_text)
+        
+        # Calculate group_id text width (e.g., "#999" for large group IDs)
+        group_id_text = f"#{self.group_id}" if self.group_id is not None else ""
+        group_id_text_width = font_metrics.horizontalAdvance(group_id_text) if group_id_text else 0
+        
+        # Badge dimensions - use text width + padding, but respect widget bounds
+        padding = 8  # Horizontal padding (4px on each side)
+        min_badge_w = 35
+        max_badge_w = int(widget_w * 0.4)  # Max 40% of widget width
+        
+        # Calculate required width for all badges that will be shown
+        required_widths = []
+        if self.is_best and self.group_size >= 2:
+            required_widths.append(best_text_width + padding)
+        if self.group_size > 1:
+            required_widths.append(max_size_text_width + padding)
+        if self.group_id is not None:
+            required_widths.append(group_id_text_width + padding)
+        
+        # Use the maximum required width, but respect min/max bounds
+        badge_w = max(min_badge_w, min(max(required_widths) if required_widths else min_badge_w, max_badge_w))
+        badge_h = max(14, int(widget_h * 0.10))  # ~10% of height, minimum 14px
+
+        # Position badges at top-left
+        x = 2
+        y = 2
 
         badges_drawn = 0
 

@@ -3276,35 +3276,33 @@ class PhotoView(QMainWindow):
                     self.metric_f1.setText(f"F1: {f1}")
 
             # Training metrics (loss, iterations, patience)
+            # Only update if present in stats (preserve existing values if not provided)
             final_loss = stats.get("final_loss")
-            if final_loss is None:
-                self.metric_loss.setText("Loss: —")
-            else:
+            if final_loss is not None:
                 try:
                     # Format loss with fewer decimals for readability
                     self.metric_loss.setText(f"Loss: {float(final_loss):.4f}")
                 except Exception:
                     self.metric_loss.setText(f"Loss: {final_loss}")
+            # else: keep existing value (don't reset to "—")
 
             iterations = stats.get("iterations")
-            if iterations is None:
-                self.metric_iterations.setText("Iter: —")
-            else:
+            if iterations is not None:
                 try:
                     # Shortened label to save space
                     self.metric_iterations.setText(f"Iter: {int(iterations)}")
                 except Exception:
                     self.metric_iterations.setText(f"Iter: {iterations}")
+            # else: keep existing value (don't reset to "—")
 
             patience = stats.get("patience")
-            if patience is None:
-                self.metric_patience.setText("Pat: —")
-            else:
+            if patience is not None:
                 try:
                     # Shortened label to save space
                     self.metric_patience.setText(f"Pat: {int(patience)}")
                 except Exception:
                     self.metric_patience.setText(f"Pat: {patience}")
+            # else: keep existing value (don't reset to "—")
 
             # Top features
             self._clear_layout(self.top_features_list_layout)
