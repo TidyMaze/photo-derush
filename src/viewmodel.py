@@ -1483,12 +1483,42 @@ class PhotoViewModel(QObject):
                         "confusion": result.confusion,
                     }
                     # Add model metadata for feature name mapping (interactions, embeddings)
+                    # Also extract feature importances from model (top 20 for better COCO visibility)
                     try:
                         from .inference import load_model
+                        import joblib
+                        import numpy as np
                         if result.model_path:
                             bundle = load_model(result.model_path)
                             if bundle and bundle.meta:
                                 stats_dict["model_metadata"] = bundle.meta
+                            # Extract feature importances from model (top 20)
+                            if bundle and bundle.model and hasattr(bundle.model, "named_steps"):
+                                cat_model = bundle.model.named_steps.get("cat")
+                                xgb_model = bundle.model.named_steps.get("xgb")
+                                classifier = cat_model or xgb_model
+                                if classifier and hasattr(classifier, "feature_importances_"):
+                                    importances = classifier.feature_importances_
+                                    order = np.argsort(importances)[::-1][:20]
+                                    fi = [(int(i), float(importances[i])) for i in order]
+                                    stats_dict["feature_importances"] = fi
+                            # Fallback: try loading from saved file
+                            elif os.path.isfile(result.model_path):
+                                data = joblib.load(result.model_path)
+                                fi = data.get("feature_importances")
+                                if fi and len(fi) <= 10:
+                                    # If only top 10 saved, extract top 20 from model
+                                    model = data.get("model")
+                                    if model and hasattr(model, "named_steps"):
+                                        cat_model = model.named_steps.get("cat")
+                                        xgb_model = model.named_steps.get("xgb")
+                                        classifier = cat_model or xgb_model
+                                        if classifier and hasattr(classifier, "feature_importances_"):
+                                            importances = classifier.feature_importances_
+                                            order = np.argsort(importances)[::-1][:20]
+                                            fi = [(int(i), float(importances[i])) for i in order]
+                                if fi:
+                                    stats_dict["feature_importances"] = fi
                     except Exception:
                         pass  # Ignore errors loading metadata
                     if keep_eff is not None and trash_eff is not None and hasattr(self, "_auto"):
