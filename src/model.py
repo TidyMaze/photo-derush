@@ -73,6 +73,7 @@ class ImageModel:
         
         # Check cache first
         if path in self._exif_cache:
+            # Cache hit - return immediately (no file I/O)
             return self._exif_cache[path]
         
         try:

@@ -1453,17 +1453,30 @@ class PhotoViewModel(QObject):
                 # OPTIMIZATION: Batch EXIF loading to reduce overhead
                 exif_data: dict[str, dict] = {}
                 # Pre-warm cache by loading EXIF in batches (reduces per-call overhead)
+                # EXIF should already be pre-loaded in background, so most calls should hit cache
                 batch_size = 50
+                cache_hits = 0
+                cache_misses = 0
                 for batch_start in range(0, len(self.images), batch_size):
                     batch_end = min(batch_start + batch_size, len(self.images))
                     for idx in range(batch_start, batch_end):
                         filename = self.images[idx]
                         path = self.model.get_image_path(filename)
                         if path:
-                            # load_exif uses internal cache, so this should be fast
+                            # Check if already in cache (before calling load_exif)
+                            was_cached = hasattr(self.model, "_exif_cache") and path in self.model._exif_cache
+                            # load_exif uses internal cache, so this should be fast if cached
                             exif_data[filename] = self.model.load_exif(path)
+                            if was_cached:
+                                cache_hits += 1
+                            else:
+                                cache_misses += 1
                     if reporter:
-                        reporter.detail(f"Collected EXIF for {batch_end}/{len(self.images)} photos...")
+                        hit_rate = (cache_hits / (cache_hits + cache_misses) * 100) if (cache_hits + cache_misses) > 0 else 0
+                        detail_msg = f"Collected EXIF for {batch_end}/{len(self.images)} photos... (cache: {hit_rate:.0f}% hit)"
+                        reporter.detail(detail_msg)
+                        # Also log to console for verification
+                        logging.info(f"[grouping] {detail_msg} (hits: {cache_hits}, misses: {cache_misses})")
                 
                 # Get keep probabilities from auto-label manager
                 keep_probs: dict[str, float] = {}
