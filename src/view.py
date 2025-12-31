@@ -315,7 +315,7 @@ class PhotoView(QMainWindow):
         self.side_layout = QVBoxLayout(self.side_panel)
         # Minimize margins to reduce wasted space
         self.side_layout.setContentsMargins(3, 3, 3, 3)
-        self.side_layout.setSpacing(8)  # Increased spacing between all field sets
+        self.side_layout.setSpacing(12)  # Increased vertical spacing between all field sets
         self.side_scroll = QScrollArea()
         self.side_scroll.setWidgetResizable(True)
         # Remove margins from scroll area to eliminate gap
@@ -373,7 +373,7 @@ class PhotoView(QMainWindow):
         # Wrap directory layout in a widget to add top/bottom margins
         dir_widget = QWidget()
         dir_widget_layout = QVBoxLayout(dir_widget)
-        dir_widget_layout.setContentsMargins(0, 6, 0, 6)  # Top and bottom margins
+        dir_widget_layout.setContentsMargins(0, 10, 0, 10)  # Increased top and bottom margins
         dir_widget_layout.setSpacing(0)
         dir_widget_layout.addLayout(dir_layout)
         
@@ -389,11 +389,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 2px;
-                padding-top: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
                 padding-left: 2px;
                 padding-right: 2px;
-                padding-bottom: 2px;
+                padding-bottom: 4px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -689,11 +689,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 2px;
-                padding-top: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
                 padding-left: 2px;
                 padding-right: 2px;
-                padding-bottom: 2px;
+                padding-bottom: 4px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -783,8 +783,8 @@ class PhotoView(QMainWindow):
 
         # Arrange into multiple rows with spacing (compact)
         outer = QVBoxLayout()
-        outer.setSpacing(2)  # Reduced spacing
-        outer.setContentsMargins(2, 2, 2, 2)  # Reduced margins
+        outer.setSpacing(6)  # Increased vertical spacing between rows
+        outer.setContentsMargins(2, 4, 2, 4)  # Increased top/bottom margins
         
         # Row 1: Dataset stats
         top_row = QHBoxLayout()
@@ -972,11 +972,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 2px;
-                padding-top: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
                 padding-left: 2px;
                 padding-right: 2px;
-                padding-bottom: 2px;
+                padding-bottom: 4px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -987,8 +987,8 @@ class PhotoView(QMainWindow):
             }
         """)
         exif_layout = QVBoxLayout(exif_group)
-        exif_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
-        exif_layout.setSpacing(2)  # Reduced spacing
+        exif_layout.setContentsMargins(2, 4, 2, 4)  # Increased top/bottom margins
+        exif_layout.setSpacing(4)  # Increased spacing
 
         # Enhanced EXIF display with better formatting
         self.exif_view = QTextEdit()
@@ -1022,11 +1022,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 2px;
-                padding-top: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
                 padding-left: 2px;
                 padding-right: 2px;
-                padding-bottom: 2px;
+                padding-bottom: 4px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -1037,8 +1037,8 @@ class PhotoView(QMainWindow):
             }
         """)
         self.object_detection_layout = QVBoxLayout()
-        self.object_detection_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
-        self.object_detection_layout.setSpacing(2)  # Reduced spacing
+        self.object_detection_layout.setContentsMargins(2, 4, 2, 4)  # Increased top/bottom margins
+        self.object_detection_layout.setSpacing(4)  # Increased spacing
         self.object_detection_group.setLayout(self.object_detection_layout)
 
         # Replace plain text with a chip-style list for better UX
@@ -1219,11 +1219,11 @@ class PhotoView(QMainWindow):
                 color: #d0d0d0;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                margin-top: 2px;
-                padding-top: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
                 padding-left: 2px;
                 padding-right: 2px;
-                padding-bottom: 2px;
+                padding-bottom: 4px;
                 font-size: 9px;
                 background: #2a2a2a;
             }
@@ -1234,8 +1234,8 @@ class PhotoView(QMainWindow):
             }
         """)
         self.model_stats_layout = QVBoxLayout()
-        self.model_stats_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
-        self.model_stats_layout.setSpacing(2)  # Reduced spacing
+        self.model_stats_layout.setContentsMargins(2, 4, 2, 4)  # Increased top/bottom margins
+        self.model_stats_layout.setSpacing(4)  # Increased spacing
         self.model_stats_group.setLayout(self.model_stats_layout)
         # Prevent the model stats group from forcing a wide minimum width
         self.model_stats_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
