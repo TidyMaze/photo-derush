@@ -147,13 +147,13 @@ class BadgeOverlayWidget(QWidget):
             # No prediction available - show label only without percentage
             badge_text = f"{emoji}{letter}"
         
-        # Background color based on source
+        # Background color based on source - slightly transparent
         if self.label_source == "manual":
-            bg_color = QColor(27, 140, 77, 240) if is_keep else QColor(200, 50, 40, 240)
+            bg_color = QColor(27, 140, 77, 160) if is_keep else QColor(200, 50, 40, 160)  # Reduced from 240
         elif self.label_source == "auto":
-            bg_color = QColor(60, 200, 120, 200) if is_keep else QColor(250, 120, 100, 200)
+            bg_color = QColor(60, 200, 120, 160) if is_keep else QColor(250, 120, 100, 160)  # Reduced from 200
         else:
-            bg_color = QColor(39, 174, 96, 220) if is_keep else QColor(231, 76, 60, 220)
+            bg_color = QColor(39, 174, 96, 160) if is_keep else QColor(231, 76, 60, 160)  # Reduced from 220
         
         # Text with proper DPR scaling for sharp rendering
         font = QFont()
@@ -163,17 +163,17 @@ class BadgeOverlayWidget(QWidget):
         font.setBold(True)
         painter.setFont(font)
         
-        # Drop shadow
+        # Drop shadow - slightly more transparent
         shadow_offset = 1
-        painter.fillRect(x + shadow_offset, y + shadow_offset, badge_w_logical, badge_h_logical, QColor(0, 0, 0, 100))
+        painter.fillRect(x + shadow_offset, y + shadow_offset, badge_w_logical, badge_h_logical, QColor(0, 0, 0, 80))  # Reduced from 100
         
         # Background
         painter.fillRect(x, y, badge_w_logical, badge_h_logical, bg_color)
         
-        # Text outline (dark) then fill (white)
-        painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
+        # Text outline (dark) then fill (white) - fully opaque (alpha 255)
+        painter.setPen(QPen(QColor(0, 0, 0, 255), 1))  # Fully opaque outline
         painter.drawText(x, y, badge_w_logical, badge_h_logical, Qt.AlignmentFlag.AlignCenter, badge_text)
-        painter.setPen(QPen(QColor(255, 255, 255)))
+        painter.setPen(QPen(QColor(255, 255, 255, 255)))  # Fully opaque white text
         painter.drawText(x, y, badge_w_logical, badge_h_logical, Qt.AlignmentFlag.AlignCenter, badge_text)
         
         painter.end()

@@ -131,9 +131,9 @@ class GroupBadgeWidget(QWidget):
             best_x = x
             best_y = y + badges_drawn * (badge_h + 2)
 
-            # Background (gold/yellow)
-            bg_color = QColor(255, 215, 0, 240)  # Gold with transparency
-            shadow_color = QColor(0, 0, 0, 100)
+            # Background (gold/yellow) - slightly transparent
+            bg_color = QColor(255, 215, 0, 160)  # Gold with transparency (reduced from 240)
+            shadow_color = QColor(0, 0, 0, 80)  # Slightly more transparent shadow
 
             # Drop shadow
             painter.fillRect(best_x + 1, best_y + 1, badge_w, badge_h, shadow_color)
@@ -141,10 +141,10 @@ class GroupBadgeWidget(QWidget):
             # Background
             painter.fillRect(best_x, best_y, badge_w, badge_h, bg_color)
 
-            # Text
-            painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
+            # Text - fully opaque (alpha 255)
+            painter.setPen(QPen(QColor(0, 0, 0, 255), 1))  # Fully opaque outline
             painter.drawText(best_x, best_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, "⭐ BEST")
-            painter.setPen(QPen(QColor(255, 255, 255)))
+            painter.setPen(QPen(QColor(255, 255, 255, 255)))  # Fully opaque white text
             painter.drawText(best_x, best_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, "⭐ BEST")
 
             badges_drawn += 1
@@ -154,9 +154,9 @@ class GroupBadgeWidget(QWidget):
             size_x = x
             size_y = y + badges_drawn * (badge_h + 2)
 
-            # Background (blue/cyan)
-            bg_color = QColor(70, 130, 180, 220)  # Steel blue with transparency
-            shadow_color = QColor(0, 0, 0, 100)
+            # Background (blue/cyan) - slightly transparent
+            bg_color = QColor(70, 130, 180, 160)  # Steel blue with transparency (reduced from 220)
+            shadow_color = QColor(0, 0, 0, 80)  # Slightly more transparent shadow
 
             # Drop shadow
             painter.fillRect(size_x + 1, size_y + 1, badge_w, badge_h, shadow_color)
@@ -164,11 +164,11 @@ class GroupBadgeWidget(QWidget):
             # Background
             painter.fillRect(size_x, size_y, badge_w, badge_h, bg_color)
 
-            # Text
+            # Text - fully opaque (alpha 255)
             text = f"×{self.group_size}"
-            painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
+            painter.setPen(QPen(QColor(0, 0, 0, 255), 1))  # Fully opaque outline
             painter.drawText(size_x, size_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, text)
-            painter.setPen(QPen(QColor(255, 255, 255)))
+            painter.setPen(QPen(QColor(255, 255, 255, 255)))  # Fully opaque white text
             painter.drawText(size_x, size_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, text)
 
             badges_drawn += 1
@@ -178,9 +178,9 @@ class GroupBadgeWidget(QWidget):
             group_x = x
             group_y = y + badges_drawn * (badge_h + 2)
 
-            # Background (gray/dark)
-            bg_color = QColor(100, 100, 100, 200)  # Gray with transparency
-            shadow_color = QColor(0, 0, 0, 100)
+            # Background (gray/dark) - slightly transparent
+            bg_color = QColor(100, 100, 100, 160)  # Gray with transparency (reduced from 200)
+            shadow_color = QColor(0, 0, 0, 80)  # Slightly more transparent shadow
 
             # Drop shadow
             painter.fillRect(group_x + 1, group_y + 1, badge_w, badge_h, shadow_color)
@@ -188,10 +188,10 @@ class GroupBadgeWidget(QWidget):
             # Background
             painter.fillRect(group_x, group_y, badge_w, badge_h, bg_color)
 
-            # Text
+            # Text - fully opaque (alpha 255)
             text = f"#{self.group_id}"
-            painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
+            painter.setPen(QPen(QColor(0, 0, 0, 255), 1))  # Fully opaque outline
             painter.drawText(group_x, group_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, text)
-            painter.setPen(QPen(QColor(255, 255, 255)))
+            painter.setPen(QPen(QColor(255, 255, 255, 255)))  # Fully opaque white text
             painter.drawText(group_x, group_y, badge_w, badge_h, Qt.AlignmentFlag.AlignCenter, text)
 
