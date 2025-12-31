@@ -80,6 +80,7 @@ class PhotoViewModel(QObject):
         self._detection_task_running = False
         self._detection_task_complete = False  # Track when detection task completes
         self._pending_predictions = False  # Track if predictions are waiting for detection
+        self._detection_retrain_triggered = False  # Track if retrain was triggered after detection
         self._auto_selected_most_boxes = False
         self._group_info: dict[str, dict] = {}  # filename -> grouping info
         self._grouping_computed = False
@@ -167,6 +168,9 @@ class PhotoViewModel(QObject):
 
     def _connect_signals(self):
         self.selection_model.selectionChanged.connect(self._on_selection_changed)
+        # Connect object detection updates to trigger retraining (with debounce)
+        # Each detection update (with objects or not) should retrigger training
+        self.object_detection_ready.connect(self._on_object_detection_ready)
         self.selection_model.primaryChanged.connect(self._on_primary_changed)
         self._tasks.task_started.connect(self.task_started.emit)
         self._tasks.task_progress.connect(self.task_progress.emit)
@@ -264,12 +268,22 @@ class PhotoViewModel(QObject):
             if len(to_process) == 0:
                 self._detection_task_complete = True
                 logging.debug(f"[DETECTION] All {len(self.images)} images already cached, detection complete")
+                # Trigger retraining after detection completes (even if all cached)
+                # Only trigger once - use a flag to prevent multiple triggers
+                if not getattr(self, "_detection_retrain_triggered", False):
+                    if self._auto:
+                        logging.info("[viewmodel] Scheduling retrain after detection completes (all cached)")
+                        self._auto.schedule_retrain()
+                        self._detection_retrain_triggered = True
                 # Start pending predictions if they were waiting
                 if self._pending_predictions:
                     logging.info("[viewmodel] Starting pending predictions (all detections cached)")
                     self._pending_predictions = False
                     if self._auto:
+                        logging.info("[viewmodel] Calling update_predictions_async() (all cached)")
                         self._auto.update_predictions_async()
+                    else:
+                        logging.warning("[viewmodel] _auto is None, cannot start predictions (all cached)")
 
             # Schedule background detection for missing images to avoid blocking UI
             if len(to_process) > 0:
@@ -332,9 +346,11 @@ class PhotoViewModel(QObject):
                             self._detected_objects[base] = new_dets
                             self.object_detection_ready.emit(base)
                             
-                            # Save cache immediately after each detection to prevent data loss
+                            # Save cache after each detection to prevent data loss
+                            # (but batch saves to reduce I/O - save every 10 images or at end)
                             try:
-                                object_detection.save_object_cache(c)
+                                if (idx + 1) % 10 == 0 or idx == len(to_process) - 1:
+                                    object_detection.save_object_cache(c)
                             except Exception as e:
                                 logging.warning(f"Failed to save cache after detection for {base}: {e}")
                             
@@ -343,7 +359,9 @@ class PhotoViewModel(QObject):
                                 reporter.detail(f"detected {base}")
 
                         try:
-                            # Cache is now saved after each detection, so no need to save at the end
+                            # Final save to ensure all detections are persisted
+                            # (in case the last batch wasn't saved due to modulo check)
+                            object_detection.save_object_cache(c)
                             # Update in-memory cache to reflect new detections (don't invalidate - keep in memory)
                             cache_path = object_detection.get_cache_path()
                             self._cached_detection_cache = c
@@ -369,12 +387,25 @@ class PhotoViewModel(QObject):
                         self._detection_task_running = False
                         self._detection_task_complete = True
                         logging.info("[viewmodel] Object detection task completed")
+                        # Trigger retraining after detection task completes (not per-image)
+                        # This allows the model to learn from all new detection features at once
+                        # Only trigger once - use a flag to prevent multiple triggers
+                        if not getattr(self, "_detection_retrain_triggered", False):
+                            if self._auto:
+                                logging.info("[viewmodel] Scheduling retrain after detection task completes")
+                                self._auto.schedule_retrain()
+                                self._detection_retrain_triggered = True
+                        else:
+                            logging.warning("[viewmodel] _auto is None, cannot schedule retrain after detection")
                         # Start pending predictions if they were waiting
                         if self._pending_predictions:
                             logging.info("[viewmodel] Starting pending predictions after object detection completes")
                             self._pending_predictions = False
                             if self._auto:
+                                logging.info("[viewmodel] Calling update_predictions_async()")
                                 self._auto.update_predictions_async()
+                            else:
+                                logging.warning("[viewmodel] _auto is None, cannot start predictions")
 
                 # run detection in background task runner
                 try:
@@ -788,6 +819,8 @@ class PhotoViewModel(QObject):
             delattr(self, "_image_basename_cache")
         # OPTIMIZATION: Clear timestamp cache when images change
         self._timestamp_cache.clear()
+        # Reset detection retrain trigger flag when loading new images
+        self._detection_retrain_triggered = False
         files = self.model.get_image_files()
         self._progress_total = len(files)
         # Reset grouping when images change
@@ -808,15 +841,20 @@ class PhotoViewModel(QObject):
                 from concurrent.futures import ThreadPoolExecutor
                 import threading
                 
-                def _preload_exif_batch():
-                    """Pre-load EXIF for all images in background."""
+                def _preload_exif_task(reporter):
+                    """Pre-load EXIF for all images in background with progress."""
                     try:
+                        reporter.detail("pre-loading EXIF data")
+                        reporter.set_total(len(image_paths))
                         with ThreadPoolExecutor(max_workers=4) as executor:
                             futures = [executor.submit(self.model.load_exif, path) for path in image_paths]
-                            # Wait for all to complete
-                            for future in futures:
+                            # Wait for all to complete with progress updates
+                            for idx, future in enumerate(futures):
                                 try:
                                     future.result()  # Wait for each to complete
+                                    reporter.update(idx + 1, len(image_paths))
+                                    if (idx + 1) % 50 == 0:
+                                        reporter.detail(f"pre-loaded EXIF for {idx + 1}/{len(image_paths)} images")
                                 except Exception as e:
                                     logging.debug(f"[viewmodel] EXIF pre-load error (non-fatal): {e}")
                         logging.info(f"[viewmodel] EXIF pre-loading completed for {len(image_paths)} images")
@@ -835,9 +873,8 @@ class PhotoViewModel(QObject):
                 self._exif_preload_complete = False
                 self._pending_grouping = False
                 
-                # Start pre-loading in background (non-blocking)
-                thread = threading.Thread(target=_preload_exif_batch, daemon=True)
-                thread.start()
+                # Start pre-loading in background with progress bar
+                self._tasks.run("preload-exif", _preload_exif_task)
                 logging.info(f"[viewmodel] Started EXIF pre-loading for {len(image_paths)} images in background (grouping will wait)")
         self.images_changed.emit(self.images)
         self.progress_changed.emit(self._progress_current, self._progress_total)
@@ -949,7 +986,11 @@ class PhotoViewModel(QObject):
             logging.info("[viewmodel] Waiting for object detection to complete before starting predictions...")
             self._pending_predictions = True
         else:
-            self._auto.update_predictions_async()
+            if self._auto:
+                logging.info("[viewmodel] Starting predictions immediately (detection already complete)")
+                self._auto.update_predictions_async()
+            else:
+                logging.warning("[viewmodel] _auto is None, cannot start predictions")
 
         self._progress_current = self._progress_total
         self.progress_changed.emit(self._progress_current, self._progress_total)
@@ -1339,6 +1380,14 @@ class PhotoViewModel(QObject):
         else:
             # For non-keep/trash changes, update predictions immediately
             self._auto.update_predictions_async()
+
+    def _on_object_detection_ready(self, filename: str):
+        """Called when object detection completes for an image.
+        
+        Note: We don't retrain per-image to avoid excessive retraining.
+        Instead, retrain is triggered once after the detection task completes.
+        """
+        logging.debug(f"[viewmodel] Object detection ready for {filename}")
 
         # Always apply filters to maintain sorting by uncertainty, even when no filters are active
         # Note: _on_label_changed will also call _apply_filters(), but we call it here too

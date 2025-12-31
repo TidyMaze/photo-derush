@@ -153,7 +153,7 @@ def compute_grouping_for_photos(
         if (idx + 1) % 100 == 0:
             logging.info(f"[grouping_service] Step 1: Processed {idx + 1}/{len(filenames)} photos")
             if progress_reporter:
-                progress_reporter.detail(f"Building metadata: {idx + 1}/{len(filenames)}...")
+                progress_reporter.detail("Building metadata...")
         path = os.path.join(image_dir, filename)
         exif = exif_data.get(filename, {})
         timestamp = extract_timestamp(exif, path)
@@ -412,7 +412,7 @@ def compute_grouping_for_photos(
         if (idx + 1) % 100 == 0:
             logging.info(f"[grouping_service] Step 7: Computed scores for {idx + 1}/{len(photos)} photos")
             if progress_reporter:
-                progress_reporter.detail(f"Computing scores: {idx + 1}/{len(photos)}...")
+                progress_reporter.detail("Computing scores...")
         keep_prob = keep_probabilities.get(photo.filename, 0.5) if keep_probabilities else 0.5
         metrics = quality_metrics.get(photo.filename, {}) if quality_metrics else {}
 

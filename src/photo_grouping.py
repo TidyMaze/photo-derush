@@ -148,7 +148,7 @@ def _add_edges_naive(
                 logging.info(f"[photo_grouping] Comparison progress: {progress_pct:.1f}% ({i+1}/{len(filenames)} photos)")
                 last_progress_log = progress_pct
                 if progress_reporter:
-                    progress_reporter.detail(f"Comparing hashes: {i+1}/{len(filenames)}...")
+                    progress_reporter.detail("Comparing hashes...")
 
         for fname2 in filenames[i + 1 :]:
             h2 = filename_to_hash_obj.get(fname2)
@@ -300,7 +300,7 @@ def group_near_duplicates(
         if (idx + 1) % 100 == 0:
             logging.info(f"[photo_grouping] Computed hashes for {idx + 1}/{len(filenames)} photos")
             if progress_reporter:
-                progress_reporter.detail(f"Computing hashes: {idx + 1}/{len(filenames)}...")
+                progress_reporter.detail("Computing hashes...")
         try:
             filename_to_hash[fname] = hash_fn(fname)
             G.add_node(fname)

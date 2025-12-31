@@ -487,10 +487,11 @@ class AutoLabelManager:
 
     def update_predictions_async(self):
         """Predict on ALL images (not just displayed) to maintain feature cache."""
+        logging.info("[predict] update_predictions_async() called")
         # Skip if retraining is in progress - post-retrain workflow will handle predictions
         with self._retrain_lock:
             if self._retrain_in_progress:
-                logging.debug("[predict] Skipping update_predictions_async - retrain in progress")
+                logging.info("[predict] Skipping update_predictions_async - retrain in progress")
                 return
         with self._predict_lock:
             if self._predict_in_progress:
@@ -499,12 +500,14 @@ class AutoLabelManager:
                 return
             self._predict_in_progress = True
 
+        logging.info("[predict] Starting prediction task")
         def _task(reporter):
             reporter.detail("predicting labels")
             try:
                 from .inference import predict_keep_probability_stream
 
                 if not (self.model_path and os.path.isfile(self.model_path)):
+                    logging.warning(f"[predict] Model path invalid: {self.model_path}")
                     if self.predicted_labels:
                         self.predicted_labels.clear()
                         self.predicted_probabilities.clear()
@@ -514,6 +517,8 @@ class AutoLabelManager:
                             except Exception:
                                 pass
                     return
+                
+                logging.info(f"[predict] Using model: {self.model_path}")
 
                 all_files = self.data.get_image_files()
                 paths = [self.data.get_image_path(f) for f in all_files]
@@ -604,8 +609,10 @@ class AutoLabelManager:
                         _task(None)
 
         if self.task_runner:
+            logging.info("[predict] Running prediction task via TaskRunner")
             self.task_runner.run("predict", _task)
         else:
+            logging.warning("[predict] No TaskRunner available, running inline")
             _task(None)
 
     # ---------------- Auto Label -----------------
@@ -744,7 +751,7 @@ class AutoLabelManager:
                 def progress_cb(current, total, detail):
                     if reporter:
                         reporter.update(current, total)
-                        reporter.detail(detail or f"predicting {current}/{total}")
+                        reporter.detail(detail or "predicting")
 
                 predict_keep_probability_stream(
                     full_paths,
