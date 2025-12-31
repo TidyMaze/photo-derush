@@ -140,6 +140,9 @@ class PhotoView(QMainWindow):
         self._last_cols_per_row = None  # Cache column count to skip unnecessary relayouts
         self._last_filtered_images_order = None  # Track last filtered_images order to detect sort changes
 
+        # Side panel width (account for scrollbar: 350px total - 6px scrollbar = 344px)
+        self.side_panel_width = 344
+
         # Initialize lazy loader for non-blocking EXIF/thumbnail loading
         self.lazy_loader = LazyImageLoader(self.viewmodel.model, max_workers=4, cache_size=256)
 
@@ -307,19 +310,23 @@ class PhotoView(QMainWindow):
         # Make the entire right panel scrollable to avoid crushed widgets
         self.side_panel = QWidget()
         # Set width constraints to prevent horizontal scrolling
-        self.side_panel.setMaximumWidth(350)
-        self.side_panel.setMinimumWidth(350)
-        self.side_panel.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        # Account for scrollbar width: 350px total - 6px for scrollbar = 344px for content
+        panel_width = self.side_panel_width
+        # Use maximum width instead of fixed width to allow flexibility while preventing overflow
+        self.side_panel.setMaximumWidth(panel_width)
+        self.side_panel.setMinimumWidth(panel_width)
+        self.side_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.side_layout = QVBoxLayout(self.side_panel)
         # Minimize margins to reduce wasted space
         self.side_layout.setContentsMargins(3, 3, 3, 3)
         self.side_layout.setSpacing(12)  # Increased vertical spacing between all field sets
         self.side_scroll = QScrollArea()
-        self.side_scroll.setWidgetResizable(True)  # Allow widget to resize to fit content
+        self.side_scroll.setWidgetResizable(True)  # Allow widget to resize, but constrained by max width
         # Remove margins from scroll area to eliminate gap
         self.side_scroll.setContentsMargins(0, 0, 0, 0)
-        # Fix width to prevent horizontal scrolling
-        self.side_scroll.setFixedWidth(350)
+        # Set maximum width to prevent horizontal scrolling
+        self.side_scroll.setMaximumWidth(350)
+        self.side_scroll.setMinimumWidth(350)
         self.side_scroll.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         # Prevent horizontal scrolling in the side panel; only allow vertical scrolling
         try:
@@ -351,6 +358,8 @@ class PhotoView(QMainWindow):
         self.dir_display.setStyleSheet("color: #909090; font-size: 9px;")
         self.dir_display.setWordWrap(True)
         self.dir_display.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        # Ensure directory display doesn't exceed panel width
+        self.dir_display.setMaximumWidth(self.side_panel_width - 20)  # Account for margins and button
         self.switch_dir_btn = QPushButton("📁 Switch")
         self.switch_dir_btn.clicked.connect(self._on_switch_directory)
         self.switch_dir_btn.setStyleSheet("""
@@ -822,6 +831,8 @@ class PhotoView(QMainWindow):
         # Enable word wrap to prevent long lines from forcing panel width
         self.exif_view.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.exif_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        # Ensure EXIF view doesn't exceed panel width
+        self.exif_view.setMaximumWidth(self.side_panel_width - 10)  # Account for margins
         self.exif_view.setStyleSheet("""
             QTextEdit {
                 font-family: 'Monaco', 'Courier New', monospace;
