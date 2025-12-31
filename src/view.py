@@ -306,15 +306,16 @@ class PhotoView(QMainWindow):
         """Build right panel with controls and info displays."""
         # Make the entire right panel scrollable to avoid crushed widgets
         self.side_panel = QWidget()
-        # Fix width to match scroll area and prevent horizontal scrolling
-        self.side_panel.setFixedWidth(350)
+        # Set width constraints to prevent horizontal scrolling
+        self.side_panel.setMaximumWidth(350)
+        self.side_panel.setMinimumWidth(350)
         self.side_panel.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.side_layout = QVBoxLayout(self.side_panel)
         # Minimize margins to reduce wasted space
         self.side_layout.setContentsMargins(3, 3, 3, 3)
         self.side_layout.setSpacing(12)  # Increased vertical spacing between all field sets
         self.side_scroll = QScrollArea()
-        self.side_scroll.setWidgetResizable(True)
+        self.side_scroll.setWidgetResizable(True)  # Allow widget to resize to fit content
         # Remove margins from scroll area to eliminate gap
         self.side_scroll.setContentsMargins(0, 0, 0, 0)
         # Fix width to prevent horizontal scrolling
@@ -332,7 +333,7 @@ class PhotoView(QMainWindow):
 
         self._build_action_buttons()  # Keep/Trash buttons at top
         self._build_directory_selector()
-        self._build_search_bar()
+        self._build_hide_manual_checkbox()
         self._build_status_bar()
         self._build_batch_toolbar()
         self._build_exif_view()
@@ -382,126 +383,8 @@ class PhotoView(QMainWindow):
         self.side_layout.addWidget(dir_widget)
         self._update_directory_display()
 
-    def _build_search_bar(self):
-        """Build search bar for filtering images."""
-        search_group = QGroupBox("Search")
-        search_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: 600;
-                color: #d0d0d0;
-                border: 1px solid #4a4a4a;
-                border-radius: 2px;
-                margin-top: 4px;
-                padding-top: 4px;
-                padding-left: 2px;
-                padding-right: 2px;
-                padding-bottom: 4px;
-                font-size: 9px;
-                background: #2a2a2a;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 6px;
-                padding: 0 2px;
-            }
-        """)
-        search_layout = QVBoxLayout(search_group)
-
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search by filename...")
-        # Prevent search input from forcing panel width (match side panel max width)
-        # Search input should adapt to panel width (word wrap handled by QLineEdit)
-        self.search_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                padding: 4px 8px;
-                border: 1px solid #4a4a4a;
-                border-radius: 4px;
-                background: #3a3a3a;
-                color: #e0e0e0;
-                font-size: 9px;
-            }
-            QLineEdit:focus {
-                border-color: #5a6a7a;
-                outline: none;
-            }
-        """)
-        self.search_input.textChanged.connect(self._on_search_changed)
-
-        # Quick filter buttons
-        quick_filters = QHBoxLayout()
-        quick_filters.setSpacing(8)  # Increased spacing between filter buttons
-        self.btn_unlabeled = QPushButton("Unlabeled")
-        self.btn_keep = QPushButton("Keep")
-        self.btn_trash = QPushButton("Trash")
-        self.btn_unlabeled.clicked.connect(lambda: self._apply_quick_filter("unlabeled"))
-        self.btn_keep.clicked.connect(lambda: self._apply_quick_filter("keep"))
-        self.btn_trash.clicked.connect(lambda: self._apply_quick_filter("trash"))
-
-        # Style filter buttons with Lightroom palette
-        self.btn_unlabeled.setStyleSheet("""
-            QPushButton {
-                padding: 3px 6px;
-                margin: 2px;
-                border: 1px solid #4a4a4a;
-                border-radius: 3px;
-                background: #3a3a3a;
-                color: #c0c0c0;
-                font-weight: 500;
-                font-size: 9px;
-            }
-            QPushButton:hover {
-                background: #4a4a4a;
-                border-color: #5a5a5a;
-            }
-            QPushButton:pressed {
-                background: #2a2a2a;
-            }
-        """)
-        self.btn_keep.setStyleSheet("""
-            QPushButton {
-                padding: 3px 6px;
-                margin: 2px;
-                border: 1px solid #4a5a4a;
-                border-radius: 3px;
-                background: #3a4a3a;
-                color: #a0c0a0;
-                font-weight: 500;
-                font-size: 9px;
-            }
-            QPushButton:hover {
-                background: #4a5a4a;
-                border-color: #5a6a5a;
-            }
-            QPushButton:pressed {
-                background: #2a3a2a;
-            }
-        """)
-        self.btn_trash.setStyleSheet("""
-            QPushButton {
-                padding: 3px 6px;
-                margin: 2px;
-                border: 1px solid #5a4a4a;
-                border-radius: 3px;
-                background: #4a3a3a;
-                color: #c0a0a0;
-                font-weight: 500;
-                font-size: 9px;
-            }
-            QPushButton:hover {
-                background: #5a4a4a;
-                border-color: #6a5a5a;
-            }
-            QPushButton:pressed {
-                background: #3a2a2a;
-            }
-        """)
-
-        quick_filters.addWidget(self.btn_unlabeled)
-        quick_filters.addWidget(self.btn_keep)
-        quick_filters.addWidget(self.btn_trash)
-
-        # Hide manual labeled checkbox
+    def _build_hide_manual_checkbox(self):
+        """Build checkbox to hide manually labeled images."""
         self.hide_manual_checkbox = QCheckBox("Hide manually labeled")
         self.hide_manual_checkbox.setStyleSheet("""
             QCheckBox {
@@ -509,31 +392,25 @@ class PhotoView(QMainWindow):
                 color: #c0c0c0;
                 padding: 6px 4px;
                 font-weight: 500;
+                border-radius: 2px;
             }
             QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
+                width: 12px;
+                height: 12px;
                 border: 1px solid #4a4a4a;
                 border-radius: 2px;
-                background: #2a2a2a;
-            }
-            QCheckBox::indicator:checked {
                 background: #3a3a3a;
             }
-            QCheckBox:hover {
-                background: #2a2a2a;
-                border-radius: 3px;
+            QCheckBox::indicator:checked {
+                background: #4a6a4a;
+                border-color: #5a7a5a;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #5a5a5a;
             }
         """)
         self.hide_manual_checkbox.stateChanged.connect(self._on_hide_manual_changed)
-
-        search_layout.addWidget(self.search_input)
-        search_layout.addLayout(quick_filters)
-        search_layout.addWidget(self.hide_manual_checkbox)
-        self.side_layout.addWidget(search_group)
-
-        # Connect Ctrl+F to focus search
-        QShortcut(QKeySequence.StandardKey.Find, self, self.search_input.setFocus)
+        self.side_layout.addWidget(self.hide_manual_checkbox)
 
 
     def _build_batch_toolbar(self):
@@ -615,63 +492,6 @@ class PhotoView(QMainWindow):
         self.selected_filenames = set()
         self._update_all_highlights()
 
-    def _on_search_changed(self, text):
-        """Handle search text change - filter images."""
-        if not text.strip():
-            # Clear filter if search is empty
-            if self.viewmodel._filter_ctrl.active():
-                self.viewmodel._filter_ctrl.clear()
-                self.viewmodel._apply_filters()
-            return
-
-        # Simple search: check if text matches filename
-        self.viewmodel._filter_ctrl.set_date("")  # Clear date filter
-
-        # Apply filename filter through viewmodel
-        filtered = []
-        search_lower = text.lower()
-        for fname in self.viewmodel.images:
-            if search_lower in fname.lower():
-                filtered.append(fname)
-
-        # Update filtered images
-        self.viewmodel._filtered_images = filtered
-        self.viewmodel._apply_filters()
-
-    def _apply_quick_filter(self, filter_type):
-        """Apply quick filter preset."""
-        self.search_input.clear()
-        if filter_type == "unlabeled":
-            self.viewmodel._filter_ctrl.set_batch(date="")
-            # Filter to show only unlabeled
-            filtered = []
-            for fname in self.viewmodel.images:
-                path = self.viewmodel.model.get_image_path(fname)
-                if path:
-                    label = self.viewmodel.model.get_state(path)
-                    if not label:
-                        filtered.append(fname)
-            self.viewmodel._filtered_images = filtered
-        elif filter_type == "keep":
-            filtered = []
-            for fname in self.viewmodel.images:
-                path = self.viewmodel.model.get_image_path(fname)
-                if path:
-                    label = self.viewmodel.model.get_state(path)
-                    if label == "keep":
-                        filtered.append(fname)
-            self.viewmodel._filtered_images = filtered
-        elif filter_type == "trash":
-            filtered = []
-            for fname in self.viewmodel.images:
-                path = self.viewmodel.model.get_image_path(fname)
-                if path:
-                    label = self.viewmodel.model.get_state(path)
-                    if label == "trash":
-                        filtered.append(fname)
-            self.viewmodel._filtered_images = filtered
-
-        self.viewmodel._apply_filters()
 
     def _on_hide_manual_changed(self, state):
         """Handle hide manual labeled checkbox state change."""
