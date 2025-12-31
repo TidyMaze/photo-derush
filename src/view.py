@@ -3375,7 +3375,8 @@ class PhotoView(QMainWindow):
                 # Normalize importances to percentages (sum to 100%)
                 total_importance = sum(imp for _, imp in fi) if fi else 1.0
                 # Create compact chips for top features for better readability
-                for idx, (feat_idx, importance) in enumerate(fi[:8], 1):
+                # Show top 10 (instead of 8) to increase chance of seeing COCO classes
+                for idx, (feat_idx, importance) in enumerate(fi[:10], 1):
                     name = feature_names.get(feat_idx, f"Feature {feat_idx}")
                     percentage = (importance / total_importance * 100) if total_importance > 0 else 0.0
                     chip = QLabel(f"{idx}. {name} — {percentage:.1f}%")

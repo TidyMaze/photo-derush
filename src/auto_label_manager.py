@@ -894,11 +894,26 @@ class AutoLabelManager:
                     # Attempt to load persisted metrics and feature importances for UI display
                     try:
                         import joblib
+                        import numpy as np
 
                         if os.path.isfile(result.model_path):
                             data = joblib.load(result.model_path)
-                            # Load feature importances
+                            # Load feature importances (prefer saved top 10, but extract all from model if needed)
                             fi = data.get("feature_importances") or getattr(result, "feature_importances", None)
+                            
+                            # If we only have top 10, extract all from model for better UI display
+                            if fi and len(fi) <= 10:
+                                model = data.get("model")
+                                if model and hasattr(model, "named_steps"):
+                                    cat_model = model.named_steps.get("cat")
+                                    xgb_model = model.named_steps.get("xgb")
+                                    classifier = cat_model or xgb_model
+                                    if classifier and hasattr(classifier, "feature_importances_"):
+                                        importances = classifier.feature_importances_
+                                        # Get top 20 (instead of just top 10) for better COCO class visibility
+                                        order = np.argsort(importances)[::-1][:20]
+                                        fi = [(int(i), float(importances[i])) for i in order]
+                            
                             if fi:
                                 stats_dict["feature_importances"] = fi
                             # Load F1 score (may not be in result if model was loaded from disk)
