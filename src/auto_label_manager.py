@@ -934,6 +934,22 @@ class AutoLabelManager:
                                 precision = data.get("precision")
                                 if precision is not None:
                                     stats_dict["precision"] = precision
+                            # Fallback: try to extract training metrics from saved model if not in result
+                            if stats_dict.get("final_loss") is None:
+                                final_loss = data.get("final_loss")
+                                if final_loss is not None:
+                                    stats_dict["final_loss"] = final_loss
+                                    logging.info(f"[retrain] Loaded final_loss from saved model: {final_loss}")
+                            if stats_dict.get("iterations") is None:
+                                iterations = data.get("iterations")
+                                if iterations is not None:
+                                    stats_dict["iterations"] = iterations
+                                    logging.info(f"[retrain] Loaded iterations from saved model: {iterations}")
+                            if stats_dict.get("patience") is None:
+                                patience = data.get("patience")
+                                if patience is not None:
+                                    stats_dict["patience"] = patience
+                                    logging.info(f"[retrain] Loaded patience from saved model: {patience}")
                             # Add model metadata for feature name mapping (interactions, embeddings)
                             metadata = data.get("__metadata__")
                             if metadata:

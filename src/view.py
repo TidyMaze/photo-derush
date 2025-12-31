@@ -314,8 +314,8 @@ class PhotoView(QMainWindow):
         self.side_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.side_layout = QVBoxLayout(self.side_panel)
         # Minimize margins to reduce wasted space
-        self.side_layout.setContentsMargins(4, 4, 4, 4)
-        self.side_layout.setSpacing(4)
+        self.side_layout.setContentsMargins(3, 3, 3, 3)
+        self.side_layout.setSpacing(3)
         self.side_scroll = QScrollArea()
         self.side_scroll.setWidgetResizable(True)
         # Remove margins from scroll area to eliminate gap
@@ -345,23 +345,23 @@ class PhotoView(QMainWindow):
         dir_label = QLabel("Directory:")
         dir_label.setStyleSheet("font-size: 9px;")
         self.dir_display = QLabel()
-        self.dir_display.setStyleSheet("color: #888; font-size: 8px;")
+        self.dir_display.setStyleSheet("color: #909090; font-size: 9px;")
         self.dir_display.setWordWrap(True)
         self.switch_dir_btn = QPushButton("📁 Switch")
         self.switch_dir_btn.clicked.connect(self._on_switch_directory)
         self.switch_dir_btn.setStyleSheet("""
             QPushButton {
                 padding: 3px 6px;
-                border: 1px solid #007bff;
+                border: 1px solid #4a5a6a;
                 border-radius: 3px;
-                background: #ffffff;
-                color: #007bff;
+                background: #3a4a5a;
+                color: #a0b0c0;
                 font-weight: 500;
                 font-size: 9px;
             }
             QPushButton:hover {
-                background: #e7f3ff;
-                border-color: #0056b3;
+                background: #4a5a6a;
+                border-color: #5a6a7a;
             }
         """)
         dir_layout.addWidget(dir_label)
@@ -372,40 +372,41 @@ class PhotoView(QMainWindow):
 
     def _build_search_bar(self):
         """Build search bar for filtering images."""
-        search_group = QGroupBox("🔍 Search")
+        search_group = QGroupBox("Search")
         search_group.setStyleSheet("""
             QGroupBox {
                 font-weight: 600;
-                color: #212529;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                margin-top: 6px;
-                padding-top: 8px;
-                font-size: 10px;
+                color: #d0d0d0;
+                border: 1px solid #4a4a4a;
+                border-radius: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
+                font-size: 9px;
+                background: #2a2a2a;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 3px;
+                left: 6px;
+                padding: 0 2px;
             }
         """)
         search_layout = QVBoxLayout(search_group)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Search by filename...")
+        self.search_input.setPlaceholderText("Search by filename...")
         # Prevent search input from forcing panel width (match side panel max width)
         self.search_input.setMaximumWidth(350)
         self.search_input.setStyleSheet("""
             QLineEdit {
                 padding: 4px 8px;
-                border: 1px solid #ced4da;
+                border: 1px solid #4a4a4a;
                 border-radius: 4px;
-                background: #ffffff;
-                color: #212529;
-                font-size: 10px;
+                background: #3a3a3a;
+                color: #e0e0e0;
+                font-size: 9px;
             }
             QLineEdit:focus {
-                border-color: #007bff;
+                border-color: #5a6a7a;
                 outline: none;
             }
         """)
@@ -414,66 +415,66 @@ class PhotoView(QMainWindow):
         # Quick filter buttons
         quick_filters = QHBoxLayout()
         quick_filters.setSpacing(6)
-        self.btn_unlabeled = QPushButton("⚪ Unlabeled")
-        self.btn_keep = QPushButton("✅ Keep")
-        self.btn_trash = QPushButton("❌ Trash")
+        self.btn_unlabeled = QPushButton("Unlabeled")
+        self.btn_keep = QPushButton("Keep")
+        self.btn_trash = QPushButton("Trash")
         self.btn_unlabeled.clicked.connect(lambda: self._apply_quick_filter("unlabeled"))
         self.btn_keep.clicked.connect(lambda: self._apply_quick_filter("keep"))
         self.btn_trash.clicked.connect(lambda: self._apply_quick_filter("trash"))
 
-        # Style filter buttons
+        # Style filter buttons with Lightroom palette
         self.btn_unlabeled.setStyleSheet("""
             QPushButton {
                 padding: 3px 6px;
-                border: 1px solid #ced4da;
+                border: 1px solid #4a4a4a;
                 border-radius: 3px;
-                background: #ffffff;
-                color: #495057;
+                background: #3a3a3a;
+                color: #c0c0c0;
                 font-weight: 500;
                 font-size: 9px;
             }
             QPushButton:hover {
-                background: #f8f9fa;
-                border-color: #adb5bd;
+                background: #4a4a4a;
+                border-color: #5a5a5a;
             }
             QPushButton:pressed {
-                background: #e9ecef;
+                background: #2a2a2a;
             }
         """)
         self.btn_keep.setStyleSheet("""
             QPushButton {
                 padding: 3px 6px;
-                border: 1px solid #27ae60;
+                border: 1px solid #4a5a4a;
                 border-radius: 3px;
-                background: #ffffff;
-                color: #27ae60;
+                background: #3a4a3a;
+                color: #a0c0a0;
                 font-weight: 500;
                 font-size: 9px;
             }
             QPushButton:hover {
-                background: #d5f4e6;
-                border-color: #229954;
+                background: #4a5a4a;
+                border-color: #5a6a5a;
             }
             QPushButton:pressed {
-                background: #a9dfbf;
+                background: #2a3a2a;
             }
         """)
         self.btn_trash.setStyleSheet("""
             QPushButton {
                 padding: 3px 6px;
-                border: 1px solid #e74c3c;
+                border: 1px solid #5a4a4a;
                 border-radius: 3px;
-                background: #ffffff;
-                color: #e74c3c;
+                background: #4a3a3a;
+                color: #c0a0a0;
                 font-weight: 500;
                 font-size: 9px;
             }
             QPushButton:hover {
-                background: #fadbd8;
-                border-color: #c0392b;
+                background: #5a4a4a;
+                border-color: #6a5a5a;
             }
             QPushButton:pressed {
-                background: #f1948a;
+                background: #3a2a2a;
             }
         """)
 
@@ -485,17 +486,23 @@ class PhotoView(QMainWindow):
         self.hide_manual_checkbox = QCheckBox("Hide manually labeled")
         self.hide_manual_checkbox.setStyleSheet("""
             QCheckBox {
-                font-size: 11px;
-                color: #495057;
+                font-size: 9px;
+                color: #c0c0c0;
                 padding: 6px 4px;
                 font-weight: 500;
             }
             QCheckBox::indicator {
                 width: 18px;
                 height: 18px;
+                border: 1px solid #4a4a4a;
+                border-radius: 2px;
+                background: #2a2a2a;
+            }
+            QCheckBox::indicator:checked {
+                background: #3a3a3a;
             }
             QCheckBox:hover {
-                background: #f8f9fa;
+                background: #2a2a2a;
                 border-radius: 3px;
             }
         """)
@@ -533,14 +540,20 @@ class PhotoView(QMainWindow):
 
         self.batch_toolbar.setStyleSheet("""
             QWidget {
-                background: #e3f2fd;
-                border: 1px solid #2196f3;
+                background: #3a4a5a;
+                border: 1px solid #4a5a6a;
                 border-radius: 4px;
             }
             QPushButton {
                 padding: 6px 12px;
                 border-radius: 4px;
                 font-weight: 500;
+                background: #3a3a3a;
+                color: #c0c0c0;
+                border: 1px solid #4a4a4a;
+            }
+            QPushButton:hover {
+                background: #4a4a4a;
             }
         """)
         self.batch_toolbar.hide()
@@ -651,88 +664,93 @@ class PhotoView(QMainWindow):
 
         # Dataset status: two rows. First row: Total / Labeled / Unlabeled.
         # Second row: Detector / Device / Model info.
-        self.status_group = QGroupBox("📊 Dataset Status")
+        self.status_group = QGroupBox("Dataset Status")
         self.status_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.status_group.setStyleSheet("""
             QGroupBox {
                 font-weight: 600;
-                color: #212529;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                margin-top: 6px;
-                padding-top: 8px;
-                font-size: 10px;
+                color: #d0d0d0;
+                border: 1px solid #4a4a4a;
+                border-radius: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
+                font-size: 9px;
+                background: #2a2a2a;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 3px;
+                left: 6px;
+                padding: 0 2px;
             }
         """)
 
-        # Status cards with icons
-        self.total_images_label = QLabel("📊 Total: 0")
-        self.labeled_images_label = QLabel("✅ Labeled: 0")
-        self.unlabeled_images_label = QLabel("⚪ Unlabeled: 0")
-        self.selected_count_label = QLabel("🎯 Selected: 0")
+        # Status cards (no emojis for compact modern UI)
+        self.total_images_label = QLabel("Total: 0")
+        self.labeled_images_label = QLabel("Labeled: 0")
+        self.unlabeled_images_label = QLabel("Unlabeled: 0")
+        self.selected_count_label = QLabel("Selected: 0")
         # Detection model/device display (combined backend+model into single field)
-        self.det_model_label = QLabel("Detector: unknown")
-        self.det_device_label = QLabel("Device: unknown")
+        self.det_model_label = QLabel("Det: unknown")
+        self.det_device_label = QLabel("Dev: unknown")
         # Classification model display
-        self.class_model_label = QLabel("Classification: unknown")
+        self.class_model_label = QLabel("Class: unknown")
         # Embedding model display
-        self.embed_model_label = QLabel("Embeddings: unknown")
+        self.embed_model_label = QLabel("Embed: unknown")
         # Feature extraction display
-        self.feature_backend_label = QLabel("Features: unknown")
+        self.feature_backend_label = QLabel("Feat: unknown")
 
-        # Style the main metric labels to look like status cards with better visual design
+        # Style the main metric labels with Lightroom palette (low contrast, dark grays)
         self.total_images_label.setStyleSheet("""
             QLabel {
-                background: #ffffff;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                padding: 4px 6px;
+                background: #3a3a3a;
+                border: 1px solid #4a4a4a;
+                border-radius: 2px;
+                padding: 2px 4px;
                 font-weight: 600;
                 font-size: 9px;
-                color: #212529;
+                color: #e0e0e0;
             }
         """)
         self.total_images_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.labeled_images_label.setStyleSheet("""
             QLabel {
-                background: #d5f4e6;
-                border: 1px solid #27ae60;
+                background: #3a4a3a;
+                border: 1px solid #4a5a4a;
                 border-radius: 4px;
-                padding: 4px 6px;
+                padding: 4px 8px;
                 font-weight: 600;
                 font-size: 9px;
-                color: #1e8449;
+                color: #b0d0b0;
+                min-width: 80px;
             }
         """)
         self.labeled_images_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.labeled_images_label.setWordWrap(False)
 
         self.unlabeled_images_label.setStyleSheet("""
             QLabel {
-                background: #fff3cd;
-                border: 1px solid #ffc107;
+                background: #4a4a3a;
+                border: 1px solid #5a5a4a;
                 border-radius: 4px;
-                padding: 4px 6px;
+                padding: 4px 8px;
                 font-weight: 600;
                 font-size: 9px;
-                color: #856404;
+                color: #d0c0a0;
+                min-width: 80px;
             }
         """)
         self.unlabeled_images_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.unlabeled_images_label.setWordWrap(False)
 
-        # Smaller, inline info labels with better styling
+        # Smaller, inline info labels with Lightroom palette
         info_style = """
             QLabel {
-                color: #495057;
+                color: #c0c0c0;
                 padding: 3px 5px;
-                font-size: 8px;
-                background: #f8f9fa;
-                border: 1px solid #e9ecef;
+                font-size: 9px;
+                background: #2a2a2a;
+                border: 1px solid #3a3a3a;
                 border-radius: 3px;
                 font-weight: 500;
             }
@@ -743,41 +761,41 @@ class PhotoView(QMainWindow):
             # Enable word wrap for labels that might contain long text
             label.setWordWrap(True)
 
-        # Arrange into multiple rows with spacing
+        # Arrange into multiple rows with spacing (compact)
         outer = QVBoxLayout()
-        outer.setSpacing(6)
+        outer.setSpacing(3)
         
         # Row 1: Dataset stats
         top_row = QHBoxLayout()
-        top_row.setSpacing(8)
+        top_row.setSpacing(4)
         top_row.addWidget(self.total_images_label)
         top_row.addWidget(self.labeled_images_label)
         top_row.addWidget(self.unlabeled_images_label)
         top_row.addWidget(self.selected_count_label)
 
-        # Style selection counter
+        # Style selection counter with Lightroom palette
         self.selected_count_label.setStyleSheet("""
             QLabel {
-                background: #e3f2fd;
-                border: 2px solid #2196f3;
-                border-radius: 4px;
-                padding: 4px 6px;
+                background: #3a4a5a;
+                border: 1px solid #4a5a6a;
+                border-radius: 2px;
+                padding: 2px 4px;
                 font-weight: 600;
                 font-size: 9px;
-                color: #1976d2;
+                color: #a0b0c0;
             }
         """)
         self.selected_count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Row 2: Object Detection info
         detection_row = QHBoxLayout()
-        detection_row.setSpacing(8)
+        detection_row.setSpacing(4)
         detection_row.addWidget(self.det_model_label)
         detection_row.addWidget(self.det_device_label)
         
         # Row 3: Classification, Embeddings, Features
         ml_row = QHBoxLayout()
-        ml_row.setSpacing(8)
+        ml_row.setSpacing(4)
         ml_row.addWidget(self.class_model_label)
         ml_row.addWidget(self.embed_model_label)
         ml_row.addWidget(self.feature_backend_label)
@@ -836,11 +854,11 @@ class PhotoView(QMainWindow):
             # OPTIMIZATION: selected_filenames is always set, use direct access
             selected_count = len(self.selected_filenames)
 
-            # Update labels with icons
-            self.total_images_label.setText(f"📊 Total: {total_images}")
-            self.labeled_images_label.setText(f"✅ Labeled: {labeled_count}")
-            self.unlabeled_images_label.setText(f"⚪ Unlabeled: {unlabeled_count}")
-            self.selected_count_label.setText(f"🎯 Selected: {selected_count}")
+            # Update labels (no emojis for compact modern UI)
+            self.total_images_label.setText(f"Total: {total_images}")
+            self.labeled_images_label.setText(f"Labeled: {labeled_count}")
+            self.unlabeled_images_label.setText(f"Unlabeled: {unlabeled_count}")
+            self.selected_count_label.setText(f"Selected: {selected_count}")
 
             # Show all computation models/devices from viewmodel snapshot if available
             try:
@@ -848,17 +866,17 @@ class PhotoView(QMainWindow):
                 device = getattr(self._state, "detection_device", None) if self._state else None
                 model = getattr(self._state, "detection_model", None) if self._state else None
                 if device:
-                    self.det_device_label.setText(f"Device: {device}")
+                    self.det_device_label.setText(f"Dev: {device}")
                 if model and model != "unknown":
-                    self.det_model_label.setText(f"Detector: {model}")
+                    self.det_model_label.setText(f"Det: {model}")
 
                 # Classification info
                 class_type = getattr(self._state, "classification_model_type", None) if self._state else None
                 class_path = getattr(self._state, "classification_model_path", None) if self._state else None
                 if class_type != "unknown":
-                    self.class_model_label.setText(f"Classify: {class_type}")
+                    self.class_model_label.setText(f"Class: {class_type}")
                 elif class_path != "unknown":
-                    self.class_model_label.setText(f"Classify: {class_path}")
+                    self.class_model_label.setText(f"Class: {class_path}")
 
                 # Embedding info
                 embed_model = getattr(self._state, "embedding_model", None) if self._state else None
@@ -869,7 +887,7 @@ class PhotoView(QMainWindow):
                 # Feature extraction info
                 feature_backend = getattr(self._state, "feature_extraction_backend", None) if self._state else None
                 if feature_backend != "unknown":
-                    self.feature_backend_label.setText(f"Features: {feature_backend}")
+                    self.feature_backend_label.setText(f"Feat: {feature_backend}")
 
                 # If state didn't include device/model (model not loaded yet), try fallback to object_detection module
                 if not device or not model or device == "unknown" or model == "unknown":
@@ -887,30 +905,30 @@ class PhotoView(QMainWindow):
                         
                         # Show device - use loaded if available, otherwise determine expected using same logic as _load_model
                         if ob_device is not None:
-                            self.det_device_label.setText(f"Device: {str(ob_device)}")
+                            self.det_device_label.setText(f"Dev: {str(ob_device)}")
                         elif device == "unknown":
                             # Use same device detection logic as object_detection._load_model()
                             try:
                                 import torch
                                 backend = getattr(object_detection, "DETECTION_BACKEND", "yolov8")
                                 if torch.cuda.is_available():
-                                    self.det_device_label.setText("Device: cuda")
+                                    self.det_device_label.setText("Dev: cuda")
                                 elif torch.backends.mps.is_available():
                                     # YOLOv8 on MPS on macOS is unstable, so force CPU (same logic as _load_model)
                                     if platform.system() == "Darwin" and backend == "yolov8":
-                                        self.det_device_label.setText("Device: cpu")
+                                        self.det_device_label.setText("Dev: cpu")
                                     else:
-                                        self.det_device_label.setText("Device: mps")
+                                        self.det_device_label.setText("Dev: mps")
                                 else:
-                                    self.det_device_label.setText("Device: cpu")
+                                    self.det_device_label.setText("Dev: cpu")
                             except ImportError:
-                                self.det_device_label.setText("Device: cpu")
+                                self.det_device_label.setText("Dev: cpu")
                         
                         # Show model - use loaded if available, otherwise show expected
                         if ob_model:
-                            self.det_model_label.setText(f"Detector: {ob_model}")
+                            self.det_model_label.setText(f"Det: {ob_model}")
                         elif model == "unknown":
-                            self.det_model_label.setText(f"Detector: {YOLO_MODEL_NAME}")
+                            self.det_model_label.setText(f"Det: {YOLO_MODEL_NAME}")
                     except Exception:
                         logging.exception("Failed to import object_detection for fallback detector/device")
                         pass
@@ -926,21 +944,22 @@ class PhotoView(QMainWindow):
 
     def _build_exif_view(self):
         """Build enhanced EXIF data display."""
-        exif_group = QGroupBox("📷 Image Details")
+        exif_group = QGroupBox("Image Details")
         exif_group.setStyleSheet("""
             QGroupBox {
                 font-weight: 600;
-                color: #212529;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                margin-top: 6px;
-                padding-top: 8px;
-                font-size: 10px;
+                color: #d0d0d0;
+                border: 1px solid #4a4a4a;
+                border-radius: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
+                font-size: 9px;
+                background: #2a2a2a;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 3px;
+                left: 6px;
+                padding: 0 2px;
             }
         """)
         exif_layout = QVBoxLayout(exif_group)
@@ -956,12 +975,12 @@ class PhotoView(QMainWindow):
         self.exif_view.setStyleSheet("""
             QTextEdit {
                 font-family: 'Monaco', 'Courier New', monospace;
-                font-size: 8px;
-                background: #ffffff;
-                color: #212529;
-                border: 1px solid #ced4da;
-                border-radius: 3px;
-                padding: 4px;
+                font-size: 9px;
+                background: #2a2a2a;
+                color: #d0d0d0;
+                border: 1px solid #3a3a3a;
+                border-radius: 2px;
+                padding: 3px;
             }
         """)
 
@@ -970,21 +989,22 @@ class PhotoView(QMainWindow):
 
     def _build_object_detection_view(self):
         """Build object detection display."""
-        self.object_detection_group = QGroupBox("🔍 Detected Objects")
+        self.object_detection_group = QGroupBox("Detected Objects")
         self.object_detection_group.setStyleSheet("""
             QGroupBox {
                 font-weight: 600;
-                color: #212529;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                margin-top: 6px;
-                padding-top: 8px;
-                font-size: 10px;
+                color: #d0d0d0;
+                border: 1px solid #4a4a4a;
+                border-radius: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
+                font-size: 9px;
+                background: #2a2a2a;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 3px;
+                left: 6px;
+                padding: 0 2px;
             }
         """)
         self.object_detection_layout = QVBoxLayout()
@@ -992,7 +1012,7 @@ class PhotoView(QMainWindow):
 
         # Replace plain text with a chip-style list for better UX
         self.object_detection_placeholder = QLabel("Select an image to view detected objects.")
-        self.object_detection_placeholder.setStyleSheet("color: #666; font-style: italic;")
+        self.object_detection_placeholder.setStyleSheet("color: #808080; font-style: italic;")
         self.object_detection_layout.addWidget(self.object_detection_placeholder)
 
         # Use a FlowLayout so chips wrap horizontally and look nicer
@@ -1007,7 +1027,7 @@ class PhotoView(QMainWindow):
 
     def _build_action_buttons(self):
         """Build action buttons (Open, Keep, Trash, Fullscreen)."""
-        self.open_btn = QPushButton("🔍 Open in Viewer")
+        self.open_btn = QPushButton("Open in Viewer")
         self.open_btn.setEnabled(False)
         self.open_btn.clicked.connect(self._on_open_in_viewer)
         self.open_btn.setStyleSheet("""
@@ -1038,41 +1058,41 @@ class PhotoView(QMainWindow):
         self.trash_btn = QPushButton("Trash")
         self.keep_btn.clicked.connect(lambda: self.viewmodel.set_label("keep"))
         self.trash_btn.clicked.connect(lambda: self.viewmodel.set_label("trash"))
-        # Style buttons - small size
+        # Style buttons with Lightroom palette - less saturated colors
         self.keep_btn.setStyleSheet("""
             QPushButton {
-                background: #27ae60;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                padding: 4px 8px;
+                background: #4a6a4a;
+                color: #d0e0d0;
+                border: 1px solid #5a7a5a;
+                border-radius: 2px;
+                padding: 3px 6px;
                 font-weight: 500;
-                font-size: 11px;
+                font-size: 9px;
                 min-height: 24px;
             }
             QPushButton:hover {
-                background: #229954;
+                background: #5a7a5a;
             }
             QPushButton:pressed {
-                background: #1e8449;
+                background: #3a5a3a;
             }
         """)
         self.trash_btn.setStyleSheet("""
             QPushButton {
-                background: #e74c3c;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                padding: 4px 8px;
+                background: #6a4a4a;
+                color: #e0d0d0;
+                border: 1px solid #7a5a5a;
+                border-radius: 2px;
+                padding: 3px 6px;
                 font-weight: 500;
-                font-size: 11px;
+                font-size: 9px;
                 min-height: 24px;
             }
             QPushButton:hover {
-                background: #c0392b;
+                background: #7a5a5a;
             }
             QPushButton:pressed {
-                background: #a93226;
+                background: #5a3a3a;
             }
         """)
         self.label_layout.addWidget(self.keep_btn)
@@ -1084,44 +1104,44 @@ class PhotoView(QMainWindow):
         self.train_btn.setStyleSheet("""
             QPushButton {
                 padding: 4px 8px;
-                border: 1px solid #007bff;
+                border: 1px solid #5a6a7a;
                 border-radius: 3px;
-                background: #007bff;
-                color: white;
+                background: #4a5a6a;
+                color: #d0d0e0;
                 font-weight: 500;
                 font-size: 9px;
                 min-height: 24px;
             }
             QPushButton:hover:enabled {
-                background: #0056b3;
-                border-color: #0056b3;
+                background: #5a6a7a;
+                border-color: #6a7a8a;
             }
             QPushButton:disabled {
-                background: #6c757d;
-                color: #ffffff;
-                border-color: #6c757d;
+                background: #3a3a3a;
+                color: #707070;
+                border-color: #4a4a4a;
             }
         """)
         self.cancel_train_btn = QPushButton("Cancel")
         self.cancel_train_btn.setStyleSheet("""
             QPushButton {
                 padding: 4px 8px;
-                border: 1px solid #6c757d;
+                border: 1px solid #5a5a5a;
                 border-radius: 3px;
-                background: #6c757d;
-                color: white;
+                background: #4a4a4a;
+                color: #c0c0c0;
                 font-weight: 500;
                 font-size: 9px;
                 min-height: 24px;
             }
             QPushButton:hover:enabled {
-                background: #5a6268;
-                border-color: #5a6268;
+                background: #5a5a5a;
+                border-color: #6a6a6a;
             }
             QPushButton:disabled {
-                background: #e9ecef;
-                color: #6c757d;
-                border-color: #ced4da;
+                background: #2a2a2a;
+                color: #606060;
+                border-color: #3a3a3a;
             }
         """)
         self.cancel_train_btn.setEnabled(False)
@@ -1156,21 +1176,22 @@ class PhotoView(QMainWindow):
 
     def _build_model_stats(self):
         """Build model performance statistics display."""
-        self.model_stats_group = QGroupBox("📈 Model Performance")
+        self.model_stats_group = QGroupBox("Model Performance")
         self.model_stats_group.setStyleSheet("""
             QGroupBox {
                 font-weight: 600;
-                color: #212529;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                margin-top: 6px;
-                padding-top: 8px;
-                font-size: 10px;
+                color: #d0d0d0;
+                border: 1px solid #4a4a4a;
+                border-radius: 2px;
+                margin-top: 4px;
+                padding-top: 4px;
+                font-size: 9px;
+                background: #2a2a2a;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 3px;
+                left: 6px;
+                padding: 0 2px;
             }
         """)
         self.model_stats_layout = QVBoxLayout()
@@ -1181,8 +1202,8 @@ class PhotoView(QMainWindow):
         # Metrics in 2 rows (3 columns) to avoid truncation and use space better
         from PySide6.QtWidgets import QGridLayout
         metrics_grid = QGridLayout()
-        metrics_grid.setSpacing(6)
-        metrics_grid.setContentsMargins(2, 4, 2, 4)
+        metrics_grid.setSpacing(3)
+        metrics_grid.setContentsMargins(2, 2, 2, 2)
         
         self.metric_auc = QLabel("AUC: —")
         self.metric_precision = QLabel("Precision: —")
@@ -1191,9 +1212,9 @@ class PhotoView(QMainWindow):
         self.metric_iterations = QLabel("Iter: —")
         self.metric_patience = QLabel("Pat: —")
         
-        # Style all metrics with larger font
+        # Style all metrics with uniform font size and Lightroom palette
         for w in (self.metric_auc, self.metric_precision, self.metric_f1, self.metric_loss, self.metric_iterations, self.metric_patience):
-            w.setStyleSheet("QLabel { font-weight: 600; padding: 5px 3px; font-size: 12px; }")
+            w.setStyleSheet("QLabel { font-weight: 600; padding: 2px 3px; font-size: 9px; color: #e0e0e0; background: transparent; }")
             w.setWordWrap(False)  # Prevent text wrapping
             w.setMinimumHeight(24)  # Ensure enough height for text
         
@@ -1214,7 +1235,7 @@ class PhotoView(QMainWindow):
 
         # Top features list (compact)
         self.top_features_label = QLabel("Top features:")
-        self.top_features_label.setStyleSheet("color: #333; font-weight: 600; margin-top: 3px; font-size: 9px;")
+        self.top_features_label.setStyleSheet("color: #c0c0c0; font-weight: 600; margin-top: 2px; font-size: 9px;")
         self.top_features_list = QWidget()
         # Use FlowLayout for compact, wrapped feature chips
         self.top_features_list_layout = FlowLayout(self.top_features_list, spacing=6)
@@ -2590,16 +2611,16 @@ class PhotoView(QMainWindow):
 
         border_color, border_width = self._get_label_color(current_label)
         if is_selected:
-            border_color = COLOR_SELECTED
-            border_width = "4px"
-
+            border_color = "#4a5a6a"  # Lightroom palette for selected
+            border_width = "2px"
+        
         styles = [
             f"border: {border_width} solid {border_color};",
-            "border-radius: 4px;",
+            "border-radius: 2px;",
         ]
         if is_selected:
-            styles.append(f"background: {COLOR_BG_SELECTED};")
-            # Note: Qt stylesheets don't support box-shadow, removed to avoid warnings
+            styles.append("background: #3a4a5a;")  # Lightroom palette
+        # Note: Qt stylesheets don't support box-shadow, removed to avoid warnings
 
         # OPTIMIZATION: Cache stylesheet to avoid redundant setStyleSheet calls
         # Store last style on label object to avoid expensive styleSheet() getter
@@ -2620,15 +2641,16 @@ class PhotoView(QMainWindow):
             
             border_color, border_width = self._get_label_color(current_label)
             if is_selected:
-                border_color = COLOR_SELECTED
-                border_width = "4px"
+                border_color = "#4a5a6a"  # Lightroom palette for selected
+                border_width = "2px"
             
             styles = [
                 f"border: {border_width} solid {border_color};",
-                "border-radius: 4px;",
+                "border-radius: 2px;",
             ]
             if is_selected:
-                styles.append(f"background: {COLOR_BG_SELECTED};")
+                # Use Lightroom palette for selected background
+                styles.append("background: #3a4a5a;")
             
             new_style = " ".join(styles)
             current_style = label.styleSheet()
@@ -2827,7 +2849,7 @@ class PhotoView(QMainWindow):
                     color: #1976d2;
                     padding: 6px 12px;
                     border-radius: 16px;
-                    font-size: 11px;
+                    font-size: 9px;
                     font-weight: 500;
                     border: 1px solid #bbdefb;
                 }

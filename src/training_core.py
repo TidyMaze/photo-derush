@@ -865,6 +865,9 @@ def _update_model_metadata(
     roc_auc_val: float | None,
     f1_val: float | None,
     confusion_vals: tuple[int, int, int, int] | None,
+    final_loss: float | None = None,
+    iterations: int | None = None,
+    patience: int | None = None,
 ) -> None:
     """Update model file with computed metrics."""
     try:
@@ -874,6 +877,12 @@ def _update_model_metadata(
         data["roc_auc"] = roc_auc_val
         data["f1"] = f1_val
         data["confusion"] = confusion_vals
+        if final_loss is not None:
+            data["final_loss"] = final_loss
+        if iterations is not None:
+            data["iterations"] = iterations
+        if patience is not None:
+            data["patience"] = patience
         joblib.dump(data, model_path)
     except Exception:
         logging.debug("[train] Failed updating model metadata with extended metrics")
@@ -1084,29 +1093,53 @@ def train_keep_trash_model(
                 # Get iteration count
                 if hasattr(cat_model, "tree_count_"):
                     iterations = int(cat_model.tree_count_)
+                    logging.debug(f"[train] Extracted iterations: {iterations}")
+                else:
+                    logging.warning("[train] cat_model has no tree_count_ attribute")
                 
                 # Get final loss from evals_result
                 if hasattr(cat_model, "evals_result_"):
                     evals = cat_model.evals_result_
                     if evals:
-                        # Find validation loss (usually "validation" or "test" key)
+                        logging.debug(f"[train] evals_result keys: {list(evals.keys())}")
+                        # Find validation loss (try multiple key patterns)
+                        found_loss = False
                         for key in evals:
-                            if "validation" in key.lower() or "test" in key.lower():
-                                # Look for Logloss metric
+                            key_lower = key.lower()
+                            if "validation" in key_lower or "test" in key_lower or "eval" in key_lower:
+                                logging.debug(f"[train] Checking eval key: {key}, metrics: {list(evals[key].keys())}")
+                                # Look for Logloss metric (CatBoost's default loss)
                                 if "Logloss" in evals[key]:
                                     loss_values = evals[key]["Logloss"]
-                                    if loss_values:
+                                    if loss_values and len(loss_values) > 0:
                                         final_loss = float(loss_values[-1])  # Last value
+                                        logging.info(f"[train] Extracted final_loss from {key}.Logloss: {final_loss}")
+                                        found_loss = True
                                         break
-                                # Fallback to first metric
+                                # Also try "LogLoss" (capital L)
+                                elif "LogLoss" in evals[key]:
+                                    loss_values = evals[key]["LogLoss"]
+                                    if loss_values and len(loss_values) > 0:
+                                        final_loss = float(loss_values[-1])
+                                        logging.info(f"[train] Extracted final_loss from {key}.LogLoss: {final_loss}")
+                                        found_loss = True
+                                        break
+                                # Fallback to first metric if it looks like a loss
                                 elif evals[key]:
                                     first_metric = list(evals[key].keys())[0]
-                                    loss_values = evals[key][first_metric]
-                                    if loss_values:
-                                        final_loss = float(loss_values[-1])
-                                        break
+                                    if "loss" in first_metric.lower():
+                                        loss_values = evals[key][first_metric]
+                                        if loss_values and len(loss_values) > 0:
+                                            final_loss = float(loss_values[-1])
+                                            logging.info(f"[train] Extracted final_loss from {key}.{first_metric}: {final_loss}")
+                                            found_loss = True
+                                            break
+                        if not found_loss:
+                            logging.warning(f"[train] Could not extract final_loss from evals_result (keys: {list(evals.keys())})")
+                else:
+                    logging.warning("[train] cat_model has no evals_result_ attribute")
         except Exception as e:
-            logging.debug(f"[train] Failed to extract training metrics: {e}")
+            logging.warning(f"[train] Failed to extract training metrics: {e}", exc_info=True)
         
         # Compute metrics on holdout set (model hasn't seen this)
         # Tune threshold on validation set (if available) or use default
@@ -1187,7 +1220,7 @@ def train_keep_trash_model(
         feature_importances = _get_feature_importances(clf)
         _check_cancel("importances")
         
-        _update_model_metadata(model_path, precision_val, feature_importances, roc_auc_val, f1_val, confusion_vals)
+        _update_model_metadata(model_path, precision_val, feature_importances, roc_auc_val, f1_val, confusion_vals, final_loss, iterations, patience_used)
         _check_cancel("metrics-done")
 
         # Attempt to extract per-epoch training history from the XGBoost estimator
