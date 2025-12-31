@@ -1181,19 +1181,21 @@ class PhotoView(QMainWindow):
         # Metrics in 2 rows (3 columns) to avoid truncation and use space better
         from PySide6.QtWidgets import QGridLayout
         metrics_grid = QGridLayout()
-        metrics_grid.setSpacing(4)
+        metrics_grid.setSpacing(6)
+        metrics_grid.setContentsMargins(2, 4, 2, 4)
         
         self.metric_auc = QLabel("AUC: —")
         self.metric_precision = QLabel("Precision: —")
         self.metric_f1 = QLabel("F1: —")
         self.metric_loss = QLabel("Loss: —")
-        self.metric_iterations = QLabel("Iterations: —")
-        self.metric_patience = QLabel("Patience: —")
+        self.metric_iterations = QLabel("Iter: —")
+        self.metric_patience = QLabel("Pat: —")
         
-        # Style all metrics
+        # Style all metrics with larger font
         for w in (self.metric_auc, self.metric_precision, self.metric_f1, self.metric_loss, self.metric_iterations, self.metric_patience):
-            w.setStyleSheet("QLabel { font-weight: 600; padding: 2px; font-size: 9px; }")
+            w.setStyleSheet("QLabel { font-weight: 600; padding: 5px 3px; font-size: 12px; }")
             w.setWordWrap(False)  # Prevent text wrapping
+            w.setMinimumHeight(24)  # Ensure enough height for text
         
         # Arrange in 2 rows x 3 columns
         metrics_grid.addWidget(self.metric_auc, 0, 0)
@@ -3392,27 +3394,30 @@ class PhotoView(QMainWindow):
                 self.metric_loss.setText("Loss: —")
             else:
                 try:
-                    self.metric_loss.setText(f"Loss: {float(final_loss):.6f}")
+                    # Format loss with fewer decimals for readability
+                    self.metric_loss.setText(f"Loss: {float(final_loss):.4f}")
                 except Exception:
                     self.metric_loss.setText(f"Loss: {final_loss}")
 
             iterations = stats.get("iterations")
             if iterations is None:
-                self.metric_iterations.setText("Iterations: —")
+                self.metric_iterations.setText("Iter: —")
             else:
                 try:
-                    self.metric_iterations.setText(f"Iterations: {int(iterations)}")
+                    # Shortened label to save space
+                    self.metric_iterations.setText(f"Iter: {int(iterations)}")
                 except Exception:
-                    self.metric_iterations.setText(f"Iterations: {iterations}")
+                    self.metric_iterations.setText(f"Iter: {iterations}")
 
             patience = stats.get("patience")
             if patience is None:
-                self.metric_patience.setText("Patience: —")
+                self.metric_patience.setText("Pat: —")
             else:
                 try:
-                    self.metric_patience.setText(f"Patience: {int(patience)}")
+                    # Shortened label to save space
+                    self.metric_patience.setText(f"Pat: {int(patience)}")
                 except Exception:
-                    self.metric_patience.setText(f"Patience: {patience}")
+                    self.metric_patience.setText(f"Pat: {patience}")
 
             # Top features
             self._clear_layout(self.top_features_list_layout)
