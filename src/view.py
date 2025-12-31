@@ -315,7 +315,7 @@ class PhotoView(QMainWindow):
         self.side_layout = QVBoxLayout(self.side_panel)
         # Minimize margins to reduce wasted space
         self.side_layout.setContentsMargins(3, 3, 3, 3)
-        self.side_layout.setSpacing(6)  # Increased spacing between sections
+        self.side_layout.setSpacing(8)  # Increased spacing between all field sets
         self.side_scroll = QScrollArea()
         self.side_scroll.setWidgetResizable(True)
         # Remove margins from scroll area to eliminate gap
@@ -369,7 +369,15 @@ class PhotoView(QMainWindow):
         dir_layout.addWidget(dir_label)
         dir_layout.addWidget(self.dir_display, stretch=1)
         dir_layout.addWidget(self.switch_dir_btn)
-        self.side_layout.addLayout(dir_layout)
+        
+        # Wrap directory layout in a widget to add top/bottom margins
+        dir_widget = QWidget()
+        dir_widget_layout = QVBoxLayout(dir_widget)
+        dir_widget_layout.setContentsMargins(0, 6, 0, 6)  # Top and bottom margins
+        dir_widget_layout.setSpacing(0)
+        dir_widget_layout.addLayout(dir_layout)
+        
+        self.side_layout.addWidget(dir_widget)
         self._update_directory_display()
 
     def _build_search_bar(self):
