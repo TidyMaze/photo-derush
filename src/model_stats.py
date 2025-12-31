@@ -90,8 +90,20 @@ def _get_feature_names(meta: dict | None = None) -> dict:
             76: "Motion Blur",
         }
     )
-    # 77: Person Detection
-    names.update({77: "Person Detection"})
+    # 77-156: All COCO classes (80 classes)
+    try:
+        from src.object_detection import COCO_CLASSES_LIST
+        coco_classes = COCO_CLASSES_LIST[1:]  # Skip "__background__"
+        for idx, class_name in enumerate(coco_classes):
+            if class_name:  # Skip empty strings
+                feature_idx = 77 + idx
+                # Capitalize first letter for display
+                display_name = class_name.replace("_", " ").title()
+                names[feature_idx] = f"COCO: {display_name}"
+    except Exception as e:
+        # Fallback: if COCO classes can't be loaded, use generic names
+        for idx in range(80):
+            names[77 + idx] = f"COCO Class {idx}"
     
     # Add interaction and embedding feature names if metadata provided
     if meta:

@@ -440,6 +440,7 @@ def _compute_cross_val(
                     metrics = _compute_asymmetric_metrics(y_test_fold, y_pred_test, y_proba_test)
                     keep_loss_rates.append(metrics["keep_loss_rate"])
                     junk_leak_rates.append(metrics["junk_leak_rate"])
+                    keep_rates.append(metrics["keep_rate"])  # Primary secondary metric
                     pr_aucs.append(metrics["pr_auc"])
                 else:
                     # Fallback: use default threshold
@@ -456,6 +457,8 @@ def _compute_cross_val(
                 "keep_loss_rate_std": float(np.std(keep_loss_rates)) if keep_loss_rates else 0.0,
                 "junk_leak_rate_mean": float(np.mean(junk_leak_rates)) if junk_leak_rates else 0.0,
                 "junk_leak_rate_std": float(np.std(junk_leak_rates)) if junk_leak_rates else 0.0,
+                "keep_rate_mean": float(np.mean(keep_rates)) if keep_rates else 0.0,  # Primary secondary metric
+                "keep_rate_std": float(np.std(keep_rates)) if keep_rates else 0.0,
                 "pr_auc_mean": float(np.mean(pr_aucs)) if pr_aucs else 0.0,
                 "pr_auc_std": float(np.std(pr_aucs)) if pr_aucs else 0.0,
                 "threshold_mean": float(np.mean(thresholds_used)) if thresholds_used else 0.5,
@@ -601,7 +604,10 @@ def _get_feature_importances(clf: Pipeline) -> list[tuple[int, float]] | None:
 def _find_threshold_for_max_keep_loss(
     y_true: np.ndarray, y_proba: np.ndarray, max_keep_loss: float = 0.02
 ) -> float:
-    """Find threshold that keeps keep-loss rate below target.
+    """Find threshold that keeps keep-loss rate below target (exact method).
+    
+    Uses quantile-based approach: finds the highest threshold that respects
+    the keep-loss constraint. This is exact and handles edge cases (thresholds < 0.05 or > 0.95).
     
     Args:
         y_true: True labels (1=keep, 0=trash)
@@ -609,49 +615,64 @@ def _find_threshold_for_max_keep_loss(
         max_keep_loss: Maximum allowed keep-loss rate (default: 0.02 = 2%)
     
     Returns:
-        Optimal threshold that minimizes keep-loss while respecting constraint.
-        Prefers higher threshold if multiple thresholds meet constraint (to reduce junk-leak).
+        Optimal threshold: the highest threshold that respects keep_loss_rate <= max_keep_loss.
+        If no threshold meets the constraint, returns the threshold with minimum keep-loss.
+        Defaults to 0.5 if no keep samples.
     """
     n_keep = int(np.sum(y_true == 1))
     if n_keep == 0:
         return 0.5  # No keep samples, use default
     
-    # Try thresholds from low to high (lower threshold = fewer false negatives)
-    # Use finer grid near low thresholds where keep-loss is most sensitive
-    thresholds_low = np.arange(0.05, 0.3, 0.005)  # Fine grid for low thresholds
-    thresholds_high = np.arange(0.3, 0.95, 0.01)  # Coarser grid for high thresholds
-    thresholds = np.concatenate([thresholds_low, thresholds_high])
+    # Extract probabilities for KEEP samples only
+    keep_mask = (y_true == 1)
+    keep_proba = y_proba[keep_mask]
     
-    best_threshold = 0.5
-    best_keep_loss = 1.0
-    best_threshold_meeting_constraint = None
-    best_junk_leak_if_constraint_met = 1.0
+    if len(keep_proba) == 0:
+        return 0.5
     
-    for threshold in thresholds:
-        y_pred = (y_proba >= threshold).astype(int)
-        tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
-        keep_loss_rate = float(fn / n_keep) if n_keep > 0 else 0.0
-        n_trash = int(np.sum(y_true == 0))
-        junk_leak_rate = float(fp / n_trash) if n_trash > 0 else 0.0
-        
-        # If this threshold meets the constraint, track it
-        # Prefer threshold that minimizes junk-leak while meeting constraint
-        if keep_loss_rate <= max_keep_loss:
-            if best_threshold_meeting_constraint is None or junk_leak_rate < best_junk_leak_if_constraint_met:
-                best_threshold_meeting_constraint = threshold
-                best_junk_leak_if_constraint_met = junk_leak_rate
-        
-        # Also track threshold with minimum keep-loss (fallback)
-        if keep_loss_rate < best_keep_loss:
-            best_keep_loss = keep_loss_rate
-            best_threshold = threshold
+    # Calculate max number of KEEP we can lose: m = floor(L * #keep)
+    max_false_negatives = int(np.floor(max_keep_loss * n_keep))
     
-    # Prefer threshold that meets constraint (minimizes junk-leak)
-    if best_threshold_meeting_constraint is not None:
-        return float(best_threshold_meeting_constraint)
+    # Sort KEEP probabilities in ascending order
+    keep_proba_sorted = np.sort(keep_proba)
     
-    # Fallback: use threshold with minimum keep-loss
-    return float(best_threshold)
+    # Find threshold: the (m+1)-th smallest proba (0-based index m)
+    # This ensures at most m KEEP samples have p < threshold (i.e., at most m false negatives)
+    if max_false_negatives >= len(keep_proba_sorted):
+        # Constraint allows losing all KEEP samples -> threshold = 1.0 (reject all)
+        # But this is pathological, so use a high threshold instead
+        threshold = 1.0
+    elif max_false_negatives == 0:
+        # Constraint allows losing 0 KEEP samples -> threshold = 0.0 (accept all)
+        # Use the smallest proba minus epsilon to ensure we accept all
+        threshold = max(0.0, float(keep_proba_sorted[0] - 1e-10))
+    else:
+        # Normal case: threshold is the proba at index max_false_negatives
+        # This is the highest threshold that ensures at most max_false_negatives KEEP are lost
+        threshold = float(keep_proba_sorted[max_false_negatives])
+    
+    # Verify the threshold meets the constraint (with small tolerance for floating point)
+    y_pred = (y_proba >= threshold).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    actual_keep_loss = float(fn / n_keep) if n_keep > 0 else 0.0
+    
+    # If threshold doesn't meet constraint (edge case with ties), find the next lower one
+    if actual_keep_loss > max_keep_loss + 1e-6:
+        # Find the highest threshold that actually meets the constraint
+        # This handles ties in probabilities
+        for idx in range(max_false_negatives + 1, len(keep_proba_sorted)):
+            candidate_threshold = float(keep_proba_sorted[idx])
+            y_pred_candidate = (y_proba >= candidate_threshold).astype(int)
+            tn_c, fp_c, fn_c, tp_c = confusion_matrix(y_true, y_pred_candidate).ravel()
+            candidate_keep_loss = float(fn_c / n_keep) if n_keep > 0 else 0.0
+            if candidate_keep_loss <= max_keep_loss + 1e-6:
+                threshold = candidate_threshold
+                break
+    
+    # Clamp to [0, 1] for safety
+    threshold = max(0.0, min(1.0, threshold))
+    
+    return float(threshold)
 
 
 def _compute_asymmetric_metrics(
@@ -672,6 +693,10 @@ def _compute_asymmetric_metrics(
     keep_loss_rate = float(fn / n_keep) if n_keep > 0 else 0.0  # FN(keep→trash) / total_keep
     junk_leak_rate = float(fp / n_trash) if n_trash > 0 else 0.0  # FP(trash→keep) / total_trash
     
+    # Keep rate: fraction of photos predicted as keep (primary secondary metric)
+    n_total = int(np.sum(y_true == 1) + np.sum(y_true == 0))
+    keep_rate = float((tp + fp) / n_total) if n_total > 0 else 0.0  # (TP + FP) / total = predicted_keep / total
+    
     precision_keep = float(tp / (tp + fp)) if (tp + fp) > 0 else 0.0
     recall_keep = float(tp / (tp + fn)) if (tp + fn) > 0 else 0.0
     f1_keep = float(2.0 * (precision_keep * recall_keep) / (precision_keep + recall_keep)) if (precision_keep + recall_keep) > 0 else 0.0
@@ -689,6 +714,7 @@ def _compute_asymmetric_metrics(
     result: dict[str, float] = {
         "keep_loss_rate": keep_loss_rate,
         "junk_leak_rate": junk_leak_rate,
+        "keep_rate": keep_rate,  # Primary secondary metric: fraction of photos kept
         "pr_auc": pr_auc if pr_auc is not None else 0.0,
         "precision_keep": precision_keep,
         "recall_keep": recall_keep,
@@ -980,8 +1006,9 @@ def train_keep_trash_model(
             cv_time = time.perf_counter() - cv_start
         if cv_metrics:
             logging.info(
-                "[train] CV asymmetric metrics: keep-loss=%.2f%%±%.2f%%, junk-leak=%.2f%%±%.2f%%, PR-AUC=%.4f±%.4f",
+                "[train] CV asymmetric metrics: keep-loss=%.2f%%±%.2f%%, keep-rate=%.2f%%±%.2f%%, junk-leak=%.2f%%±%.2f%%, PR-AUC=%.4f±%.4f",
                 cv_metrics["keep_loss_rate_mean"] * 100, cv_metrics["keep_loss_rate_std"] * 100,
+                cv_metrics["keep_rate_mean"] * 100, cv_metrics["keep_rate_std"] * 100,
                 cv_metrics["junk_leak_rate_mean"] * 100, cv_metrics["junk_leak_rate_std"] * 100,
                 cv_metrics["pr_auc_mean"], cv_metrics["pr_auc_std"]
             )
@@ -1066,8 +1093,9 @@ def train_keep_trash_model(
             )
             if asymmetric_metrics:
                 logging.info(
-                    "[train] Asymmetric metrics: keep-loss=%.2f%%, junk-leak=%.2f%%, PR-AUC=%.4f",
+                    "[train] Asymmetric metrics: keep-loss=%.2f%%, keep-rate=%.2f%%, junk-leak=%.2f%%, PR-AUC=%.4f",
                     asymmetric_metrics["keep_loss_rate"] * 100,
+                    asymmetric_metrics["keep_rate"] * 100,
                     asymmetric_metrics["junk_leak_rate"] * 100,
                     asymmetric_metrics["pr_auc"] or 0.0
                 )

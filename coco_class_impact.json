@@ -1,0 +1,819 @@
+{
+  "optimization_function": "Minimize keep-loss rate (target: < 2%)",
+  "secondary_goals": [
+    "Maximize accuracy",
+    "Maximize PR-AUC"
+  ],
+  "results": [
+    {
+      "class": "person",
+      "presence_rate": 0.35777126099706746,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.07246376811594202,
+      "pr_auc_improvement": -0.02542759203361844,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.6956521739130435,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8551386460088409
+    },
+    {
+      "class": "bicycle",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "car",
+      "presence_rate": 0.03812316715542522,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.14492753623188404,
+      "pr_auc_improvement": -0.037372902997624524,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.7681159420289855,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8431933350448348
+    },
+    {
+      "class": "motorcycle",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "airplane",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "bus",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "train",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "truck",
+      "presence_rate": 0.008797653958944282,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "boat",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "traffic light",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "fire hydrant",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "stop sign",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "parking meter",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "bench",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "bird",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "cat",
+      "presence_rate": 0.05278592375366569,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": -0.05797101449275366,
+      "pr_auc_improvement": -0.06781348998101777,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.5652173913043478,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8127527480614416
+    },
+    {
+      "class": "dog",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "horse",
+      "presence_rate": 0.008797653958944282,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "sheep",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "cow",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "elephant",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "bear",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "zebra",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "giraffe",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "backpack",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "umbrella",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "handbag",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "tie",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "suitcase",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "frisbee",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "skis",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "snowboard",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "sports ball",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "kite",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "baseball bat",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "baseball glove",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "skateboard",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "surfboard",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "tennis racket",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "bottle",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "wine glass",
+      "presence_rate": 0.01466275659824047,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.02898550724637683,
+      "pr_auc_improvement": -0.017008148805153223,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.6521739130434783,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8635580892373061
+    },
+    {
+      "class": "cup",
+      "presence_rate": 0.0469208211143695,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.14492753623188404,
+      "pr_auc_improvement": -0.07551035543747564,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.7681159420289855,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8050558826049837
+    },
+    {
+      "class": "fork",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "knife",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "spoon",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "bowl",
+      "presence_rate": 0.01466275659824047,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.7391304347826086,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8880436197687483
+    },
+    {
+      "class": "banana",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "apple",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "sandwich",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "orange",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "broccoli",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "carrot",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "hot dog",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "pizza",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "donut",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "cake",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "chair",
+      "presence_rate": 0.05278592375366569,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.7391304347826086,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8880436197687483
+    },
+    {
+      "class": "couch",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "potted plant",
+      "presence_rate": 0.011730205278592375,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.7391304347826086,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8880436197687483
+    },
+    {
+      "class": "bed",
+      "presence_rate": 0.005865102639296188,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "dining table",
+      "presence_rate": 0.020527859237536656,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.7391304347826086,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8880436197687483
+    },
+    {
+      "class": "toilet",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "tv",
+      "presence_rate": 0.011730205278592375,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.7391304347826086,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8880436197687483
+    },
+    {
+      "class": "laptop",
+      "presence_rate": 0.011730205278592375,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.02898550724637683,
+      "pr_auc_improvement": -0.017008148805153223,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.6521739130434783,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8635580892373061
+    },
+    {
+      "class": "mouse",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "remote",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "keyboard",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "cell phone",
+      "presence_rate": 0.008797653958944282,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "microwave",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "oven",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "toaster",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "sink",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "refrigerator",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "book",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "clock",
+      "presence_rate": 0.020527859237536656,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.05797101449275366,
+      "pr_auc_improvement": -0.03327693167467105,
+      "baseline_keep_loss": 0.0,
+      "with_class_keep_loss": 0.0,
+      "baseline_accuracy": 0.6231884057971014,
+      "with_class_accuracy": 0.6811594202898551,
+      "baseline_pr_auc": 0.8805662380424594,
+      "with_class_pr_auc": 0.8472893063677883
+    },
+    {
+      "class": "vase",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "scissors",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "teddy bear",
+      "presence_rate": 0.002932551319648094,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "hair drier",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    },
+    {
+      "class": "toothbrush",
+      "presence_rate": 0.0,
+      "impact": "insufficient_data",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.0,
+      "pr_auc_improvement": 0.0
+    }
+  ],
+  "top_classes_by_keep_loss_improvement": [
+    {
+      "class": "person",
+      "presence_rate": 0.35777126099706746,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.07246376811594202,
+      "pr_auc_improvement": -0.02542759203361844
+    },
+    {
+      "class": "car",
+      "presence_rate": 0.03812316715542522,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.14492753623188404,
+      "pr_auc_improvement": -0.037372902997624524
+    },
+    {
+      "class": "cat",
+      "presence_rate": 0.05278592375366569,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": -0.05797101449275366,
+      "pr_auc_improvement": -0.06781348998101777
+    },
+    {
+      "class": "wine glass",
+      "presence_rate": 0.01466275659824047,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.02898550724637683,
+      "pr_auc_improvement": -0.017008148805153223
+    },
+    {
+      "class": "cup",
+      "presence_rate": 0.0469208211143695,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.14492753623188404,
+      "pr_auc_improvement": -0.07551035543747564
+    },
+    {
+      "class": "bowl",
+      "presence_rate": 0.01466275659824047,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979
+    },
+    {
+      "class": "chair",
+      "presence_rate": 0.05278592375366569,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979
+    },
+    {
+      "class": "potted plant",
+      "presence_rate": 0.011730205278592375,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979
+    },
+    {
+      "class": "dining table",
+      "presence_rate": 0.020527859237536656,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979
+    },
+    {
+      "class": "tv",
+      "presence_rate": 0.011730205278592375,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.1159420289855072,
+      "pr_auc_improvement": 0.007477381726288979
+    },
+    {
+      "class": "laptop",
+      "presence_rate": 0.011730205278592375,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.02898550724637683,
+      "pr_auc_improvement": -0.017008148805153223
+    },
+    {
+      "class": "clock",
+      "presence_rate": 0.020527859237536656,
+      "impact": "measured",
+      "keep_loss_improvement": 0.0,
+      "accuracy_improvement": 0.05797101449275366,
+      "pr_auc_improvement": -0.03327693167467105
+    }
+  ]
+}

@@ -26,8 +26,8 @@ USE_FULL_FEATURES = os.environ.get("FULL_FEATURES", "0") == "1"
 # FEATURE_COUNT: 71 core features (FAST) with real EXIF extraction
 # FAST: 71 features | FULL: 95 features (16 additional histogram bins + 8 advanced features)
 # With new photography features: +6 features = 77 (FAST) or 101 (FULL)
-# With person detection: +1 feature = 78 (FAST) or 102 (FULL)
-FEATURE_COUNT = 102 if USE_FULL_FEATURES else 78
+# With all COCO classes: +80 features = 157 (FAST) or 181 (FULL)
+FEATURE_COUNT = 181 if USE_FULL_FEATURES else 157
 if not globals().get("_FEATURE_MODE_LOGGED"):
     logging.info(f"[features] Mode: {'FULL' if USE_FULL_FEATURES else 'FAST'} (FEATURE_COUNT={FEATURE_COUNT})")
     _FEATURE_MODE_LOGGED = True
@@ -854,10 +854,15 @@ def _compute_motion_blur_score(gray_arr: np.ndarray) -> float:
     return float(motion_score)
 
 
-def _extract_person_detection(path: str) -> float:
-    """Extract person detection feature from object detection cache.
+def _extract_coco_class_detection(path: str, class_name: str) -> float:
+    """Extract COCO class detection feature from object detection cache.
     
-    Returns 1.0 if person is detected, 0.0 otherwise.
+    Args:
+        path: Image path
+        class_name: COCO class name (e.g., "person", "car", "cup")
+    
+    Returns:
+        1.0 if class is detected, 0.0 otherwise.
     Uses module-level cache to avoid repeated disk I/O.
     """
     import time
@@ -883,24 +888,23 @@ def _extract_person_detection(path: str) -> float:
         detections = cache.get(basename, [])
         
         if not detections:
-            elapsed = time.perf_counter() - t0
-            if elapsed > 0.01:  # Only log if slow
-                logging.debug(f"[features] Person detection (no detections) for {basename}: {elapsed*1000:.1f}ms")
             return 0.0
         
-        person_classes = {"person"}
         classes = [d.get("class", "").lower() for d in detections]
-        has_person = 1.0 if any(c in person_classes for c in classes) else 0.0
+        has_class = 1.0 if class_name.lower() in classes else 0.0
         
-        elapsed = time.perf_counter() - t0
-        if elapsed > 0.01:  # Only log if slow
-            logging.debug(f"[features] Person detection (result={has_person}) for {basename}: {elapsed*1000:.1f}ms")
-        
-        return has_person
+        return has_class
     except Exception as e:
-        elapsed = time.perf_counter() - t0
-        logging.debug(f"[features] Failed to extract person detection for {path} in {elapsed*1000:.1f}ms: {e}")
+        logging.debug(f"[features] Failed to extract {class_name} detection for {path}: {e}")
         return 0.0
+
+
+def _extract_person_detection(path: str) -> float:
+    """Extract person detection feature (backward compatibility).
+    
+    Returns 1.0 if person is detected, 0.0 otherwise.
+    """
+    return _extract_coco_class_detection(path, "person")
 
 
 def _do_feature_extraction(prep: ImagePreprocessResult, path: str) -> list[float]:
@@ -1183,20 +1187,30 @@ def _do_feature_extraction(prep: ImagePreprocessResult, path: str) -> list[float
         float(motion_blur),
     ])
     
-    # Person detection from object detection cache (added as new feature)
-    person_start = time.perf_counter()
-    person_det = float(_extract_person_detection(path))
-    person_time = time.perf_counter() - person_start
-    if person_time > 0.1:
-        logging.info(f"[features] SLOW person detection for {basename}: {person_time*1000:.1f}ms")
-    features.append(float(person_det))
+    # All COCO classes detection from object detection cache (80 classes)
+    coco_start = time.perf_counter()
+    try:
+        from src.object_detection import COCO_CLASSES_LIST
+        # Skip background class (index 0), extract all 80 COCO classes
+        coco_classes = COCO_CLASSES_LIST[1:]  # All classes except "__background__"
+        for class_name in coco_classes:
+            if class_name:  # Skip empty strings
+                has_class = float(_extract_coco_class_detection(path, class_name))
+                features.append(has_class)
+    except Exception as e:
+        logging.warning(f"[features] Failed to extract COCO classes for {basename}: {e}")
+        # Fallback: add zeros for all COCO classes
+        features.extend([0.0] * 80)
+    coco_time = time.perf_counter() - coco_start
+    if coco_time > 0.1:
+        logging.info(f"[features] SLOW COCO detection for {basename}: {coco_time*1000:.1f}ms")
     
     feat_total = time.perf_counter() - feat_start
     if feat_total > 1.5:
         # Log breakdown of slow operations
         slow_ops = sorted(timing_breakdown.items(), key=lambda x: x[1], reverse=True)
         slow_list = ", ".join([f"{name}={t:.1f}ms" for name, t in slow_ops[:8] if t > 20])
-        logging.info(f"[features] SLOW feature extraction for {basename}: total={feat_total:.2f}s (clip={clip_time*1000:.1f}ms, advanced={advanced_time:.2f}s, person={person_time*1000:.1f}ms, {slow_list})")
+        logging.info(f"[features] SLOW feature extraction for {basename}: total={feat_total:.2f}s (clip={clip_time*1000:.1f}ms, advanced={advanced_time:.2f}s, coco={coco_time*1000:.1f}ms, {slow_list})")
     
     return features  # type: ignore[return-value]
 
