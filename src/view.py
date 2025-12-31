@@ -306,12 +306,9 @@ class PhotoView(QMainWindow):
         """Build right panel with controls and info displays."""
         # Make the entire right panel scrollable to avoid crushed widgets
         self.side_panel = QWidget()
-        # Allow the side panel to shrink horizontally; don't force a large min width
-        self.side_panel.setMinimumWidth(0)
-        # Set maximum width to prevent panel from being too wide
-        # Use Preferred instead of Maximum so it sizes to content (up to max width)
-        self.side_panel.setMaximumWidth(350)
-        self.side_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        # Fix width to match scroll area and prevent horizontal scrolling
+        self.side_panel.setFixedWidth(350)
+        self.side_panel.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.side_layout = QVBoxLayout(self.side_panel)
         # Minimize margins to reduce wasted space
         self.side_layout.setContentsMargins(3, 3, 3, 3)
@@ -320,11 +317,15 @@ class PhotoView(QMainWindow):
         self.side_scroll.setWidgetResizable(True)
         # Remove margins from scroll area to eliminate gap
         self.side_scroll.setContentsMargins(0, 0, 0, 0)
+        # Fix width to prevent horizontal scrolling
+        self.side_scroll.setFixedWidth(350)
+        self.side_scroll.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         # Prevent horizontal scrolling in the side panel; only allow vertical scrolling
         try:
             self.side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.side_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         except Exception:
-            logging.exception("Failed to set horizontal scroll bar policy")
+            logging.exception("Failed to set scroll bar policy")
         self.side_scroll.setWidget(self.side_panel)
         # Use stretch=0 so side panel only takes the space it needs (up to max width), eliminating right gap
         self.main_layout.addWidget(self.side_scroll, stretch=0)
@@ -348,6 +349,7 @@ class PhotoView(QMainWindow):
         self.dir_display = QLabel()
         self.dir_display.setStyleSheet("color: #909090; font-size: 9px;")
         self.dir_display.setWordWrap(True)
+        self.dir_display.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.switch_dir_btn = QPushButton("📁 Switch")
         self.switch_dir_btn.clicked.connect(self._on_switch_directory)
         self.switch_dir_btn.setStyleSheet("""
@@ -408,7 +410,8 @@ class PhotoView(QMainWindow):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search by filename...")
         # Prevent search input from forcing panel width (match side panel max width)
-        self.search_input.setMaximumWidth(350)
+        # Search input should adapt to panel width (word wrap handled by QLineEdit)
+        self.search_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.search_input.setStyleSheet("""
             QLineEdit {
                 padding: 4px 8px;
@@ -998,6 +1001,7 @@ class PhotoView(QMainWindow):
         self.exif_view.setPlaceholderText("Select an image to view details.")
         # Enable word wrap to prevent long lines from forcing panel width
         self.exif_view.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.exif_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.exif_view.setStyleSheet("""
             QTextEdit {
                 font-family: 'Monaco', 'Courier New', monospace;
