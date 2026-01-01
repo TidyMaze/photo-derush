@@ -163,3 +163,4 @@ def test_lsh_comparison_count():
     # For now, just verify it works
     assert len(groups) == num_images
 
+

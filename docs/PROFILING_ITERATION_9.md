@@ -92,3 +92,4 @@
 3. Pre-load EXIF data in background thread for faster initial access
 4. Further optimize signal emissions if still a bottleneck
 
+

@@ -140,3 +140,4 @@ All tests pass:
 - ✅ Performance improvements measured (2.47x for EXIF)
 - ✅ Edge cases handled
 
+

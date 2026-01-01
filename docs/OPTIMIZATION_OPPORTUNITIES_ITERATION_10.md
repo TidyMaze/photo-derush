@@ -143,3 +143,4 @@ def get_image_timestamp_cached(fname: str) -> datetime:
 3. Profile `_do_refresh_thumbnail_badges` in detail
 4. Run profiler again to measure improvements
 
+

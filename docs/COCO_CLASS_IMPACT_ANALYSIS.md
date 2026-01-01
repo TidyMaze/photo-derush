@@ -100,3 +100,4 @@ To add a COCO class as a feature:
 - **Object detection**: `src/object_detection.py`
 - **COCO classes**: 80 classes defined in `COCO_CLASSES` dict
 
+

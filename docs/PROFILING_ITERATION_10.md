@@ -153,3 +153,4 @@
 4. **Verify EXIF pre-loading** is being used
 5. **Identify hot `dict.get` paths** for caching
 
+

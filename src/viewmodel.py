@@ -718,7 +718,11 @@ class PhotoViewModel(QObject):
             self._emit_state_snapshot()
 
     def current_filtered_images(self):
-        return list(self._filtered_images)
+        """Get current filtered images list, ensuring it's always a list."""
+        if not hasattr(self, "_filtered_images"):
+            # Initialize if not set (shouldn't happen, but defensive)
+            self._filtered_images = []
+        return list(self._filtered_images) if self._filtered_images else []
     
     def _ensure_selection(self):
         """Ensure at least one image is always selected. Selects first filtered image if none selected."""
@@ -727,6 +731,9 @@ class PhotoViewModel(QObject):
             return
         self._ensuring_selection = True
         try:
+            # Ensure _filtered_images is initialized
+            if not hasattr(self, "_filtered_images"):
+                self._filtered_images = []
             if not self._filtered_images:
                 # No images available, clear selection
                 if self.selected_image:
@@ -757,27 +764,15 @@ class PhotoViewModel(QObject):
             
             # If no image is selected, select the first filtered image
             if not self.selected_image or not self._has_selected_image:
-                first_filename = self._filtered_images[0]
-                first_path = self._image_path_cache.get(first_filename) if hasattr(self, "_image_path_cache") else self.model.get_image_path(first_filename)
-                if first_path:
-                    # Use selection_model directly to avoid recursion
-                    self.selection_model.replace(first_path)
-                    self.selected_image = first_path
-                    self._has_selected_image = True
-                    self.selected_image_changed.emit(first_path)
-                    self.has_selected_image_changed.emit(True)
-                    self._load_details_for_filename(first_filename)
-            else:
-                # Check if selected image is still in filtered list
-                selected_filename = None
-                for fname in self.images:
-                    path = self._image_path_cache.get(fname) if hasattr(self, "_image_path_cache") else self.model.get_image_path(fname)
-                    if path == self.selected_image:
-                        selected_filename = fname
-                        break
-                
-                if selected_filename and selected_filename not in self._filtered_images:
-                    # Selected image is filtered out, select first filtered image
+                if not self._filtered_images:
+                    # No filtered images available, clear selection
+                    self.selection_model.clear()
+                    self.selected_image = None
+                    self._has_selected_image = False
+                    self.selected_image_changed.emit("")
+                    self.has_selected_image_changed.emit(False)
+                else:
+                    # Select first filtered image
                     first_filename = self._filtered_images[0]
                     first_path = self._image_path_cache.get(first_filename) if hasattr(self, "_image_path_cache") else self.model.get_image_path(first_filename)
                     if first_path:
@@ -788,6 +783,36 @@ class PhotoViewModel(QObject):
                         self.selected_image_changed.emit(first_path)
                         self.has_selected_image_changed.emit(True)
                         self._load_details_for_filename(first_filename)
+            else:
+                # Check if selected image is still in filtered list
+                selected_filename = None
+                for fname in self.images:
+                    path = self._image_path_cache.get(fname) if hasattr(self, "_image_path_cache") else self.model.get_image_path(fname)
+                    if path == self.selected_image:
+                        selected_filename = fname
+                        break
+                
+                if selected_filename and selected_filename not in self._filtered_images:
+                    # Selected image is filtered out, select first filtered image if available
+                    if not self._filtered_images:
+                        # No filtered images available, clear selection
+                        self.selection_model.clear()
+                        self.selected_image = None
+                        self._has_selected_image = False
+                        self.selected_image_changed.emit("")
+                        self.has_selected_image_changed.emit(False)
+                    else:
+                        # Select first filtered image
+                        first_filename = self._filtered_images[0]
+                        first_path = self._image_path_cache.get(first_filename) if hasattr(self, "_image_path_cache") else self.model.get_image_path(first_filename)
+                        if first_path:
+                            # Use selection_model directly to avoid recursion
+                            self.selection_model.replace(first_path)
+                            self.selected_image = first_path
+                            self._has_selected_image = True
+                            self.selected_image_changed.emit(first_path)
+                            self.has_selected_image_changed.emit(True)
+                            self._load_details_for_filename(first_filename)
         finally:
             self._ensuring_selection = False
 
