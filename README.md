@@ -32,6 +32,11 @@ Photo Derush is a desktop photo management tool that helps you quickly sort thro
 # Clone and install
 git clone https://github.com/TidyMaze/photo-derush.git
 cd photo-derush
+
+# Install system dependencies (Linux only, required for Qt)
+./scripts/install_system_deps.sh
+
+# Install Python dependencies
 poetry install
 
 # Run the app
@@ -99,13 +104,21 @@ pytest tests/
 
 If you get "no Qt platform plugin could be initialized":
 
+**Option 1: Use the automated script (recommended)**
 ```bash
-# Install required system libraries
+./scripts/install_system_deps.sh
+```
+
+**Option 2: Install manually**
+```bash
+# Ubuntu/Debian
 sudo apt-get install libxcb-xinerama0 libxcb-cursor0 libxcb1 libxkbcommon-x11-0
 
 # Or try setting platform explicitly
 QT_QPA_PLATFORM=xcb poetry run python app.py
 ```
+
+> **Note**: These are system dependencies (not Python packages) and cannot be managed by Poetry. See `pyproject.toml` for details on other distributions.
 
 ---
 
