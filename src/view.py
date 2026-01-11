@@ -154,6 +154,13 @@ class PhotoView(QMainWindow):
         self._converted_pixmap_cache_max = 512
 
         self._build_ui()
+        # Log DPR and screens at startup for debugging retina/scaling issues
+        try:
+            primary = QGuiApplication.primaryScreen()
+            screens = QGuiApplication.screens()
+            logging.info(f"[DPR-START] primary_dpr={float(primary.devicePixelRatio() or 1.0)}, screens={len(screens)}")
+        except Exception:
+            logging.debug("[DPR-START] Failed to log primary screen DPR")
         self._connect_signals()  # Connect signals AFTER UI is built
 
         # Purge stale caches on startup to prevent bad bounding boxes from previous runs
@@ -171,10 +178,25 @@ class PhotoView(QMainWindow):
         self._converted_pixmap_cache.clear()
 
         # Clear base_pixmap from all labels (contains overlays)
-        # Note: base_pixmap should NOT contain overlays, but clear it to force regeneration
+        # Also clear the visible pixmap on each label to force thumbnail regeneration
         for label in self._all_widgets.values():
             if hasattr(label, "base_pixmap"):
                 label.base_pixmap = None  # type: ignore[attr-defined]
+            try:
+                # Remove any displayed pixmap so next thumbnail load will re-assign
+                label.clear()
+                # Remove stored metadata to avoid mismatches
+                for attr in ("_thumb_filename", "_thumb_width", "_thumb_height", "_thumb_offset_x", "_thumb_offset_y"):
+                    try:
+                        if hasattr(label, attr):
+                            delattr(label, attr)  # type: ignore[attr-defined]
+                    except Exception:
+                        try:
+                            delattr(label, attr)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
 
         # Clear overlay cache from overlay_widget module if imported
         try:
@@ -2440,6 +2462,12 @@ class PhotoView(QMainWindow):
                         if fname:
                             # Store filename as a property (won't affect rendering)
                             final_pixmap._assigned_filename = fname  # type: ignore[attr-defined]
+                        try:
+                            logging.debug(
+                                f"[DPR-DBG][SET] final_pixmap_size=({final_pixmap.width()},{final_pixmap.height()}) pix_dpr={final_pixmap.devicePixelRatio()} label_size=({label.width()},{label.height()}) fname={fname}"
+                            )
+                        except Exception:
+                            logging.debug(f"[DPR-DBG][SET] setting pixmap id={id(final_pixmap)} to label id={id(label)} fname={fname}")
                         label.setPixmap(final_pixmap)
                         # Removed pixmap filename verification - false positives when pixmap created before filename set
                         # This check was causing frequent ERROR logs without actual issues
@@ -2735,7 +2763,7 @@ class PhotoView(QMainWindow):
             chip.setContentsMargins(0, 0, 0, 0)
             self.object_detection_list_layout.addWidget(chip)
 
-    def _convert_to_pixmap(self, thumb) -> QPixmap:
+    def _convert_to_pixmap(self, thumb, dpr: float | None = None) -> QPixmap:
         """Convert thumbnail (PIL Image or QPixmap) to QPixmap, preserving any PIL.Image.info metadata.
         
         Scales PIL images to retina resolution before conversion for crisp overlays.
@@ -2744,8 +2772,9 @@ class PhotoView(QMainWindow):
         if isinstance(thumb, QPixmap):
             return thumb
 
-        # Get device pixel ratio for retina displays
-        dpr = self._dpr
+        # Get device pixel ratio for retina displays (allow override per-widget)
+        if dpr is None:
+            dpr = self._dpr
         target_size = int(self.thumb_size * dpr)
 
         # Generate cache key from PIL Image data (if available)
@@ -2798,7 +2827,16 @@ class PhotoView(QMainWindow):
             qimg = ImageQt(rgba_img)
             pm = QPixmap.fromImage(qimg)
             # Set device pixel ratio so Qt displays at correct logical size
-            pm.setDevicePixelRatio(dpr)
+            try:
+                pm.setDevicePixelRatio(dpr)
+            except Exception:
+                pass
+            try:
+                logging.debug(
+                    f"[DPR-DBG][ImageQt] thumb_id={id(thumb)} rgba_size={rgba_img.size} qimg_size=({qimg.width()},{qimg.height()}) pm_size=({pm.width()},{pm.height()}) dpr={dpr}"
+                )
+            except Exception:
+                logging.debug(f"[DPR-DBG][ImageQt] Converted pixmap id={id(pm)} dpr={dpr}")
             # Attach metadata to QPixmap for later retrieval
             if hasattr(thumb, "info") and thumb.info:
                 logging.debug(f"[BBOX-DEBUG] Attaching PIL.Image.info to QPixmap: {thumb.info}")
@@ -2812,20 +2850,36 @@ class PhotoView(QMainWindow):
         # Fallback: PNG round-trip (loses metadata)
         try:
             from io import BytesIO
+            from PIL import Image as PilImage
 
             buf = BytesIO()
             try:
-                thumb.save(buf, format="PNG")
+                # Use a DPR-scaled copy when DPR > 1 to avoid Qt upscaling causing blur
+                thumb_copy = thumb
+                try:
+                    if dpr and dpr > 1.0 and hasattr(thumb, "size"):
+                        w, h = thumb.size
+                        target_w = max(1, int(w * dpr))
+                        target_h = max(1, int(h * dpr))
+                        if (w, h) != (target_w, target_h):
+                            thumb_copy = thumb.copy().resize((target_w, target_h), resample=PilImage.LANCZOS)
+                except Exception:
+                    thumb_copy = thumb
+
+                thumb_copy.save(buf, format="PNG")
                 data = buf.getvalue()
                 pm = QPixmap()
                 if pm.loadFromData(data):
-                    # DISABLED: Don't cache converted pixmaps to prevent sharing between labels
-                    # if cache_key:
-                    #     if len(self._converted_pixmap_cache) >= self._converted_pixmap_cache_max:
-                    #         keys_to_remove = list(self._converted_pixmap_cache.keys())[:self._converted_pixmap_cache_max // 4]
-                    #         for k in keys_to_remove:
-                    #             del self._converted_pixmap_cache[k]
-                    #     self._converted_pixmap_cache[cache_key] = pm
+                    try:
+                        pm.setDevicePixelRatio(dpr)
+                    except Exception:
+                        pass
+                    try:
+                        logging.debug(
+                            f"[DPR-DBG][PNG] thumb_id={id(thumb)} saved_bytes={len(data)} pm_size=({pm.width()},{pm.height()}) dpr={dpr}"
+                        )
+                    except Exception:
+                        logging.debug(f"[DPR-DBG][PNG] Loaded pixmap id={id(pm)} dpr={dpr}")
                     return pm
             except Exception:
                 pass
@@ -2944,7 +2998,26 @@ class PhotoView(QMainWindow):
 
             # Convert thumbnail to QPixmap first
             try:
-                pixmap = self._convert_to_pixmap(thumb)
+                # Prefer the DPR of the screen hosting this label to avoid using primaryScreen()
+                label_dpr = None
+                try:
+                    win = label.window() if hasattr(label, "window") else None
+                    if win is not None:
+                        wh = win.windowHandle() if hasattr(win, "windowHandle") else None
+                        if wh is not None and wh.screen() is not None:
+                            label_dpr = float(wh.screen().devicePixelRatio() or 1.0)
+                except Exception:
+                    label_dpr = None
+
+                # Fallback to label/device/app DPR
+                if label_dpr is None:
+                    try:
+                        # QLabel has devicePixelRatioF() in Qt6
+                        label_dpr = float(label.devicePixelRatioF())
+                    except Exception:
+                        label_dpr = self._dpr
+
+                pixmap = self._convert_to_pixmap(thumb, dpr=label_dpr)
                 logging.debug(f"[OVERLAY-TEST] Converted thumb to QPixmap: {pixmap.width()}x{pixmap.height()}, pixmap_id={id(pixmap)}")
             except Exception:
                 logging.exception("Failed converting thumb to QPixmap")
