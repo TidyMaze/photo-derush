@@ -120,7 +120,9 @@ class BadgeOverlayWidget(QWidget):
         
         # Badge spans full width, height based on font size
         badge_w_logical = widget_w
-        badge_h_logical = max(14, int(widget_h * 0.08))  # ~8% of height, minimum 14px
+        # Make badges more compact: use a smaller fraction of the widget height
+        # and reduce the minimum height so badges don't dominate large thumbnails.
+        badge_h_logical = max(12, int(widget_h * 0.05))  # ~5% of height, minimum 12px
         
         # Position in logical pixels (bottom, full width)
         x = 0
@@ -157,8 +159,9 @@ class BadgeOverlayWidget(QWidget):
         
         # Text with proper DPR scaling for sharp rendering
         font = QFont()
-        base_font_size_logical = 6.5  # Reduced from 8.0 for smaller text
-        font_pixel_size = max(8, int(base_font_size_logical * dpr))
+        # Slightly smaller base font for compact badges; scale with DPR
+        base_font_size_logical = 6.0
+        font_pixel_size = max(7, int(base_font_size_logical * dpr))
         font.setPixelSize(font_pixel_size)
         font.setBold(True)
         painter.setFont(font)
