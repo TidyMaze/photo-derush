@@ -2778,28 +2778,32 @@ class PhotoView(QMainWindow):
         # Use PIL.ImageQt for direct conversion, avoiding PNG round-trip that loses PIL.Image.info
         try:
             from PIL.ImageQt import ImageQt
+            from PIL import Image as PilImage
 
+            # Ensure we produce a high-resolution image when DPR > 1 to avoid Qt upscaling
             rgba_img = thumb.convert("RGBA") if hasattr(thumb, "convert") else thumb
+            try:
+                if dpr and dpr > 1.0:
+                    # Resize to physical pixel dimensions (thumb logical size * DPR)
+                    w, h = rgba_img.size
+                    target_w = max(1, int(w * dpr))
+                    target_h = max(1, int(h * dpr))
+                    # Only resample if size differs to avoid extra work
+                    if (w, h) != (target_w, target_h):
+                        rgba_img = rgba_img.resize((target_w, target_h), resample=PilImage.LANCZOS)
+            except Exception:
+                # If resizing fails for any reason, fall back to original image
+                pass
+
             qimg = ImageQt(rgba_img)
             pm = QPixmap.fromImage(qimg)
-            # Set device pixel ratio so Qt displays at correct size
+            # Set device pixel ratio so Qt displays at correct logical size
             pm.setDevicePixelRatio(dpr)
             # Attach metadata to QPixmap for later retrieval
             if hasattr(thumb, "info") and thumb.info:
                 logging.debug(f"[BBOX-DEBUG] Attaching PIL.Image.info to QPixmap: {thumb.info}")
                 # Store as a temporary reference on the pixmap (won't survive pickling, but fine for GUI)
                 pm._pil_info = thumb.info  # type: ignore[attr-defined]
-
-            # DISABLED: Don't cache converted pixmaps to prevent sharing between labels
-            # Each label needs a completely unique pixmap, even if the source image is the same
-            # if cache_key:
-            #     # Evict oldest entries if cache is full
-            #     if len(self._converted_pixmap_cache) >= self._converted_pixmap_cache_max:
-            #         # Remove oldest 25% of entries
-            #         keys_to_remove = list(self._converted_pixmap_cache.keys())[:self._converted_pixmap_cache_max // 4]
-            #         for k in keys_to_remove:
-            #             del self._converted_pixmap_cache[k]
-            #     self._converted_pixmap_cache[cache_key] = pm
 
             return pm
         except Exception as e:
