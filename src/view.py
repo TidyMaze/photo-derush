@@ -286,7 +286,8 @@ class PhotoView(QMainWindow):
         # Grid area
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
-        self.grid_layout.setSpacing(8)
+        # Reduce spacing to fit more thumbnails per row on smaller screens
+        self.grid_layout.setSpacing(6)
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setWidget(self.grid_widget)

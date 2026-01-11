@@ -56,55 +56,6 @@ logging.getLogger('PIL.JpegImagePlugin').setLevel(logging.WARNING)
 CONFIG_PATH = os.path.expanduser('~/.photo_app_config.json')
 MAX_IMAGES = None  # Unlimited images (was 20, removed limit)
 
-
-def _detect_hidpi() -> bool:
-    """Attempt to detect whether the primary display is HiDPI.
-
-    Methods tried (in order):
-    - `xdpyinfo` parsing for DPI (X11)
-    - Environment variables: `GDK_SCALE`, `QT_SCALE_FACTOR`
-
-    Returns True if we believe the display is HiDPI, False otherwise.
-    """
-    try:
-        # Try xdpyinfo (X11)
-        import subprocess, re
-
-        p = subprocess.run(["xdpyinfo"], capture_output=True, text=True, timeout=1)
-        out = p.stdout or ""
-        m = re.search(r"resolution:\s*(\d+)x(\d+)\s*dots per inch", out)
-        if m:
-            dpi = int(m.group(1))
-            logging.info(f"Detected screen DPI from xdpyinfo: {dpi}")
-            return dpi >= 140
-    except Exception:
-        logging.debug("xdpyinfo DPI detection not available or failed")
-
-    try:
-        # Wayland/GTK/QT env hints
-        gdk = os.environ.get("GDK_SCALE")
-        if gdk:
-            try:
-                if int(gdk) > 1:
-                    logging.info(f"Detected GDK_SCALE={gdk}, treating as HiDPI")
-                    return True
-            except Exception:
-                pass
-        qt_sf = os.environ.get("QT_SCALE_FACTOR")
-        if qt_sf:
-            try:
-                if float(qt_sf) > 1.5:
-                    logging.info(f"Detected QT_SCALE_FACTOR={qt_sf}, treating as HiDPI")
-                    return True
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    # Default to False (non-HiDPI)
-    logging.info("No HiDPI indicators found; treating display as standard DPI")
-    return False
-
 def load_last_dir():
     try:
         with open(CONFIG_PATH) as f:
@@ -181,41 +132,23 @@ def main():
         logging.info("App main() starting...")
 
         # Create QApplication early so Qt event loop and signal handling are available
-        # Determine Qt high-DPI / scaling behaviour. Preference order:
-        # 1) `PHOTO_DERUSH_QT_SCALING` env var (explicit override: 'enable'/'disable')
-        # 2) Auto-detect via helper `_detect_hidpi()` which uses `xdpyinfo` or env hints
-        # Set Qt attributes BEFORE creating the QApplication when possible.
+        # Default behaviour: enable Qt automatic high-DPI scaling. This is the
+        # usual and recommended approach — Qt will map logical pixels to
+        # physical pixels per-monitor. Allow explicit opt-out via
+        # `PHOTO_DERUSH_QT_SCALING=disable` for misconfigured environments.
         qt_scaling_env = os.environ.get('PHOTO_DERUSH_QT_SCALING')
         try:
-            if qt_scaling_env:
-                if qt_scaling_env.lower() == 'disable':
-                    os.environ.setdefault('QT_AUTO_SCREEN_SCALE_FACTOR', '0')
-                    os.environ.setdefault('QT_SCALE_FACTOR', '1')
-                    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, False)
-                    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
-                    logging.info('Qt auto-scaling disabled via PHOTO_DERUSH_QT_SCALING=disable')
-                elif qt_scaling_env.lower() == 'enable':
-                    os.environ.setdefault('QT_AUTO_SCREEN_SCALE_FACTOR', '1')
-                    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-                    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-                    logging.info('Qt auto-scaling enabled via PHOTO_DERUSH_QT_SCALING=enable')
+            if qt_scaling_env and qt_scaling_env.lower() == 'disable':
+                os.environ.setdefault('QT_AUTO_SCREEN_SCALE_FACTOR', '0')
+                os.environ.setdefault('QT_SCALE_FACTOR', '1')
+                QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, False)
+                QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
+                logging.info('Qt auto-scaling disabled via PHOTO_DERUSH_QT_SCALING=disable')
             else:
-                # Auto-detect HiDPI and enable scaling only when appropriate
-                try:
-                    is_hidpi = _detect_hidpi()
-                    if is_hidpi:
-                        os.environ.setdefault('QT_AUTO_SCREEN_SCALE_FACTOR', '1')
-                        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-                        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-                        logging.info('Auto-detected HiDPI display: enabling Qt auto-scaling')
-                    else:
-                        os.environ.setdefault('QT_AUTO_SCREEN_SCALE_FACTOR', '0')
-                        os.environ.setdefault('QT_SCALE_FACTOR', '1')
-                        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, False)
-                        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, False)
-                        logging.info('Auto-detected standard-DPI display: disabling Qt auto-scaling')
-                except Exception as e:
-                    logging.debug(f'HiDPI auto-detection failed: {e}')
+                os.environ.setdefault('QT_AUTO_SCREEN_SCALE_FACTOR', '1')
+                QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+                QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+                logging.info('Qt auto-scaling enabled (default)')
         except Exception as e:
             logging.debug(f'Could not set Qt scaling attributes: {e}')
 
@@ -306,21 +239,14 @@ def main():
         max_images = 0 if MAX_IMAGES is None else MAX_IMAGES
         viewmodel = PhotoViewModel(last_dir, max_images=max_images)
         logging.info("PhotoViewModel created, about to create PhotoView and call load_images()")
-        # Choose a reasonable thumbnail size. Previously the app used 800 which
-        # is far too large on low-resolution screens and forces a single image
-        # per row. Allow environment override via PHOTO_DERUSH_DEFAULT_THUMB
-        # and reduce size when Qt scaling is disabled.
+        # Choose a reasonable thumbnail size expressed in logical pixels.
+        # Let Qt handle mapping to physical pixels (HiDPI) via auto-scaling.
         try:
             env_thumb = os.environ.get('PHOTO_DERUSH_DEFAULT_THUMB')
             if env_thumb:
                 thumb_size = int(env_thumb)
             else:
-                # If user disabled Qt scaling, prefer a compact thumbnail size
-                if qt_scaling and qt_scaling.lower() == 'disable':
-                    thumb_size = 220
-                else:
-                    # Default for modern displays
-                    thumb_size = 320
+                thumb_size = 220
         except Exception:
             thumb_size = 320
 
