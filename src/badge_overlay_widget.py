@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
+from src.dpr_helper import get_dpr
 
 
 class BadgeOverlayWidget(QWidget):
@@ -98,7 +99,7 @@ class BadgeOverlayWidget(QWidget):
         try:
             from PySide6.QtGui import QGuiApplication
             screen = QGuiApplication.primaryScreen()
-            dpr = float(screen.devicePixelRatio() or 1.0) if screen else 1.0
+            dpr = get_dpr(screen)
         except Exception:
             dpr = 1.0
         

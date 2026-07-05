@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import QWidget
+from src.dpr_helper import get_dpr
 
 
 class GroupBadgeWidget(QWidget):
@@ -67,12 +68,7 @@ class GroupBadgeWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
         # Get device pixel ratio
-        try:
-            from PySide6.QtGui import QGuiApplication
-            screen = QGuiApplication.primaryScreen()
-            dpr = float(screen.devicePixelRatio() or 1.0) if screen else 1.0
-        except Exception:
-            dpr = 1.0
+        dpr = get_dpr()
 
         widget_w = self.width()
         widget_h = self.height()

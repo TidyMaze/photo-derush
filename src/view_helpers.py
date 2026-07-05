@@ -9,6 +9,7 @@ from PySide6.QtGui import QColor, QPainter, QPen
 
 from src.constants import HIGH_CONF_CAP, HIGH_CONFIDENCE_THRESHOLD
 from src.detections import Detection, normalize_detections
+from src.dpr_helper import get_dpr
 
 
 def overlay_state_hash(objects, label_text, is_auto, prediction_prob) -> int:
@@ -200,14 +201,14 @@ def paint_bboxes(painter: QPainter, objects, offset_x: int, offset_y: int, img_w
                     if win:
                         screen = win.screen()
                         if screen:
-                            text_dpr = float(screen.devicePixelRatio() or 1.0)
+                            text_dpr = get_dpr(screen)
             except Exception:
                 pass
         # Fallback to primary screen if DPR still 1.0
         if text_dpr == 1.0:
             screen = QGuiApplication.primaryScreen()
             if screen:
-                text_dpr = float(screen.devicePixelRatio() or 1.0)
+                text_dpr = get_dpr(screen)
     except Exception:
         text_dpr = 1.0
 

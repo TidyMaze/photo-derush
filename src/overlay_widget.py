@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QWidget
 from src.cache_config import is_cache_disabled
 from src.constants import BADGE_COLORS, BADGE_ICONS, OVERLAY_CACHE_SIZE
 from src.view_helpers import overlay_state_hash, paint_bboxes
+from src.dpr_helper import get_dpr
 
 # Simple cache for overlay pixmaps. Keyed by (w,h,dpr,overlay_hash)
 _overlay_cache: dict[str, Any] = {}
@@ -58,8 +59,7 @@ class OverlayWidget(QWidget):
         state_hash = overlay_state_hash(self.objects, self.label_text, self.is_auto, self.pred_prob)
 
         # Get device pixel ratio
-        from PySide6.QtGui import QGuiApplication
-        dpr = float(QGuiApplication.primaryScreen().devicePixelRatio() or 1.0)
+        dpr = get_dpr()
 
         key = (w, h, round(dpr, 2), state_hash)
 

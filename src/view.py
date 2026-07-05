@@ -26,6 +26,7 @@ from .flow_layout import FlowLayout
 from .lazy_loader import LazyImageLoader
 from .model_stats import _get_feature_names
 from .vm_directory import change_directory
+from .dpr_helper import get_dpr
 
 
 class ThumbRunnable(QObject, QRunnable):
@@ -158,7 +159,7 @@ class PhotoView(QMainWindow):
         try:
             primary = QGuiApplication.primaryScreen()
             screens = QGuiApplication.screens()
-            logging.info(f"[DPR-START] primary_dpr={float(primary.devicePixelRatio() or 1.0)}, screens={len(screens)}")
+            logging.info(f"[DPR-START] primary_dpr={get_dpr(primary)}, screens={len(screens)}")
         except Exception:
             logging.debug("[DPR-START] Failed to log primary screen DPR")
         self._connect_signals()  # Connect signals AFTER UI is built
@@ -232,10 +233,7 @@ class PhotoView(QMainWindow):
     @property
     def _dpr(self):
         """Device pixel ratio (cached per access)."""
-        try:
-            return float(QGuiApplication.primaryScreen().devicePixelRatio() or 1.0)
-        except Exception:
-            return 1.0
+        return get_dpr()
 
     @property
     def _state(self):
@@ -1576,7 +1574,7 @@ class PhotoView(QMainWindow):
             from PySide6.QtGui import QColor, QFont, QPainter, QPen
 
             # Get device pixel ratio to scale badge dimensions
-            dpr = pixmap.devicePixelRatio() or 1.0
+            dpr = get_dpr()
 
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -1825,7 +1823,7 @@ class PhotoView(QMainWindow):
             from .view_helpers import paint_bboxes
 
             # Get DPR and calculate dimensions
-            dpr = pixmap.devicePixelRatio() or 1.0
+            dpr = get_dpr()
 
             # Convert pixmap to QImage first to get logical pixel dimensions
             from PySide6.QtGui import QPixmap
