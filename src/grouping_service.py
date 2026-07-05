@@ -326,48 +326,51 @@ def compute_grouping_for_photos(
 
         # For each burst, check pairwise hash distances between groups
         merged_bursts = 0
-        for burst_id, group_items in burst_to_groups.items():
-            if len(group_items) <= 1:
-                continue
+        # Skip burst merging if all photos share the exact same timestamp (collision fallback)
+        has_timestamp_collision = len(set(p.timestamp for p in photos)) == 1 and len(photos) > 1
+        if not has_timestamp_collision:
+            for burst_id, group_items in burst_to_groups.items():
+                if len(group_items) <= 1:
+                    continue
 
-            # Group items by group_id
-            groups_in_burst: dict[int, list[str]] = defaultdict(list)
-            for group_id, filename in group_items:
-                groups_in_burst[group_id].append(filename)
+                # Group items by group_id
+                groups_in_burst: dict[int, list[str]] = defaultdict(list)
+                for group_id, filename in group_items:
+                    groups_in_burst[group_id].append(filename)
 
-            if len(groups_in_burst) <= 1:
-                continue  # Only one group in this burst, nothing to merge
+                if len(groups_in_burst) <= 1:
+                    continue  # Only one group in this burst, nothing to merge
 
-            # Check pairwise distances between groups in this burst
-            group_list = list(groups_in_burst.keys())
-            should_merge = False
+                # Check pairwise distances between groups in this burst
+                group_list = list(groups_in_burst.keys())
+                should_merge = False
 
-            for i, gid1 in enumerate(group_list):
-                for gid2 in group_list[i+1:]:
-                    # Find minimum distance between any images in these two groups
-                    min_dist = float('inf')
-                    for f1 in groups_in_burst[gid1]:
-                        for f2 in groups_in_burst[gid2]:
-                            h1 = all_hashes.get(f1)
-                            h2 = all_hashes.get(f2)
-                            if h1 and h2:
-                                try:
-                                    hash1 = imagehash.hex_to_hash(h1)
-                                    hash2 = imagehash.hex_to_hash(h2)
-                                    dist = hash1 - hash2
-                                    if dist < min_dist:
-                                        min_dist = dist
-                                except Exception:
-                                    pass
+                for i, gid1 in enumerate(group_list):
+                    for gid2 in group_list[i+1:]:
+                        # Find minimum distance between any images in these two groups
+                        min_dist = float('inf')
+                        for f1 in groups_in_burst[gid1]:
+                            for f2 in groups_in_burst[gid2]:
+                                h1 = all_hashes.get(f1)
+                                h2 = all_hashes.get(f2)
+                                if h1 and h2:
+                                    try:
+                                        hash1 = imagehash.hex_to_hash(h1)
+                                        hash2 = imagehash.hex_to_hash(h2)
+                                        dist = hash1 - hash2
+                                        if dist < min_dist:
+                                            min_dist = dist
+                                    except Exception:
+                                        pass
 
-                    # If groups are visually similar enough, merge them
-                    if min_dist <= BURST_MERGE_THRESHOLD:
-                        union(gid1, gid2)
-                        should_merge = True
-                        logging.debug(f"[grouping_service] Burst {burst_id}: merging groups {gid1} and {gid2} (distance {min_dist} <= {BURST_MERGE_THRESHOLD})")
+                        # If groups are visually similar enough, merge them
+                        if min_dist <= BURST_MERGE_THRESHOLD:
+                            union(gid1, gid2)
+                            should_merge = True
+                            logging.debug(f"[grouping_service] Burst {burst_id}: merging groups {gid1} and {gid2} (distance {min_dist} <= {BURST_MERGE_THRESHOLD})")
 
-            if should_merge:
-                merged_bursts += 1
+                if should_merge:
+                    merged_bursts += 1
 
         # Build final mapping: each group -> its root
         merged_final: dict[int, int] = {}
