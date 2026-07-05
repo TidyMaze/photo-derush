@@ -364,6 +364,7 @@ class PhotoView(QMainWindow):
         self._build_action_buttons()  # Keep/Trash buttons at top
         self._build_directory_selector()
         self._build_hide_manual_checkbox()
+        self._build_show_detected_objects_checkbox()
         self._build_status_bar()
         self._build_batch_toolbar()
         self._build_exif_view()
@@ -443,6 +444,41 @@ class PhotoView(QMainWindow):
         """)
         self.hide_manual_checkbox.stateChanged.connect(self._on_hide_manual_changed)
         self.side_layout.addWidget(self.hide_manual_checkbox)
+
+
+    def _build_show_detected_objects_checkbox(self):
+        """Build checkbox to show/hide detected objects bounding boxes."""
+        self.show_detected_objects_checkbox = QCheckBox("Show detected objects")
+        self.show_detected_objects_checkbox.setChecked(True)
+        self.show_detected_objects_checkbox.setStyleSheet("""
+            QCheckBox {
+                font-size: 9px;
+                color: #c0c0c0;
+                padding: 6px 4px;
+                font-weight: 500;
+                border-radius: 2px;
+            }
+            QCheckBox::indicator {
+                width: 12px;
+                height: 12px;
+                border: 1px solid #4a4a4a;
+                border-radius: 2px;
+                background: #3a3a3a;
+            }
+            QCheckBox::indicator:checked {
+                background: #4a6a4a;
+                border-color: #5a7a5a;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #5a5a5a;
+            }
+        """)
+        self.show_detected_objects_checkbox.stateChanged.connect(self._on_show_detected_objects_changed)
+        self.side_layout.addWidget(self.show_detected_objects_checkbox)
+
+    def _on_show_detected_objects_changed(self):
+        """Handle toggle of detected objects visibility."""
+        self._refresh_thumbnail_badges()
 
 
     def _build_batch_toolbar(self):
@@ -2090,25 +2126,19 @@ class PhotoView(QMainWindow):
                         raise ValueError(f"Filename mismatch in _refresh_thumbnail_badges badge: label._thumb_filename={label_filename}, state fname={fname}")
 
                     # ALWAYS update bbox overlay if objects exist (independent of pixmap repaint)
-                    if objects:
-                        thumb_w = getattr(label, "_thumb_width", self.thumb_size)
-                        thumb_h = getattr(label, "_thumb_height", self.thumb_size)
-                        offset_x = getattr(label, "_thumb_offset_x", 0)
-                        offset_y = getattr(label, "_thumb_offset_y", 0)
-                        # Update bounding box overlay widget (reusable component)
-                        # Only show if objects have bbox data
-                        has_bboxes = any(obj.get("bbox") is not None for obj in objects)
-                        bbox_overlay = getattr(label, "_bbox_overlay", None)
-                        # Verify filename matches to prevent overlay mismatch - fail fast on mismatch
-                        if label_filename != fname:
-                            raise ValueError(f"Filename mismatch in _refresh_thumbnail_badges: label._thumb_filename={label_filename}, state fname={fname}")
+                    bbox_overlay = getattr(label, "_bbox_overlay", None)
+                    show_bboxes = self.show_detected_objects_checkbox.isChecked() if hasattr(self, "show_detected_objects_checkbox") else True
+                    
+                    if bbox_overlay:
+                        has_bboxes = any(obj.get("bbox") is not None for obj in objects) if objects else False
+                        if objects and show_bboxes and has_bboxes:
+                            # Verify filename matches to prevent overlay mismatch - fail fast on mismatch
+                            if label_filename != fname:
+                                raise ValueError(f"Filename mismatch in _refresh_thumbnail_badges: label._thumb_filename={label_filename}, state fname={fname}")
 
-                        if bbox_overlay and has_bboxes:
                             # Get full path from model using filename - fail fast if not found
                             if not fname:
                                 raise ValueError("fname is None when updating bbox overlay in _refresh_thumbnail_badges")
-                            if label_filename != fname:
-                                raise ValueError(f"Filename mismatch: label._thumb_filename={label_filename}, state fname={fname}")
 
                             label_path = self.viewmodel.model.get_image_path(fname)
                             if not label_path:
@@ -2117,34 +2147,25 @@ class PhotoView(QMainWindow):
                             try:
                                 from PIL import Image
                                 # OPTIMIZATION: Get original size from thumbnail metadata to avoid redundant Image.open
-                                # Thumbnails store original size in their metadata
                                 orig_w, orig_h = None, None
                                 thumb = label.pixmap()
                                 if thumb:
-                                    # Try to get size from thumbnail metadata (stored during thumbnail creation)
-                                    # Check if we cached it on the label
                                     cached_size = getattr(label, "_cached_image_size", None)
                                     if cached_size:
                                         orig_w, orig_h = cached_size
                                     else:
-                                        # Fallback: open image to get size (only if not cached)
                                         with Image.open(label_path) as img:
                                             orig_w, orig_h = img.size
-                                            # Cache for future use
                                             label._cached_image_size = (orig_w, orig_h)  # type: ignore[attr-defined]
                                 
                                 if orig_w and orig_h:
                                     bbox_overlay.set_detections(objects, original_image_size=(orig_w, orig_h))
                                 else:
-                                    # Last resort: open image
                                     with Image.open(label_path) as img:
                                         bbox_overlay.set_detections(objects, original_image_size=img.size)
-                                # With setScaledContents(True), pixmap fills entire label
-                                # So overlay should match label size, not thumbnail dimensions
                                 label_w = label.width()
                                 label_h = label.height()
                                 bbox_overlay.setGeometry(0, 0, label_w, label_h)
-                                # Batch visibility change - always add to show set
                                 widgets_to_show.add(bbox_overlay)
                                 widgets_to_hide.discard(bbox_overlay)
                                 bbox_overlay.raise_()
@@ -2152,13 +2173,11 @@ class PhotoView(QMainWindow):
                                 logging.debug(f"[BBOX-WIDGET] Updated overlay for {fname}: {len(objects)} objects with bboxes")
                             except Exception as e:
                                 logging.exception(f"[BBOX-WIDGET] Failed to update overlay for {fname}: {e}")
-                        elif bbox_overlay:
-                            # Hide if no bboxes
+                        else:
+                            # Hide if no bboxes, toggle is unchecked, or objects list is empty
                             widgets_to_hide.add(bbox_overlay)
                             widgets_to_show.discard(bbox_overlay)
                             bbox_overlay.set_detections([], original_image_size=None)
-                            if objects:
-                                logging.info(f"[BBOX-WIDGET] Hiding overlay for {fname}: {len(objects)} objects but no bbox data")
 
                     badge_overlay = getattr(label, "_badge_overlay", None)
                     if badge_overlay:

@@ -14,9 +14,13 @@ def test_offscreen_overlays(tmp_path):
     from src.view import PhotoView
 
     app = QApplication.instance() or QApplication([])
-    # use repo root as directory (contains test images)
-    repo_root = Path(__file__).resolve().parents[1]
-    vm = PhotoViewModel(str(repo_root))
+    # Create mock images in tmp_path
+    for i in range(3):
+        img_path = tmp_path / f"test_{i}.jpg"
+        img = Image.new('RGB', (100, 100), color='red')
+        img.save(img_path)
+
+    vm = PhotoViewModel(str(tmp_path))
     view = PhotoView(vm, thumb_size=106, images_per_row=6)
 
     # load images and give event loop a bit of time
@@ -60,3 +64,38 @@ def test_offscreen_overlays(tmp_path):
         return any(a > 0 for (_, _, _, a) in px)
 
     assert any(has_nontransparent(p) for p in saved), "All saved thumbnails are fully transparent"
+
+
+def test_show_hide_detected_objects(tmp_path):
+    os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+    from PySide6.QtWidgets import QApplication
+    from src.viewmodel import PhotoViewModel
+    from src.view import PhotoView
+
+    app = QApplication.instance() or QApplication([])
+    vm = PhotoViewModel(str(tmp_path))
+    # mock some images
+    vm.images = ["test0.jpg", "test1.jpg"]
+    # Mock detected objects
+    vm._detected_objects = {
+        "test0.jpg": [{"class": "person", "confidence": 0.8, "bbox": [0.1, 0.1, 0.5, 0.5]}],
+        "test1.jpg": []
+    }
+    
+    view = PhotoView(vm, thumb_size=106, images_per_row=6)
+    
+    # Assert checkbox exists
+    assert hasattr(view, "show_detected_objects_checkbox")
+    assert view.show_detected_objects_checkbox.isChecked() is True
+    
+    # Trigger refresh
+    view._refresh_thumbnail_badges()
+    app.processEvents()
+    
+    # Toggle off
+    view.show_detected_objects_checkbox.setChecked(False)
+    view._refresh_thumbnail_badges()
+    app.processEvents()
+    
+    # Check that isChecked is False
+    assert view.show_detected_objects_checkbox.isChecked() is False
