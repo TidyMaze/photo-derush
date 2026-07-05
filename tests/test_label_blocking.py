@@ -393,3 +393,36 @@ def test_auto_label_mixed_update_and_removal(vm):
     assert path3 in vm._auto.auto_assigned, "Unchanged label still auto-labeled"
 
 
+def test_group_sort_dynamic_resort(vm):
+    """Test that group sorting and best pick updates dynamically when labels/predictions change."""
+    if not vm.images or len(vm.images) < 2:
+        return
+
+    # Setup static group_info
+    vm._group_info = {
+        vm.images[0]: {"group_id": 1, "pick_score": 0.5, "is_group_best": False},
+        vm.images[1]: {"group_id": 1, "pick_score": 0.6, "is_group_best": True},
+    }
+
+    # Initial apply
+    vm._apply_filters()
+    filtered = list(vm.current_filtered_images())
+    # Since images[1] has score 0.6 and images[0] has score 0.5, images[1] should be first
+    assert filtered[0] == vm.images[1]
+    assert filtered[1] == vm.images[0]
+
+    # Now manually label images[0] as 'keep' -> should become 1.0 (best)
+    path0 = vm.model.get_image_path(vm.images[0])
+    vm.model.set_state(path0, 'keep', source='manual')
+
+    # Apply filters again
+    vm._apply_filters()
+    filtered = list(vm.current_filtered_images())
+
+    # Now images[0] should be first, and marked as best
+    assert filtered[0] == vm.images[0]
+    assert filtered[1] == vm.images[1]
+    assert vm._group_info[vm.images[0]]["is_group_best"] is True
+    assert vm._group_info[vm.images[1]]["is_group_best"] is False
+
+

@@ -577,6 +577,50 @@ class PhotoViewModel(QObject):
         # Get group info (may be empty if grouping not computed yet)
         group_info = getattr(self, "_group_info", {})
         
+        # Dynamically update pick_score and best pick recommendation for each group
+        if group_info:
+            from collections import defaultdict
+            # Group items by group_id
+            groups_map = defaultdict(list)
+            for fname in self.images:
+                ginfo = group_info.get(fname)
+                if ginfo:
+                    gid = ginfo.get("group_id")
+                    if gid is not None:
+                        groups_map[gid].append(fname)
+            
+            # For each group, find the one with the highest dynamic score
+            probs = dict(getattr(self._auto, "predicted_probabilities", {}))
+            for gid, fnames in groups_map.items():
+                best_fname = None
+                best_score = -2.0
+                
+                # Get dynamic scores
+                scores = {}
+                for f in fnames:
+                    path = self.model.get_image_path(f)
+                    state = self.model.get_state(path) if path else ""
+                    f_ginfo = group_info.get(f) or {}
+                    if state == "keep":
+                        score = 1.0
+                    elif state == "trash":
+                        score = -1.0  # Labeled trash should be lowest pick priority
+                    else:
+                        score = probs.get(f)
+                        if score is None:
+                            score = f_ginfo.get("pick_score", 0.5)
+                    scores[f] = score
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_fname = f
+                
+                # Update ginfo for each file in the group
+                for f in fnames:
+                    ginfo = group_info[f]
+                    ginfo["pick_score"] = scores[f]
+                    ginfo["is_group_best"] = (f == best_fname)
+
         # If no group info available, fall back to uncertainty sorting
         if not group_info:
             # Fallback: sort by uncertainty (original behavior)
