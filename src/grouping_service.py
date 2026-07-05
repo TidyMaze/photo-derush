@@ -326,8 +326,13 @@ def compute_grouping_for_photos(
 
         # For each burst, check pairwise hash distances between groups
         merged_bursts = 0
-        # Skip burst merging if all photos share the exact same timestamp (collision fallback)
-        has_timestamp_collision = len(set(p.timestamp for p in photos)) == 1 and len(photos) > 1
+        # Skip burst merging if all photos share the exact same timestamp range < 5 mins (collision fallback)
+        time_span = 0.0
+        if len(photos) > 1:
+            ts_list = [p.timestamp for p in photos if p.timestamp is not None]
+            if ts_list:
+                time_span = (max(ts_list) - min(ts_list)).total_seconds()
+        has_timestamp_collision = len(photos) > 1 and time_span < 300.0
         if not has_timestamp_collision:
             for burst_id, group_items in burst_to_groups.items():
                 if len(group_items) <= 1:
