@@ -318,7 +318,7 @@ def group_near_duplicates(
         # Convert hash strings to hash objects once and cache them
         filename_to_hash_obj: dict[str, imagehash.ImageHash | None] = {}
         for fname, h_str in filename_to_hash.items():
-            if h_str.startswith("error_"):
+            if h_str is None or h_str.startswith("error_"):
                 filename_to_hash_obj[fname] = None
             else:
                 try:

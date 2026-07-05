@@ -21,7 +21,7 @@ class ImageModel:
         self.directory = directory
         self.max_images = max_images
         self.cache = cache or ThumbnailCache()
-        self.allowed_exts = allowed_exts or [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff"]
+        self.allowed_exts = allowed_exts or [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"]
         self._repo = repo or RatingsTagsRepository()
         # Metadata-only caches (small, in-memory)
         self._exif_cache: dict[str, dict] = {}  # EXIF metadata dict per path (~1-5KB each)

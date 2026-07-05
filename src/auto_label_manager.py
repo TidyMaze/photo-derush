@@ -830,10 +830,11 @@ class AutoLabelManager:
 
                 def progress_cb(current, total, detail):
                     try:
-                        if getattr(reporter, "total", None) != total and total:
-                            reporter.set_total(total)
-                        reporter.update(current, total)
-                        reporter.detail(detail)
+                        if reporter is not None:
+                            if getattr(reporter, "total", None) != total and total:
+                                reporter.set_total(total)
+                            reporter.update(current, total)
+                            reporter.detail(detail)
                     except Exception:
                         logging.exception("Error in auto-label assignment")
                         raise
@@ -977,13 +978,15 @@ class AutoLabelManager:
                     self._start_retrain()
                 # Post-retrain workflow
                 try:
-                    reporter.detail("predicting after retrain")
+                    if reporter is not None:
+                        reporter.detail("predicting after retrain")
                     logging.info("[retrain] Starting predictions with new model")
                     self.predict_with_progress()
                     logging.info("[retrain] Predictions complete")
                     if self.enabled:
                         logging.info("[retrain] Refreshing auto-labels (enabled)")
-                        reporter.detail("refreshing auto-labels")
+                        if reporter is not None:
+                            reporter.detail("refreshing auto-labels")
                         self.refresh_auto_labels()
                     else:
                         logging.info(

@@ -403,6 +403,7 @@ def _compute_cross_val(
             scores = []
             keep_loss_rates = []
             junk_leak_rates = []
+            keep_rates = []
             pr_aucs = []
             thresholds_used = []
             
@@ -563,6 +564,8 @@ def _fit_model(
         else:
             # No early stopping - fit on all data
             logging.info(f"[train] Training without early stopping on {len(X)} samples")
+            if cat_model:
+                cat_model.set_params(use_best_model=False, early_stopping_rounds=None)
             clf.fit(X, y)
             if hasattr(cat_model, "tree_count_"):
                 logging.info(f"[train] Training completed: {cat_model.tree_count_} iterations")

@@ -52,27 +52,12 @@ def test_update_label_icon_missing_pixmap_raises():
 
 def test_update_label_icon_missing_offset_raises(tmp_path):
     label = DummyLabel()
-    # attach a minimal pixmap-like object used by view_helpers
-    class PixmapLike:
-        def __init__(self):
-            self._w = 64
-            self._h = 64
-        def isNull(self):
-            return False
-        def copy(self):
-            return self
-        def rect(self):
-            return None
-        def width(self):
-            return self._w
-        def height(self):
-            return self._h
-        def setWidth(self, w):
-            self._w = w
-        def setHeight(self, h):
-            self._h = h
-
-    label.original_pixmap = PixmapLike()
+    from PySide6.QtGui import QGuiApplication, QPixmap
+    if QGuiApplication.instance() is None:
+        QGuiApplication([])
+    pm = QPixmap(64, 64)
+    pm.fill()
+    label.original_pixmap = pm
     # leave _overlay_image_offset missing
     with pytest.raises(ValueError):
         view_helpers.update_label_icon(label, 'keep', filename=None, is_auto=False, prediction_prob=None, objects=[])

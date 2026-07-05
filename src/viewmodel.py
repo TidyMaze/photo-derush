@@ -246,8 +246,11 @@ class PhotoViewModel(QObject):
             for fname in self.images:
                 base = self._image_basename_cache[fname]
                 if base in cache:
-                    # cache stores list[dict]
-                    results[base] = cache[base]
+                    # Sanitize to fail-fast on malformed cached entries
+                    sanitized = []
+                    for item in cache[base]:
+                        sanitized.append(object_detection.sanitize_detection(item))
+                    results[base] = sanitized
                     cache_hits += 1
                 else:
                     # ensure we have an entry (empty until detection completes)

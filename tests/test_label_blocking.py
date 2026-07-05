@@ -270,6 +270,8 @@ def test_auto_label_updates_when_prediction_changes(vm):
 
     # Refresh auto-labels (simulates post-retrain workflow)
     vm._refresh_auto_labels()
+    from PySide6.QtCore import QThreadPool
+    QThreadPool.globalInstance().waitForDone()
 
     # Verify labels were updated to match new predictions
     assert vm.model.get_state(path1) == 'trash', "Auto-label should update from 'keep' to 'trash'"
@@ -301,6 +303,8 @@ def test_auto_label_tracking_rebuilds_from_repository(vm):
 
     # Refresh should rebuild tracking from repository
     vm._refresh_auto_labels()
+    from PySide6.QtCore import QThreadPool
+    QThreadPool.globalInstance().waitForDone()
 
     # Verify tracking was rebuilt and label was updated
     assert path1 in vm._auto.auto_assigned, "Should rebuild tracking from repository"
@@ -335,6 +339,8 @@ def test_auto_label_removed_when_prediction_below_threshold(vm):
 
     # Refresh auto-labels
     vm._refresh_auto_labels()
+    from PySide6.QtCore import QThreadPool
+    QThreadPool.globalInstance().waitForDone()
 
     # Verify labels were removed (cleared to empty string)
     assert vm.model.get_state(path1) == '', "Auto-label should be removed when prediction below threshold"
@@ -373,6 +379,8 @@ def test_auto_label_mixed_update_and_removal(vm):
 
     # Refresh
     vm._refresh_auto_labels()
+    from PySide6.QtCore import QThreadPool
+    QThreadPool.globalInstance().waitForDone()
 
     # Verify outcomes
     assert vm.model.get_state(path1) == 'trash', "Should update to new prediction"

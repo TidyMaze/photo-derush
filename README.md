@@ -138,3 +138,38 @@ Contributions welcome! Report bugs, suggest features, or submit PRs.
 ## 📄 License
 
 MIT License - see LICENSE file for details
+
+---
+
+## 📋 Backlog (TODO List)
+
+Below is the list of issues encountered while running the project and its tests:
+
+- [x] **CatBoost holdout early stopping error on small datasets**
+  - **Symptom**: `_catboost.CatBoostError: To employ param {'use_best_model': True} provide non-empty 'eval_set'.`
+  - **Details**: Bypassing early stopping on small datasets (< 20 samples) leaves `use_best_model` set to `True` on the CatBoost model, which crashes when fitting without an evaluation set.
+
+- [x] **Missing `.webp` support**
+  - **Symptom**: Scanning `photos-mariage` only loads 26 photos (instead of 320) because the default `allowed_exts` in `ImageModel` does not include `.webp` files.
+
+- [x] **`test_update_label_icon` test failures**
+  - **Symptom**: `test_update_label_icon_missing_pixmap_raises` (fails to raise `ValueError`) and `test_update_label_icon_missing_offset_raises` (`TypeError: QPainter.__init__ called with wrong argument types: PixmapLike`).
+  - **Details**: `update_label_icon` logs a warning and returns instead of raising, and the mock `PixmapLike` class is not a valid `QPaintDevice` for `QPainter`.
+
+- [x] **`test_viewmodel_fails_fast_on_malformed_batch` test failure**
+  - **Symptom**: `Failed: DID NOT RAISE <class 'ValueError'>`
+  - **Details**: Mocking `get_objects_for_images` does nothing because it is not used by `_load_object_detections`, and task executes asynchronously in the background.
+
+- [x] **`test_retraining_on_label_changes` test failure**
+  - **Symptom**: `set_label called but no image selected`
+  - **Details**: The test initializes the viewmodel but never calls `vm.load_images()`. Since the image list is empty, `_apply_filters` triggers `_ensure_selection`, clearing the selected image.
+
+- [x] **Background retraining progress reporter crash**
+  - **Symptom**: `AttributeError: 'NoneType' object has no attribute 'update'` / `detail` in `auto_label_manager.py` (lines 835, 980) when running retraining in a background thread with progress reporter set to `None`.
+
+- [x] **Perceptual hashing NoneType error**
+  - **Symptom**: `AttributeError: 'NoneType' object has no attribute 'startswith'` in `src/photo_grouping.py:321` when hash computation returns `None`.
+
+- [x] **Test warnings treated as errors**
+  - **Symptom**: `DeprecationWarning: 'CatBoostClassifier' object has no attribute '__sklearn_tags__'` fails tests because `pytest.ini` configures `filterwarnings = error`.
+

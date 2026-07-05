@@ -60,6 +60,7 @@ def test_retraining_on_label_changes(tmp_path, monkeypatch):
     monkeypatch.setattr(training_mod, 'train_keep_trash_model', fast_train)
 
     vm = PhotoViewModel(str(img_dir))
+    vm.load_images()
     log.debug("PhotoViewModel initialized; images=%s", vm.images)
     # Speed up throttle
     vm._retrain_min_interval = 0.05

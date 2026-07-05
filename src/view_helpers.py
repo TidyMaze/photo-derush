@@ -77,6 +77,9 @@ def update_label_icon(thumb_label, label, filename=None, is_auto=False, predicti
 
     from PySide6.QtGui import QPainter
 
+    if not hasattr(thumb_label, "_overlay_image_offset") or getattr(thumb_label, "_overlay_image_offset") is None:
+        raise ValueError("thumb_label must have a non-None _overlay_image_offset attribute")
+
     # Get base pixmap - use _logical_pixmap which is the raw PNG-loaded version before DPR scaling
     base = getattr(thumb_label, "_logical_pixmap", None)
     if base is None or base.isNull():
@@ -84,7 +87,7 @@ def update_label_icon(thumb_label, label, filename=None, is_auto=False, predicti
         base = getattr(thumb_label, "base_pixmap", None) or getattr(thumb_label, "original_pixmap", None)
         if base is None or base.isNull():
             logging.warning(f"update_label_icon: no base pixmap for {filename}")
-            return
+            raise ValueError(f"No base pixmap found for {filename}")
 
     # Skip if pixmap is transparent placeholder (worker hasn't loaded real image yet)
     try:
