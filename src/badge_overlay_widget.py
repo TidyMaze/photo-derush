@@ -113,7 +113,8 @@ class BadgeOverlayWidget(QWidget):
             return
         
         # Render badge to pixmap
-        pixmap = QPixmap(widget_w, widget_h)
+        pixmap = QPixmap(int(widget_w * dpr), int(widget_h * dpr))
+        pixmap.setDevicePixelRatio(dpr)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)

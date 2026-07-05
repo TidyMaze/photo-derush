@@ -74,7 +74,8 @@ class OverlayWidget(QWidget):
             return
 
         # No cached pixmap; draw into temporary QPixmap and cache it
-        temp = QPixmap(self.width() or 1, self.height() or 1)
+        temp = QPixmap(int((self.width() or 1) * dpr), int((self.height() or 1) * dpr))
+        temp.setDevicePixelRatio(dpr)
         temp.fill(Qt.GlobalColor.transparent)
         p = QPainter(temp)
 
