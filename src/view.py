@@ -2906,8 +2906,15 @@ class PhotoView(QMainWindow):
 
     def _on_thumbnail_loaded(self, path, thumb=None):
         try:
-            # OPTIMIZATION: Cache basename (was called twice)
-            path_filename = os.path.basename(path)
+            # _all_widgets/_thumb_filename are keyed by path relative to the image
+            # directory (e.g. "subfolder/name.jpg", see ImageModel.get_image_files),
+            # not by bare basename. Using basename here caused every image inside a
+            # subfolder to look up the wrong (or no) label whenever another file
+            # elsewhere shared the same basename, permanently skipping its thumbnail.
+            try:
+                path_filename = os.path.relpath(path, self.viewmodel.model.directory).replace('\\', '/')
+            except Exception:
+                path_filename = os.path.basename(path)
             # Log the actual path to track if same path is being loaded multiple times
             logging.debug(f"[THUMBNAIL] Loading thumbnail for path={path}, filename={path_filename}, has_thumb={thumb is not None}, thumb_id={id(thumb) if thumb else None}, _all_widgets_count={len(self._all_widgets)}")
             if not thumb:
