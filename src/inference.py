@@ -427,37 +427,38 @@ def predict_keep_probability_stream(
     all_feats = batch_extract_features(image_paths, progress_callback=progress_callback)
     feat_extract_end = time.perf_counter()
     
+    # OPTIMIZATION: predict all valid images in one batched predict_proba call
+    # instead of one call per image. Each predict_proba call has fixed model-init
+    # overhead (~2ms for CatBoost), which used to be paid once per image (~900
+    # calls) instead of once per stream.
     probs: list[float] = [float("nan")] * total
+    valid_idx = [
+        idx for idx, feats in enumerate(all_feats) if feats and len(feats) == FEATURE_COUNT
+    ]
+    if valid_idx and hasattr(model, "predict_proba"):
+        try:
+            X = np.array([all_feats[idx] for idx in valid_idx], dtype=float)
+            feature_indices = meta.get("feature_indices")
+            if feature_indices is not None and len(feature_indices) > 0:
+                X = X[:, feature_indices]
+            elif feature_indices is not None and len(feature_indices) == 0:
+                logging.debug("[inference-stream] Empty feature_indices, using all features")
+            if calibrator is not None and hasattr(calibrator, "predict_proba"):
+                try:
+                    preds = calibrator.predict_proba(X)[:, 1]
+                except Exception:
+                    preds = model.predict_proba(X)[:, 1]
+            else:
+                preds = model.predict_proba(X)[:, 1]
+            for idx, pred in zip(valid_idx, preds):
+                probs[idx] = float(pred)
+        except Exception as e:
+            logging.debug("[inference-stream] batched predict failed: %s", e)
+
     for idx, path in enumerate(image_paths):
-        pred_start = time.perf_counter()
         if progress_callback:
             progress_callback(idx, total, f"predicting {idx+1}/{total}")
-        feats = all_feats[idx]  # Use pre-extracted features
-        feat_time = time.perf_counter()
-        prob = float("nan")
-        if feats and len(feats) == FEATURE_COUNT and hasattr(model, "predict_proba"):
-            try:
-                import numpy as np
-
-                arr = np.array([feats], dtype=float)
-                # Apply feature subset selection if model uses it
-                feature_indices = meta.get("feature_indices")
-                if feature_indices is not None and len(feature_indices) > 0:
-                    arr = arr[:, feature_indices]
-                elif feature_indices is not None and len(feature_indices) == 0:
-                    logging.debug("[inference-stream] Empty feature_indices, using all features")
-                if calibrator is not None and hasattr(calibrator, "predict_proba"):
-                    try:
-                        pred = calibrator.predict_proba(arr)[0, 1]
-                    except Exception:
-                        pred = model.predict_proba(arr)[0, 1]
-                else:
-                    pred = model.predict_proba(arr)[0, 1]
-                prob = float(pred)
-            except Exception as e:
-                logging.debug("[inference-stream] predict failed %s: %s", path, e)
-        pred_time = time.perf_counter()
-        probs[idx] = prob
+        prob = probs[idx]
         if per_prediction_callback:
             try:
                 from os import path as osp

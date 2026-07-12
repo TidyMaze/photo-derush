@@ -483,35 +483,31 @@ def _preprocess_image(path: str) -> ImagePreprocessResult | None:
             img_original_ctx.__exit__(None, None, None)
 
 
-def _compute_edge_features(gray_arr: np.ndarray) -> tuple[float, float]:
-    """Compute edge density and strength using Sobel operator."""
-    # Skip cv2 in multiprocessing to avoid deadlocks - use fallback always
-    # Fallback: simple gradient
+def _gray_gradient_magnitude(gray_arr: np.ndarray) -> np.ndarray:
+    """Simple Sobel-like gradient magnitude, shared by edge and corner features
+    so it's computed once per image instead of once per feature."""
     grad_x = np.diff(gray_arr.astype(np.float32), axis=1)  # shape: (h, w-1)
     grad_y = np.diff(gray_arr.astype(np.float32), axis=0)  # shape: (h-1, w)
     # Match shapes: take overlapping region
-    magnitude = np.sqrt(grad_x[:-1, :] ** 2 + grad_y[:, :-1] ** 2)
+    return np.sqrt(grad_x[:-1, :] ** 2 + grad_y[:, :-1] ** 2)
+
+
+def _compute_edge_features(magnitude: np.ndarray) -> tuple[float, float]:
+    """Compute edge density and strength from a precomputed gradient magnitude."""
     edge_density = float(np.mean(magnitude > np.percentile(magnitude, 75))) if magnitude.size > 0 else 0.0
     edge_strength = float(np.mean(magnitude)) if magnitude.size > 0 else 0.0
     return edge_density, edge_strength
 
 
-def _compute_corner_count(gray_arr: np.ndarray) -> float:
-    """Estimate corner count using Harris corner detection approximation."""
-    # Skip cv2 in multiprocessing to avoid deadlocks - use fallback always
-    # Fallback: count high-gradient points
-    grad_x = np.diff(gray_arr.astype(np.float32), axis=1)  # shape: (h, w-1)
-    grad_y = np.diff(gray_arr.astype(np.float32), axis=0)  # shape: (h-1, w)
-    # Match shapes: take overlapping region
-    magnitude = np.sqrt(grad_x[:-1, :] ** 2 + grad_y[:, :-1] ** 2)
+def _compute_corner_count(magnitude: np.ndarray) -> float:
+    """Estimate corner count (Harris approximation) from a precomputed gradient magnitude."""
     threshold = np.percentile(magnitude, 95) if magnitude.size > 0 else 0.0
     return float(np.sum(magnitude > threshold)) if magnitude.size > 0 else 0.0
 
 
-def _compute_histogram_balance(gray_arr: np.ndarray) -> float:
+def _compute_histogram_balance(hist64: np.ndarray) -> float:
     """Compute histogram balance (how evenly distributed pixel values are)."""
-    hist, _ = np.histogram(gray_arr, bins=64, range=(0, 256))
-    hist_norm = hist.astype(np.float32)
+    hist_norm = hist64.astype(np.float32)
     if hist_norm.sum() > 0:
         hist_norm /= hist_norm.sum()
         balance = float(-np.sum(hist_norm * np.log2(hist_norm + 1e-12)))
@@ -643,13 +639,12 @@ def _compute_center_focus_quality(gray_arr: np.ndarray, overall_sharpness: float
     return float(min(2.0, ratio))
 
 
-def _compute_dynamic_range_utilization(gray_arr: np.ndarray) -> float:
+def _compute_dynamic_range_utilization(gray_arr: np.ndarray, hist64: np.ndarray) -> float:
     """Compute how well the image utilizes the full dynamic range."""
     min_val = float(np.min(gray_arr))
     max_val = float(np.max(gray_arr))
     range_used = (max_val - min_val) / 255.0
-    hist, _ = np.histogram(gray_arr, bins=64, range=(0, 256))
-    hist_norm = hist.astype(np.float32)
+    hist_norm = hist64.astype(np.float32)
     if hist_norm.sum() > 0:
         hist_norm /= hist_norm.sum()
         bins_used = float(np.sum(hist_norm > 0.01)) / 64.0
@@ -750,21 +745,22 @@ def _compute_golden_hour_score(hour: float, color_temp: float) -> float:
     return float(min(1.0, golden_score))
 
 
-def _compute_lighting_quality_score(gray_arr: np.ndarray, highlight_clip: float, shadow_clip: float) -> float:
+def _compute_lighting_quality_score(gray_arr: np.ndarray, highlight_clip: float, shadow_clip: float, hist64: np.ndarray) -> float:
     """Assess lighting quality: harsh vs soft (contrast analysis).
-    
+
     Softer, more even lighting is generally preferred.
     """
     # High contrast = harsh lighting
     contrast = float(np.std(gray_arr))
     contrast_score = 1.0 - min(1.0, contrast / 80.0)  # Lower contrast = better
-    
+
     # Clipping penalty (harsh highlights/shadows)
     clipping_penalty = (highlight_clip + shadow_clip) / 200.0
     clipping_score = 1.0 - min(1.0, clipping_penalty)
-    
+
     # Histogram smoothness (even distribution = soft lighting)
-    hist, _ = np.histogram(gray_arr, bins=32, range=(0, 256))
+    # 32 bins over range (0, 256) = pairs of the shared 64-bin histogram
+    hist = hist64.reshape(32, 2).sum(axis=1)
     hist_norm = hist.astype(np.float32)
     if hist_norm.sum() > 0:
         hist_norm /= hist_norm.sum()
@@ -1020,18 +1016,23 @@ def _do_feature_extraction(prep: ImagePreprocessResult, path: str) -> list[float
     advanced_start = time.perf_counter()
     feature_times = {}
     # Removed try-except wrapper - let exceptions propagate to catch bugs
+    # Shared intermediates: gradient magnitude and 64-bin histogram are each
+    # needed by multiple features below; compute once instead of per-feature.
+    gradient_magnitude = _gray_gradient_magnitude(prep.gray_arr)
+    hist64, _ = np.histogram(prep.gray_arr, bins=64, range=(0, 256))
+
     t0 = time.perf_counter()
-    edge_density, edge_strength = _compute_edge_features(prep.gray_arr)
+    edge_density, edge_strength = _compute_edge_features(gradient_magnitude)
     feature_times['edge'] = (time.perf_counter() - t0) * 1000
-    
+
     t0 = time.perf_counter()
-    corner_count = _compute_corner_count(prep.gray_arr)
+    corner_count = _compute_corner_count(gradient_magnitude)
     feature_times['corner'] = (time.perf_counter() - t0) * 1000
-    
+
     face_count = 0.0  # Would require face detection model
-    
+
     t0 = time.perf_counter()
-    histogram_balance = _compute_histogram_balance(prep.gray_arr)
+    histogram_balance = _compute_histogram_balance(hist64)
     feature_times['hist_balance'] = (time.perf_counter() - t0) * 1000
     
     t0 = time.perf_counter()
@@ -1096,7 +1097,7 @@ def _do_feature_extraction(prep: ImagePreprocessResult, path: str) -> list[float
     feature_times['center_focus'] = (time.perf_counter() - t0) * 1000
     
     t0 = time.perf_counter()
-    dynamic_range_utilization = _compute_dynamic_range_utilization(prep.gray_arr)
+    dynamic_range_utilization = _compute_dynamic_range_utilization(prep.gray_arr, hist64)
     feature_times['dynamic_range'] = (time.perf_counter() - t0) * 1000
     
     # New photography-specific features
@@ -1109,7 +1110,7 @@ def _do_feature_extraction(prep: ImagePreprocessResult, path: str) -> list[float
     feature_times['golden_hour'] = (time.perf_counter() - t0) * 1000
     
     t0 = time.perf_counter()
-    lighting_quality = _compute_lighting_quality_score(prep.gray_arr, highlight_clip, shadow_clip)
+    lighting_quality = _compute_lighting_quality_score(prep.gray_arr, highlight_clip, shadow_clip, hist64)
     feature_times['lighting'] = (time.perf_counter() - t0) * 1000
     
     t0 = time.perf_counter()
@@ -1365,8 +1366,9 @@ def _parallel_extract(paths: list[str], progress_callback, hits: int, total: int
 
     parallel_start = time.perf_counter()
     
-    # Use more workers for better parallelism (cap at 4 to limit resource usage)
-    max_workers = int(os.environ.get("FEATURE_EXTRACT_WORKERS", min(cpu_count(), 4)))
+    # Use more workers for better parallelism (cap at 8, benchmarked: 4->6->8 workers
+    # gave 4.0s->3.59s->3.45s on 200 images, diminishing but still positive past 4)
+    max_workers = int(os.environ.get("FEATURE_EXTRACT_WORKERS", min(cpu_count(), 8)))
     workers = min(max_workers, len(paths))
     # In pytest environments force a single worker to avoid multiprocessing deadlocks
     if os.environ.get("PYTEST_CURRENT_TEST"):
@@ -1516,26 +1518,45 @@ def batch_extract_features(paths: list[str], progress_callback=None) -> list[lis
     logging.info(f"[features] Need to extract: {len(needed)} images")
 
     if needed:
+        # Dedup identical paths within this batch so duplicate entries (e.g. same
+        # file listed twice by a caller) don't get extracted twice in parallel.
+        dup_count = len(needed) - len(set(os.path.abspath(p) for p in needed))
+        if dup_count:
+            logging.info(f"[features] Skipping {dup_count} duplicate path(s) in batch (extracting each unique path once)")
+        unique_needed: list[str] = []
+        seen_apaths: set[str] = set()
+        for p in needed:
+            ap = os.path.abspath(p)
+            if ap not in seen_apaths:
+                seen_apaths.add(ap)
+                unique_needed.append(p)
+
         # In test mode (pytest) avoid spawning multiprocessing pools or heavy parallel work
         extraction_start = time.perf_counter()
         if os.environ.get("PYTEST_CURRENT_TEST"):
-            logging.info(f"[features] PYTEST detected: forcing sequential extraction ({len(needed)} images)")
-            extracted = _sequential_extract(needed, progress_callback, hits, total)
+            logging.info(f"[features] PYTEST detected: forcing sequential extraction ({len(unique_needed)} images)")
+            extracted = _sequential_extract(unique_needed, progress_callback, hits, total)
         else:
-            if len(needed) > 10:
-                logging.info(f"[features] Using parallel extraction ({len(needed)} images)")
-                extracted = _parallel_extract(needed, progress_callback, hits, total)
+            if len(unique_needed) > 10:
+                logging.info(f"[features] Using parallel extraction ({len(unique_needed)} images)")
+                extracted = _parallel_extract(unique_needed, progress_callback, hits, total)
             else:
-                logging.info(f"[features] Using sequential extraction ({len(needed)} images)")
-                extracted = _sequential_extract(needed, progress_callback, hits, total)
+                logging.info(f"[features] Using sequential extraction ({len(unique_needed)} images)")
+                extracted = _sequential_extract(unique_needed, progress_callback, hits, total)
         extraction_time = time.perf_counter() - extraction_start
-        logging.info(f"[features] Extraction phase completed in {extraction_time:.2f}s ({extraction_time/len(needed)*1000:.1f}ms per image)")
+        logging.info(f"[features] Extraction phase completed in {extraction_time:.2f}s ({extraction_time/len(unique_needed)*1000:.1f}ms per image)")
+
+        # Map unique extraction results back to every requesting index (broadcasts
+        # duplicates without recomputing them).
+        feats_by_apath: dict[str, list[float] | None] = {apath: feats for apath, feats in extracted}
 
         # Process results and save cache incrementally
         save_start = time.perf_counter()
         extracted_count = 0
         failed_count = 0
-        for (apath, feats), orig_idx in zip(extracted, needed_idx):
+        for p, orig_idx in zip(needed, needed_idx):
+            apath = os.path.abspath(p)
+            feats = feats_by_apath.get(apath)
             if feats:
                 results[orig_idx] = feats
                 if not is_cache_disabled():
