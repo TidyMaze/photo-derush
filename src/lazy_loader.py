@@ -47,10 +47,36 @@ class LazyImageLoader:
 
         # Create Qt signal bridge for thread-safe callbacks
         self._signals = _LazyLoaderSignals()
+        
+        # Callback maps to avoid signal connection bloat
+        self._pending_exif_callbacks: dict[str, list[Callable]] = {}
+        self._pending_thumb_callbacks: dict[str, list[Callable]] = {}
+
+        # Connect signals once
+        self._signals.exif_loaded.connect(self._on_exif_loaded, type=Qt.ConnectionType.QueuedConnection)
+        self._signals.thumbnail_loaded.connect(self._on_thumbnail_loaded, type=Qt.ConnectionType.QueuedConnection)
 
         # Create LRU-wrapped methods
         self._cached_exif = lru_cache(maxsize=cache_size)(self._load_exif_uncached)
         self._cached_thumb = lru_cache(maxsize=cache_size)(self._load_thumb_uncached)
+
+    def _on_exif_loaded(self, path: str, exif: dict):
+        with self._lock:
+            callbacks = self._pending_exif_callbacks.pop(path, [])
+        for cb in callbacks:
+            try:
+                cb(path, exif)
+            except Exception as e:
+                logging.error(f"[loader] Exif callback error: {e}")
+
+    def _on_thumbnail_loaded(self, path: str, thumb: object | None):
+        with self._lock:
+            callbacks = self._pending_thumb_callbacks.pop(path, [])
+        for cb in callbacks:
+            try:
+                cb(path, thumb)
+            except Exception as e:
+                logging.error(f"[loader] Thumbnail callback error: {e}")
 
     def _load_exif_uncached(self, path: str) -> dict[Any, Any]:
         """Load EXIF without cache (for LRU wrapping)."""
@@ -73,11 +99,12 @@ class LazyImageLoader:
             logging.debug("[loader] Ignoring request (cancelled)")
             return
 
-        # Connect signal to callback once
-        self._signals.exif_loaded.connect(
-            lambda p, exif: callback(p, exif) if p == path else None,
-            type=Qt.ConnectionType.QueuedConnection,  # main thread
-        )
+        with self._lock:
+            already_running = path in self._pending_exif_callbacks
+            self._pending_exif_callbacks.setdefault(path, []).append(callback)
+
+        if already_running:
+            return
 
         def _load_and_emit():
             try:
@@ -105,11 +132,12 @@ class LazyImageLoader:
             logging.debug("[loader] Ignoring request (cancelled)")
             return
 
-        # Connect signal to callback once
-        self._signals.thumbnail_loaded.connect(
-            lambda p, thumb: callback(p, thumb) if p == path else None,
-            type=Qt.ConnectionType.QueuedConnection,  # main thread
-        )
+        with self._lock:
+            already_running = path in self._pending_thumb_callbacks
+            self._pending_thumb_callbacks.setdefault(path, []).append(callback)
+
+        if already_running:
+            return
 
         def _load_and_emit():
             try:
@@ -231,7 +259,7 @@ class LazyImageLoader:
         # threads are waiting to post to the Qt main loop which is shutting
         # down.
         try:
-            self.executor.shutdown(wait=False)
+            self.executor.shutdown(wait=wait)
         except Exception:
             logging.exception("[loader] Exception during executor.shutdown")
 

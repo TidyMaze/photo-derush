@@ -39,7 +39,16 @@ class ImageModel:
         if not os.path.isdir(self.directory):
             logging.error(f"Directory does not exist: {self.directory}")
             return []
-        files = [f for f in os.listdir(self.directory) if os.path.splitext(f)[1].lower() in self.allowed_exts]
+        files = []
+        for root, dirs, filenames in os.walk(self.directory):
+            # Skip hidden/system directories starting with '.'
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for f in filenames:
+                if os.path.splitext(f)[1].lower() in self.allowed_exts:
+                    rel_path = os.path.relpath(os.path.join(root, f), self.directory)
+                    rel_path = rel_path.replace('\\', '/')
+                    files.append(rel_path)
+        files.sort()
         logging.info(f"Found files: {files[:5]}... (total {len(files)})")
         # Unlimited if max_images is None or <= 0
         if self.max_images is None or (isinstance(self.max_images, int) and self.max_images <= 0):
@@ -79,19 +88,19 @@ class ImageModel:
         try:
             # OPTIMIZATION: Use shared image cache to avoid repeated file opens
             # This reduces PIL.Image.open overhead (39.2s -> ~10-15s expected)
-            img = get_cached_image_for_exif(path)
-            if img is None:
-                result = {}
-            else:
-                exif_data = img._getexif() if hasattr(img, "_getexif") and callable(img._getexif) else None  # type: ignore[attr-defined]
-                if not exif_data or not isinstance(exif_data, dict):
+            with get_cached_image_for_exif(path) as img:
+                if img is None:
                     result = {}
                 else:
-                    exif = {}
-                    for tag, value in exif_data.items():
-                        tag_name = ExifTags.TAGS.get(tag, str(tag))
-                        exif[tag_name] = value
-                    result = exif
+                    exif_data = img._getexif() if hasattr(img, "_getexif") and callable(img._getexif) else None  # type: ignore[attr-defined]
+                    if not exif_data or not isinstance(exif_data, dict):
+                        result = {}
+                    else:
+                        exif = {}
+                        for tag, value in exif_data.items():
+                            tag_name = ExifTags.TAGS.get(tag, str(tag))
+                            exif[tag_name] = value
+                        result = exif
             # Cache the result (even empty dict to avoid re-opening)
             self._exif_cache[path] = result
             return result
@@ -114,19 +123,19 @@ class ImageModel:
         try:
             # OPTIMIZATION: Use shared image cache to avoid repeated file opens
             # This reduces PIL.Image.open overhead (39.2s -> ~10-15s expected)
-            img = get_cached_image(path)
-            if img is None:
-                return None
-            
-            # OPTIMIZATION: Store original size in thumbnail metadata for bbox overlay
-            orig_w, orig_h = img.size
-            # Preserve aspect ratio: use thumbnail() instead of square crop + resize
-            img_thumb = img.copy().convert("RGBA")
-            img_thumb.thumbnail((size, size), resample=Image.Resampling.LANCZOS)
-            
-            # Store original size in thumbnail metadata for bbox overlay
-            img_thumb.info["original_width"] = str(orig_w)
-            img_thumb.info["original_height"] = str(orig_h)
+            with get_cached_image(path) as img:
+                if img is None:
+                    return None
+                
+                # OPTIMIZATION: Store original size in thumbnail metadata for bbox overlay
+                orig_w, orig_h = img.size
+                # Preserve aspect ratio: use thumbnail() instead of square crop + resize
+                img_thumb = img.copy().convert("RGBA")
+                img_thumb.thumbnail((size, size), resample=Image.Resampling.LANCZOS)
+                
+                # Store original size in thumbnail metadata for bbox overlay
+                img_thumb.info["original_width"] = str(orig_w)
+                img_thumb.info["original_height"] = str(orig_h)
 
             # Center on square canvas to maintain consistent thumbnail grid
             canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))

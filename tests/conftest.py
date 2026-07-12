@@ -8,14 +8,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 # widgets and QTimers behave correctly in offscreen mode.
 try:
 	from PySide6.QtWidgets import QApplication
+	qapp = QApplication.instance() or QApplication([])
 except Exception:  # pragma: no cover - defensive for non-Qt environments
 	QApplication = None
-
-# Do NOT create a global QApplication here. Creating it changes internal
-# code paths (e.g. making the app non-headless) and causes tests that rely
-# on synchronous/headless behavior to schedule GUI timers instead, which
-# can lead to hangs when tests don't pump the event loop. Tests that need
-# a QApplication should create it explicitly.
+	qapp = None
 
 # Configure logging for tests so debug information from src modules
 # (TaskRunner, AutoLabelManager, etc.) is visible when tests hang.
@@ -53,3 +49,42 @@ def wait_for_qt_tasks(request):
 		logging.getLogger(__name__).debug("QThreadPool.waitForDone finished")
 	except Exception as e:
 		logging.getLogger(__name__).warning("Error while waiting for QThreadPool: %s", e)
+
+
+# Centralized tracking and cleanup of PhotoViewModel instances to prevent WinError 32 locked files.
+_active_viewmodels = []
+
+@pytest.fixture(autouse=True)
+def cleanup_viewmodels():
+    import sys
+    if "src.viewmodel" in sys.modules:
+        from src.viewmodel import PhotoViewModel
+        if not hasattr(PhotoViewModel, "_original_init"):
+            PhotoViewModel._original_init = PhotoViewModel.__init__
+            def _tracked_init(self, *args, **kwargs):
+                _active_viewmodels.append(self)
+                PhotoViewModel._original_init(self, *args, **kwargs)
+            PhotoViewModel.__init__ = _tracked_init
+    yield
+    while _active_viewmodels:
+        vm = _active_viewmodels.pop()
+        try:
+            vm.cleanup()
+        except Exception:
+            pass
+
+
+# Prevent garbage collection of any created QApplication instance across tests.
+_global_qapp = None
+try:
+    from PySide6.QtWidgets import QApplication
+    _original_qapp_init = QApplication.__init__
+    def _tracked_qapp_init(self, *args, **kwargs):
+        global _global_qapp
+        _global_qapp = self
+        _original_qapp_init(self, *args, **kwargs)
+    QApplication.__init__ = _tracked_qapp_init
+except Exception:
+    pass
+
+

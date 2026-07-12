@@ -20,6 +20,7 @@ def _mkimg(path: Path, color):
 
 
 def test_retraining_on_label_changes(tmp_path, monkeypatch):
+    monkeypatch.setenv("PHOTO_DERUSH_ALLOW_RETRAIN_TEST", "1")
     # Prepare directory with 4 images
     img_dir = tmp_path / 'imgs'
     img_dir.mkdir()

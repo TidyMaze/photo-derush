@@ -27,7 +27,7 @@ def test_extract_features_basic(tmp_path):
     assert feats is not None
     # Dynamic feature count support: fast mode (71) vs full mode (95)
     # Now includes real EXIF data extraction
-    expected = 95 if USE_FULL_FEATURES else 71
+    expected = 181 if USE_FULL_FEATURES else 157
     assert len(feats) == expected
     # Width, height first two
     assert feats[0] == 32
@@ -70,7 +70,7 @@ def test_train_model_and_predict(tmp_path):
     assert model_path.exists()
 
     data = joblib.load(model_path)
-    assert data['feature_length'] == (95 if USE_FULL_FEATURES else 71)
+    assert data['feature_length'] == (181 if USE_FULL_FEATURES else 157)
     assert set(data['filenames']) == {n for n, *_ in names_colors_states}
 
     # Predict on the same images; probabilities should be finite and within [0,1]

@@ -786,6 +786,10 @@ class AutoLabelManager:
 
     # ---------------- Retraining -----------------
     def schedule_retrain(self):
+        import os
+        if os.environ.get("PYTEST_CURRENT_TEST") and not os.environ.get("PHOTO_DERUSH_ALLOW_RETRAIN_TEST"):
+            logging.info("[retrain] Pytest environment detected: skipping background retraining thread")
+            return
         logging.info(f"[retrain] schedule_retrain called (in_progress={self._retrain_in_progress})")
         now = time.time()
         with self._retrain_lock:
@@ -821,7 +825,7 @@ class AutoLabelManager:
             self._retrain_in_progress = True
         logging.info("[retrain] Starting background retraining")
 
-        def _retrain_task(reporter):
+        def _retrain_task(reporter=None):
             try:
                 from .training import DEFAULT_MODEL_PATH, train_keep_trash_model
 

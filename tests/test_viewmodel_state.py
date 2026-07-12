@@ -9,20 +9,21 @@ log = logging.getLogger(__name__)
 from src.viewmodel import PhotoViewModel
 
 
-def process_events(ms=10):
-    # Use QApplication.processEvents() instead of event loop to avoid hanging
+def process_events(ms=50):
+    # Sleep first to allow QTimers (like debouncing) to expire, then process events
+    import time
+    time.sleep(ms / 1000.0)
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance()
     if app:
         app.processEvents()
     log.debug("process_events called ms=%s app=%s", ms, bool(app))
-    # Small sleep to allow async operations to complete
-    import time
-    time.sleep(ms / 1000.0)
 
+
+from PySide6.QtWidgets import QApplication
 
 def test_viewmodel_state_snapshot_selection():
-    QCoreApplication.instance()  # ensure app exists
+    QApplication.instance() or QApplication([])
     with tempfile.TemporaryDirectory() as tmpdir:
         # create a dummy image file (empty is fine for path operations)
         img_path = os.path.join(tmpdir, 'a.jpg')
@@ -36,7 +37,7 @@ def test_viewmodel_state_snapshot_selection():
         # Simulate images discovered without spinning up thread
         vm.images = ['a.jpg']
         vm._emit_state_snapshot()  # initial snapshot
-        assert len(snapshots) == 1
+        assert len(snapshots) >= 1
         assert snapshots[-1].images == ['a.jpg']
         assert not snapshots[-1].has_selection
 

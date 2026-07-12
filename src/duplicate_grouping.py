@@ -155,12 +155,12 @@ def create_duplicate_groups(
         try:
             # OPTIMIZATION: Use shared image cache to avoid repeated file opens
             from src.image_cache import get_cached_image
-            img = get_cached_image(img_path)
-            if img is None:
-                return None
-            phash = imagehash.phash(img)
-            phash_str = str(phash)
-            filename_to_hash[fname] = phash_str
+            with get_cached_image(img_path) as img:
+                if img is None:
+                    return None
+                phash = imagehash.phash(img)
+                phash_str = str(phash)
+                filename_to_hash[fname] = phash_str
         except Exception as e:
             logging.debug(f"[duplicate_grouping] Failed to hash {fname}: {e}")
             # Use fallback for this file

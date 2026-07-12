@@ -1,10 +1,10 @@
-from PySide6.QtCore import QCoreApplication
+from PySide6.QtWidgets import QApplication
 
 from src.selection import SelectionModel
 
 
 def test_selection_basic_toggle_and_replace():
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = QApplication.instance() or QApplication([])
     sm = SelectionModel()
     events = {'sel': [], 'prim': []}
     sm.selectionChanged.connect(lambda s: events['sel'].append(list(sorted(s))))
@@ -30,7 +30,7 @@ def test_selection_basic_toggle_and_replace():
 
 
 def test_selection_extend_range():
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = QApplication.instance() or QApplication([])
     sm = SelectionModel()
     ordered = ['a', 'b', 'c', 'd', 'e']
 

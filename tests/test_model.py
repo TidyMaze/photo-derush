@@ -34,9 +34,9 @@ def test_get_image_path_invalid():
 def test_set_allowed_exts_invalid():
     model = ImageModel('.')
     model.set_allowed_exts('jpg')
-    assert model.allowed_exts == ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']
+    assert model.allowed_exts == ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']
     model.set_allowed_exts([1, 2])
-    assert model.allowed_exts == ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']
+    assert model.allowed_exts == ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']
 
 def test_set_rating_invalid():
     model = ImageModel('.')
@@ -106,3 +106,21 @@ def test_filter_by_exif(monkeypatch):
         assert set(model.filter_by_exif('', 'Canon')) == all_files
         assert set(model.filter_by_exif('Model', '')) == all_files
         assert set(model.filter_by_exif(None, None)) == all_files
+
+def test_get_image_files_recursive():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create nested folders and files
+        os.makedirs(os.path.join(tmpdir, 'sub1', 'nested'), exist_ok=True)
+        os.makedirs(os.path.join(tmpdir, '.hidden'), exist_ok=True)
+        
+        open(os.path.join(tmpdir, 'root.jpg'), 'a').close()
+        open(os.path.join(tmpdir, 'sub1', 'a.png'), 'a').close()
+        open(os.path.join(tmpdir, 'sub1', 'nested', 'b.gif'), 'a').close()
+        open(os.path.join(tmpdir, '.hidden', 'ignored.jpg'), 'a').close()
+        
+        model = ImageModel(tmpdir)
+        files = model.get_image_files()
+        
+        # Should find files in sub1 and sub1/nested, but ignore .hidden
+        assert set(files) == {'root.jpg', 'sub1/a.png', 'sub1/nested/b.gif'}
+

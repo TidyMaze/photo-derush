@@ -10,21 +10,22 @@ log = logging.getLogger(__name__)
 from src.viewmodel import PhotoViewModel
 
 
-def process_events(ms=10):
-    # Use QApplication.processEvents() instead of event loop to avoid hanging
+def process_events(ms=50):
+    # Sleep first to allow QTimers (like debouncing) to expire, then process events
+    import time
+    time.sleep(ms / 1000.0)
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance()
     if app:
         app.processEvents()
-    # Small sleep to allow async operations to complete
-    import time
-    time.sleep(ms / 1000.0)
     log.debug("process_events called ms=%s app=%s", ms, bool(app))
 
 
+from PySide6.QtWidgets import QApplication
+
 def test_viewmodel_batch_set_filters_and_idempotent_snapshot():
     with patch('src.viewmodel.PhotoViewModel._load_object_detections', lambda self: None):
-        QCoreApplication.instance()  # ensure app exists
+        QApplication.instance() or QApplication([])
         with tempfile.TemporaryDirectory() as tmpdir:
             for name in ['a.jpg', 'b.jpg', 'c.jpg']:
                 open(os.path.join(tmpdir, name), 'a').close()
@@ -41,7 +42,7 @@ def test_viewmodel_batch_set_filters_and_idempotent_snapshot():
             vm.set_filters(rating=4, tag='cat'); process_events()
             last = snapshots[-1]
             assert set(last.filtered_images) == {'b.jpg'}
-            assert vm.active_filters() == {'rating': 4, 'tag': 'cat', 'date': ''}
+            assert vm.active_filters() == {'rating': 4, 'tag': 'cat', 'date': '', 'hide_manual': False}
             new_len = len(snapshots)
             assert new_len == base_len + 1  # single emission
             # Idempotent call (no change) should not emit

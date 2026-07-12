@@ -162,12 +162,12 @@ def identify_optimizations(profile_path: str):
 
 
 def main():
-    # Check for py-spy profile first (modern profiler, all threads/processes)
-    pyspy_json = Path("/tmp/app_profile_pyspy.json")
-    pyspy_prof = Path("/tmp/app_profile.prof")  # Converted pstats format
-    aggregated_path = Path("/tmp/app_profile_aggregated.prof")
-    profile_path = Path("/tmp/app_profile.prof")
-    memory_path = Path("/tmp/app_memory_final.pkl")
+    from src.profiling_utils import DEFAULT_OUTPUT_DIR
+    pyspy_json = Path(DEFAULT_OUTPUT_DIR) / "app_profile_pyspy.json"
+    pyspy_prof = Path(DEFAULT_OUTPUT_DIR) / "app_profile.prof"  # Converted pstats format
+    aggregated_path = Path(DEFAULT_OUTPUT_DIR) / "app_profile_aggregated.prof"
+    profile_path = Path(DEFAULT_OUTPUT_DIR) / "app_profile.prof"
+    memory_path = Path(DEFAULT_OUTPUT_DIR) / "app_memory_final.pkl"
     
     if pyspy_json.exists():
         print("=" * 80)
@@ -176,7 +176,7 @@ def main():
         print(f"Profile: {pyspy_json}")
         print("\nTo view py-spy profile, use:")
         print(f"  py-spy top --input {pyspy_json}")
-        print(f"  py-spy flamegraph --input {pyspy_json} --output /tmp/flamegraph.svg")
+        print(f"  py-spy flamegraph --input {pyspy_json} --output {Path(DEFAULT_OUTPUT_DIR) / 'flamegraph.svg'}")
         
         # Try to analyze if converted to pstats format
         if pyspy_prof.exists():
@@ -193,7 +193,7 @@ def main():
         identify_optimizations(str(aggregated_path))
         
         # Also show individual thread profiles
-        thread_profiles = sorted(Path("/tmp").glob("app_profile_thread_*.prof"))
+        thread_profiles = sorted(Path(DEFAULT_OUTPUT_DIR).glob("app_profile_thread_*.prof"))
         if thread_profiles:
             print("\n" + "=" * 80)
             print(f"FOUND {len(thread_profiles)} INDIVIDUAL THREAD PROFILES")
@@ -217,7 +217,7 @@ def main():
         return 1
     
     # Check for worker process profiles
-    worker_profiles = sorted(Path("/tmp").glob("app_profile_worker_*.prof"))
+    worker_profiles = sorted(Path(DEFAULT_OUTPUT_DIR).glob("app_profile_worker_*.prof"))
     if worker_profiles:
         print("\n" + "=" * 80)
         print(f"FOUND {len(worker_profiles)} WORKER PROCESS PROFILES")
@@ -229,11 +229,10 @@ def main():
     if memory_path.exists():
         analyze_memory_snapshot(str(memory_path))
     else:
-        print("\nMemory snapshot not found. Check /tmp/app_memory_final.pkl")
+        print(f"\nMemory snapshot not found. Check {memory_path}")
     
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

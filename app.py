@@ -87,6 +87,8 @@ def main():
     memory_tracer = None
     cpu_profiler = None
     if os.environ.get("PROFILING") == "1":
+        from src.profiling_utils import DEFAULT_OUTPUT_DIR
+        os.makedirs(DEFAULT_OUTPUT_DIR, exist_ok=True)
         # Enable memory profiling (lightweight, non-intrusive)
         try:
             import tracemalloc
@@ -209,15 +211,15 @@ def main():
                     snapshot = memory_tracer.take_snapshot()
                     top_stats = snapshot.statistics('lineno')
                     
-                    with open("/tmp/app_memory_snapshot.txt", "w") as f:
+                    with open(os.path.join(DEFAULT_OUTPUT_DIR, "app_memory_snapshot.txt"), "w") as f:
                         f.write("===== MEMORY SNAPSHOT =====\n")
                         f.write(f"Total allocated: {sum(stat.size for stat in top_stats) / 1024 / 1024:.2f} MB\n\n")
                         f.write("Top 50 memory allocations:\n")
                         for index, stat in enumerate(top_stats[:50], 1):
                             f.write(f"{index}. {stat}\n")
                     
-                    snapshot.dump("/tmp/app_memory_snapshot.pkl")
-                    logging.info("[PROFILING] Dumped memory snapshot to /tmp/app_memory_snapshot.txt")
+                    snapshot.dump(os.path.join(DEFAULT_OUTPUT_DIR, "app_memory_snapshot.pkl"))
+                    logging.info(f"[PROFILING] Dumped memory snapshot to {os.path.join(DEFAULT_OUTPUT_DIR, 'app_memory_snapshot.txt')}")
                 except Exception as e:
                     logging.warning(f"[PROFILING] Failed to dump memory stats: {e}")
             
@@ -294,10 +296,10 @@ def main():
         # Aggregate and save all thread profiles before exit
         try:
             from src.profiling_utils import aggregate_profiles, dump_all_profiles
-            aggregated = aggregate_profiles("/tmp")
+            aggregated = aggregate_profiles(DEFAULT_OUTPUT_DIR)
             if aggregated:
-                logging.info("[PROFILING] Aggregated multi-thread profile saved to /tmp/app_profile_aggregated.prof")
-            dump_all_profiles("/tmp")  # Also save individual thread profiles
+                logging.info(f"[PROFILING] Aggregated multi-thread profile saved to {os.path.join(DEFAULT_OUTPUT_DIR, 'app_profile_aggregated.prof')}")
+            dump_all_profiles(DEFAULT_OUTPUT_DIR)  # Also save individual thread profiles
         except Exception as e:
             logging.warning(f"[PROFILING] Failed to aggregate thread profiles: {e}")
         
@@ -309,7 +311,7 @@ def main():
                 snapshot = memory_tracer.take_snapshot()
                 top_stats = snapshot.statistics('lineno')
                 
-                with open("/tmp/app_memory_final.txt", "w") as f:
+                with open(os.path.join(DEFAULT_OUTPUT_DIR, "app_memory_final.txt"), "w") as f:
                     f.write("===== FINAL MEMORY SNAPSHOT =====\n")
                     total_mb = sum(stat.size for stat in top_stats) / 1024 / 1024
                     f.write(f"Total allocated: {total_mb:.2f} MB\n\n")
@@ -317,8 +319,8 @@ def main():
                     for index, stat in enumerate(top_stats[:100], 1):
                         f.write(f"{index}. {stat}\n")
                 
-                snapshot.dump("/tmp/app_memory_final.pkl")
-                logging.info(f"[PROFILING] Final memory snapshot saved ({total_mb:.2f} MB total)")
+                snapshot.dump(os.path.join(DEFAULT_OUTPUT_DIR, "app_memory_final.pkl"))
+                logging.info(f"[PROFILING] Final memory snapshot saved to {os.path.join(DEFAULT_OUTPUT_DIR, 'app_memory_final.pkl')} ({total_mb:.2f} MB total)")
             except Exception as e:
                 logging.warning(f"[PROFILING] Failed to save final memory snapshot: {e}")
         
@@ -328,7 +330,7 @@ def main():
         # Save CPU profile if enabled
         if cpu_profiler:
             try:
-                profile_path = "/tmp/app_profile.prof"
+                profile_path = os.path.join(DEFAULT_OUTPUT_DIR, "app_profile.prof")
                 cpu_profiler.disable()
                 cpu_profiler.dump_stats(profile_path)
                 logging.info(f"[PROFILING] CPU profile saved to {profile_path}")

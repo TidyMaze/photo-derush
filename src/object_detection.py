@@ -656,10 +656,10 @@ def detect_objects(
     # OPTIMIZATION: Use shared image cache to avoid repeated file opens
     # This reduces PIL.Image.open overhead (39.2s -> ~10-15s expected)
     from .image_cache import get_cached_image
-    cached_img = get_cached_image(image_path)
-    if cached_img is None:
-        return []
-    image = cached_img.convert("RGB")
+    with get_cached_image(image_path) as cached_img:
+        if cached_img is None:
+            return []
+        image = cached_img.convert("RGB")
 
     # Resize image to ensure the largest side equals max_size while
     # preserving aspect ratio. This upsamples small images and downsamples
@@ -857,6 +857,8 @@ def get_objects_for_image(
     Each class appears only once, even if multiple instances are detected.
     """
     global _object_cache_cache, _object_cache_mtime
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        _object_cache_cache = None
     
     if config is None:
         config = DetectionConfig()

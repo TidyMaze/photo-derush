@@ -29,50 +29,46 @@ def test_image_path():
 def test_get_cached_image(test_image_path):
     """Test that get_cached_image opens images correctly."""
     # First call - should open image
-    img1 = get_cached_image(test_image_path)
-    assert img1 is not None
-    assert isinstance(img1, Image.Image)
-    assert img1.size == (100, 100)
+    with get_cached_image(test_image_path) as img1:
+        assert img1 is not None
+        assert isinstance(img1, Image.Image)
+        assert img1.size == (100, 100)
     
     # Second call - should open again (no in-memory cache, but OS cache helps)
-    img2 = get_cached_image(test_image_path)
-    assert img2 is not None
-    assert isinstance(img2, Image.Image)
-    assert img2.size == (100, 100)
-    
-    # Should be different objects (new opens each time)
-    assert img1 is not img2
+    with get_cached_image(test_image_path) as img2:
+        assert img2 is not None
+        assert isinstance(img2, Image.Image)
+        assert img2.size == (100, 100)
 
 
 def test_get_cached_image_for_exif(test_image_path):
     """Test that get_cached_image_for_exif works for EXIF extraction."""
-    img = get_cached_image_for_exif(test_image_path)
-    assert img is not None
-    assert isinstance(img, Image.Image)
-    
-    # Should be able to extract EXIF (even if empty for PNG)
-    # Use getexif() for newer PIL versions, fallback to _getexif() for older
-    if hasattr(img, "getexif"):
-        exif = img.getexif()
-    elif hasattr(img, "_getexif"):
-        exif = img._getexif()  # type: ignore[attr-defined]
-    else:
-        exif = None
-    # EXIF might be None for PNG, that's OK
+    with get_cached_image_for_exif(test_image_path) as img:
+        assert img is not None
+        assert isinstance(img, Image.Image)
+        
+        # Should be able to extract EXIF (even if empty for PNG)
+        # Use getexif() for newer PIL versions, fallback to _getexif() for older
+        if hasattr(img, "getexif"):
+            exif = img.getexif()
+        elif hasattr(img, "_getexif"):
+            exif = img._getexif()  # type: ignore[attr-defined]
+        else:
+            exif = None
 
 
 def test_get_cached_image_invalid_path():
     """Test that get_cached_image handles invalid paths gracefully."""
     invalid_path = "/nonexistent/path/image.png"
-    img = get_cached_image(invalid_path)
-    assert img is None
+    with get_cached_image(invalid_path) as img:
+        assert img is None
 
 
 def test_get_cached_image_for_exif_invalid_path():
     """Test that get_cached_image_for_exif handles invalid paths gracefully."""
     invalid_path = "/nonexistent/path/image.png"
-    img = get_cached_image_for_exif(invalid_path)
-    assert img is None
+    with get_cached_image_for_exif(invalid_path) as img:
+        assert img is None
 
 
 def test_clear_image_cache():
@@ -84,13 +80,13 @@ def test_clear_image_cache():
 
 def test_get_cached_image_lazy_loading(test_image_path):
     """Test that images are opened lazily (not decoded until needed)."""
-    img = get_cached_image(test_image_path)
-    assert img is not None
-    
-    # Image should be opened but not necessarily decoded
-    # Accessing size should work (metadata only, no decode)
-    assert img.size == (100, 100)
-    
-    # Actually loading the image should work
-    img.load()
-    assert img.size == (100, 100)
+    with get_cached_image(test_image_path) as img:
+        assert img is not None
+        
+        # Image should be opened but not necessarily decoded
+        # Accessing size should work (metadata only, no decode)
+        assert img.size == (100, 100)
+        
+        # Actually loading the image should work
+        img.load()
+        assert img.size == (100, 100)

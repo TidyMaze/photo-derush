@@ -12,6 +12,8 @@ from typing import Any
 _thread_profilers: dict[int, cProfile.Profile] = {}
 _thread_profilers_lock = threading.Lock()
 
+DEFAULT_OUTPUT_DIR = str(Path(__file__).resolve().parent.parent / ".cache" / "profiles")
+
 
 def _thread_profile_func(frame, event, arg):
     """Profile function for threading.setprofile()."""
@@ -80,7 +82,7 @@ def get_all_thread_profilers() -> dict[int, cProfile.Profile]:
         return _thread_profilers.copy()
 
 
-def dump_all_profiles(output_dir: str = "/tmp"):
+def dump_all_profiles(output_dir: str = DEFAULT_OUTPUT_DIR):
     """Dump all thread profiles to files."""
     if os.environ.get("PROFILING") != "1":
         return
@@ -99,7 +101,7 @@ def dump_all_profiles(output_dir: str = "/tmp"):
                 logging.warning(f"[PROFILING] Failed to dump thread {thread_id} profile: {e}")
 
 
-def aggregate_profiles(output_dir: str = "/tmp") -> cProfile.Profile | None:
+def aggregate_profiles(output_dir: str = DEFAULT_OUTPUT_DIR) -> cProfile.Profile | None:
     """Aggregate all thread profiles into a single profile."""
     if os.environ.get("PROFILING") != "1":
         return None
@@ -157,7 +159,7 @@ def init_worker_profiler():
     return profiler
 
 
-def dump_worker_profile(profiler: cProfile.Profile | None, worker_id: int | None = None, output_dir: str = "/tmp"):
+def dump_worker_profile(profiler: cProfile.Profile | None, worker_id: int | None = None, output_dir: str = DEFAULT_OUTPUT_DIR):
     """Dump a worker process profile."""
     if profiler is None or os.environ.get("PROFILING") != "1":
         return

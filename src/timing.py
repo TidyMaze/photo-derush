@@ -65,7 +65,11 @@ def log_stats():
     
     # Also write to file for easy access
     try:
-        with open("/tmp/photo-derush-timing-stats.txt", "w") as f:
+        from src.profiling_utils import DEFAULT_OUTPUT_DIR
+        import os
+        os.makedirs(DEFAULT_OUTPUT_DIR, exist_ok=True)
+        stats_file_path = os.path.join(DEFAULT_OUTPUT_DIR, "photo-derush-timing-stats.txt")
+        with open(stats_file_path, "w") as f:
             f.write("===== TIMING STATISTICS =====\n")
             for name, data in sorted_stats:
                 f.write(
@@ -76,7 +80,7 @@ def log_stats():
                     f"max={data['max_ms']:.2f}ms\n"
                 )
             f.write("============================\n")
-        logging.info("[timing] Stats also written to /tmp/photo-derush-timing-stats.txt")
+        logging.info(f"[timing] Stats also written to {stats_file_path}")
     except Exception as e:
         logging.debug(f"[timing] Failed to write stats file: {e}")
 

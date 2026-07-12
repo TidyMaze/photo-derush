@@ -67,17 +67,17 @@ def extract_timestamp(exif: dict, path: str) -> datetime:
             from PIL import Image
             # OPTIMIZATION: Use shared image cache to avoid repeated file opens
             from .image_cache import get_cached_image_for_exif
-            img = get_cached_image_for_exif(path)
-            if img is None:
-                return None
-            exif_obj = img.getexif()
-            if exif_obj:
-                # Try to get EXIF sub-IFD (0x8769 is EXIFIFD constant)
-                try:
-                    exif_ifd = exif_obj.get_ifd(0x8769)
-                    dt_original = exif_ifd.get(36867)  # DateTimeOriginal
-                except Exception:
-                    pass
+            with get_cached_image_for_exif(path) as img:
+                if img is None:
+                    return None
+                exif_obj = img.getexif()
+                if exif_obj:
+                    # Try to get EXIF sub-IFD (0x8769 is EXIFIFD constant)
+                    try:
+                        exif_ifd = exif_obj.get_ifd(0x8769)
+                        dt_original = exif_ifd.get(36867)  # DateTimeOriginal
+                    except Exception:
+                        pass
                 # Fallback to DateTime in main IFD
                 if not dt_original:
                     dt_original = exif_obj.get(306)  # DateTime
@@ -232,14 +232,14 @@ def compute_grouping_for_photos(
         try:
             # OPTIMIZATION: Use shared image cache to avoid repeated file opens
             from .image_cache import get_cached_image
-            img = get_cached_image(path)
-            if img is None:
-                return None
-            phash = imagehash.phash(img)
-            hash_string = str(phash)
-            # Cache it
-            hash_cache.set_hash(path, hash_string)
-            return hash_string
+            with get_cached_image(path) as img:
+                if img is None:
+                    return None
+                phash = imagehash.phash(img)
+                hash_string = str(phash)
+                # Cache it
+                hash_cache.set_hash(path, hash_string)
+                return hash_string
         except Exception as e:
             logging.debug(f"[grouping_service] Failed to hash {filename}: {e}")
             error_hash = f"error_{filename}"

@@ -1,13 +1,14 @@
 import os
 import pytest
 from PySide6.QtWidgets import QApplication
-from src.overlay_widget import OverlayWidget, _overlay_cache
-from src.badge_overlay_widget import BadgeOverlayWidget
-from src.dpr_helper import get_dpr
 
 def test_overlay_pixmap_sharpness_high_dpr():
     # Setup QApplication if not exists
     app = QApplication.instance() or QApplication([])
+
+    from src.overlay_widget import OverlayWidget, _overlay_cache
+    from src.badge_overlay_widget import BadgeOverlayWidget
+    from src.dpr_helper import get_dpr
 
     # Set environment variable to force Retina scaling (DPR = 2.0)
     os.environ["FORCE_DPR"] = "2.0"

@@ -65,7 +65,10 @@ class TestViewModelObjectDetection:
                 'image_1.jpg': [{'class': 'car', 'confidence': 0.87, 'bbox': None}],
                 'image_2.jpg': []
             }
-            assert vm._detected_objects == expected
+            try:
+                assert vm._detected_objects == expected
+            finally:
+                vm.cleanup()
 
     def test_load_object_detections_handles_exceptions(self, temp_dir, sample_images):
         """Test _load_object_detections handles exceptions gracefully."""
@@ -76,10 +79,13 @@ class TestViewModelObjectDetection:
              patch.object(src.object_detection, 'save_object_cache', return_value=None), \
              patch.object(src.object_detection, 'get_objects_for_images', side_effect=Exception("Test error")), \
              patch.object(vm._tasks, 'run', side_effect=lambda name, fn: fn()):
-            vm._load_object_detections()
+            try:
+                vm._load_object_detections()
 
-            # ViewModel adopts an empty mapping when the batch API raises
-            assert vm._detected_objects == {}
+                # ViewModel adopts an empty mapping when the batch API raises
+                assert vm._detected_objects == {}
+            finally:
+                vm.cleanup()
 
     def test_emit_state_snapshot_includes_detected_objects(self, temp_dir, sample_images):
         """Test that browser state snapshot includes detected objects."""
@@ -125,13 +131,16 @@ class TestViewModelObjectDetection:
         emitted_states = []
         vm.browser_state_changed.connect(lambda state: emitted_states.append(state))
 
-        with patch.object(vm, '_load_object_detections'):  # Prevent actual model loading
-            vm._emit_state_snapshot()
+        try:
+            with patch.object(vm, '_load_object_detections'):  # Prevent actual model loading
+                vm._emit_state_snapshot()
 
-        assert len(emitted_states) == 1
-        state = emitted_states[0]
-        assert hasattr(state, 'detected_objects')
-        assert state.detected_objects == mock_detections
+            assert len(emitted_states) == 1
+            state = emitted_states[0]
+            assert hasattr(state, 'detected_objects')
+            assert state.detected_objects == mock_detections
+        finally:
+            vm.cleanup()
 
     def test_object_detections_loaded_on_image_loading(self, temp_dir, sample_images):
         """Test that object detections are loaded when images are loaded."""
@@ -147,16 +156,19 @@ class TestViewModelObjectDetection:
              patch.object(src.object_detection, 'save_object_cache', return_value=None), \
              patch.object(src.object_detection, 'get_objects_for_images', return_value=mock_detections), \
              patch.object(vm._tasks, 'run', side_effect=lambda name, fn: fn()):
-            # Simulate loading images
-            vm.images = sample_images
-            vm._emit_state_snapshot()  # This should call _load_object_detections
+            try:
+                # Simulate loading images
+                vm.images = sample_images
+                vm._emit_state_snapshot()  # This should call _load_object_detections
 
-            expected = {
-                'image_0.jpg': [{'class': 'person', 'confidence': 0.95, 'bbox': None}],
-                'image_1.jpg': [{'class': 'car', 'confidence': 0.87, 'bbox': None}],
-                'image_2.jpg': []
-            }
-            assert vm._detected_objects == expected
+                expected = {
+                    'image_0.jpg': [{'class': 'person', 'confidence': 0.95, 'bbox': None}],
+                    'image_1.jpg': [{'class': 'car', 'confidence': 0.87, 'bbox': None}],
+                    'image_2.jpg': []
+                }
+                assert vm._detected_objects == expected
+            finally:
+                vm.cleanup()
 
     def test_object_detections_updated_on_state_changes(self, temp_dir, sample_images):
         """Test that object detections are refreshed when browser state changes."""
@@ -170,15 +182,18 @@ class TestViewModelObjectDetection:
              patch.object(src.object_detection, 'save_object_cache', return_value=None), \
              patch.object(src.object_detection, 'get_objects_for_images', return_value=mock_detections_1), \
              patch.object(vm._tasks, 'run', side_effect=lambda name, fn: fn()):
-            vm._emit_state_snapshot()
-            assert vm._detected_objects == expected_1
+            try:
+                vm._emit_state_snapshot()
+                assert vm._detected_objects == expected_1
 
-        # Simulate state change that triggers re-detection
-        mock_detections_2 = {'image_0.jpg': [('person', 0.95), ('dog', 0.82)]}
-        expected_2 = {'image_0.jpg': [{'class': 'person', 'confidence': 0.95, 'bbox': None}, {'class': 'dog', 'confidence': 0.82, 'bbox': None}]}
-        with patch.object(src.object_detection, 'load_object_cache', return_value={}), \
-             patch.object(src.object_detection, 'save_object_cache', return_value=None), \
-             patch.object(src.object_detection, 'get_objects_for_images', return_value=mock_detections_2), \
-             patch.object(vm._tasks, 'run', side_effect=lambda name, fn: fn()):
-            vm._emit_state_snapshot()  # Should reload detections
-            assert vm._detected_objects == expected_2
+                # Simulate state change that triggers re-detection
+                mock_detections_2 = {'image_0.jpg': [('person', 0.95), ('dog', 0.82)]}
+                expected_2 = {'image_0.jpg': [{'class': 'person', 'confidence': 0.95, 'bbox': None}, {'class': 'dog', 'confidence': 0.82, 'bbox': None}]}
+                with patch.object(src.object_detection, 'load_object_cache', return_value={}), \
+                     patch.object(src.object_detection, 'save_object_cache', return_value=None), \
+                     patch.object(src.object_detection, 'get_objects_for_images', return_value=mock_detections_2), \
+                     patch.object(vm._tasks, 'run', side_effect=lambda name, fn: fn()):
+                    vm._emit_state_snapshot()  # Should reload detections
+                    assert vm._detected_objects == expected_2
+            finally:
+                vm.cleanup()

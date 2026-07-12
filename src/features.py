@@ -371,12 +371,14 @@ def _preprocess_image(path: str) -> ImagePreprocessResult | None:
     
     prep_start = time.perf_counter()
     basename = os.path.basename(path)
+    img_original_ctx = None
     try:
         # Open image with lazy loading - don't decode until needed
         open_start = time.perf_counter()
         # OPTIMIZATION: Use shared image cache to avoid repeated file opens
         # This reduces PIL.Image.open overhead (39.2s -> ~10-15s expected)
-        img_original = get_cached_image(path)
+        img_original_ctx = get_cached_image(path)
+        img_original = img_original_ctx.__enter__()
         if img_original is None:
             return None
         # Extract EXIF BEFORE resizing (EXIF data is lost after resize)
@@ -476,6 +478,9 @@ def _preprocess_image(path: str) -> ImagePreprocessResult | None:
     except Exception as e:
         logging.exception("[features] _preprocess_image failed for %s: %s", path, e)
         return None
+    finally:
+        if img_original_ctx is not None:
+            img_original_ctx.__exit__(None, None, None)
 
 
 def _compute_edge_features(gray_arr: np.ndarray) -> tuple[float, float]:
