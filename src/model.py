@@ -101,6 +101,17 @@ class ImageModel:
                             tag_name = ExifTags.TAGS.get(tag, str(tag))
                             exif[tag_name] = value
                         result = exif
+                    # _getexif() misses DateTimeOriginal (36867) for many cameras since it
+                    # lives in the EXIF sub-IFD. Pull it here (same file open) so callers
+                    # never need to reopen the file just to fetch it.
+                    if "DateTimeOriginal" not in result:
+                        try:
+                            exif_ifd = img.getexif().get_ifd(0x8769)
+                            dt_original = exif_ifd.get(36867)
+                            if dt_original:
+                                result["DateTimeOriginal"] = dt_original
+                        except Exception:
+                            pass
             # Cache the result (even empty dict to avoid re-opening)
             self._exif_cache[path] = result
             return result

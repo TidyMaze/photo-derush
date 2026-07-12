@@ -49,40 +49,19 @@ def extract_camera_id(exif: dict) -> str:
 
 
 def extract_timestamp(exif: dict, path: str) -> datetime:
-    """Extract timestamp from EXIF, filename, or fallback to file mtime."""
-    # Try to read EXIF directly from file if exif dict doesn't have DateTimeOriginal
-    # DateTimeOriginal (tag 36867) is in EXIF sub-IFD, not main IFD
-    dt_original = None
+    """Extract timestamp from EXIF, or fallback to file mtime.
 
-    # First, try to get from provided exif dict (might have string keys)
+    The passed-in `exif` dict comes from ImageModel.load_exif(), which already
+    reads both the main IFD and the EXIF sub-IFD (0x8769) for DateTimeOriginal
+    in a single cached file open. Re-opening the file here to look again would
+    just redo that same parse, so if it's not in `exif` it isn't in the file.
+    """
+    dt_original = None
     if isinstance(exif, dict):
         dt_original = exif.get("DateTimeOriginal") or exif.get(36867) or exif.get("36867")
         # Fallback to DateTime (tag 306 in main IFD)
         if not dt_original:
             dt_original = exif.get("DateTime") or exif.get(306) or exif.get("306")
-
-    # If not found, try reading EXIF directly from file to access EXIF sub-IFD
-    if not dt_original:
-        try:
-            from PIL import Image
-            # OPTIMIZATION: Use shared image cache to avoid repeated file opens
-            from .image_cache import get_cached_image_for_exif
-            with get_cached_image_for_exif(path) as img:
-                if img is None:
-                    return None
-                exif_obj = img.getexif()
-                if exif_obj:
-                    # Try to get EXIF sub-IFD (0x8769 is EXIFIFD constant)
-                    try:
-                        exif_ifd = exif_obj.get_ifd(0x8769)
-                        dt_original = exif_ifd.get(36867)  # DateTimeOriginal
-                    except Exception:
-                        pass
-                # Fallback to DateTime in main IFD
-                if not dt_original:
-                    dt_original = exif_obj.get(306)  # DateTime
-        except Exception:
-            pass
 
     if dt_original:
         try:
