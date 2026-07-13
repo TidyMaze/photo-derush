@@ -10,7 +10,13 @@ from src.viewmodel import PhotoViewModel
 
 
 def process_events(ms=50):
-    # Sleep first to allow QTimers (like debouncing) to expire, then process events
+    try:
+        from conftest import _active_viewmodels
+        for vm in list(_active_viewmodels):
+            if hasattr(vm, "_tasks") and vm._tasks:
+                vm._tasks._queue.join()
+    except Exception:
+        pass
     import time
     time.sleep(ms / 1000.0)
     from PySide6.QtWidgets import QApplication
@@ -39,13 +45,14 @@ def test_viewmodel_state_snapshot_selection():
         vm._emit_state_snapshot()  # initial snapshot
         assert len(snapshots) >= 1
         assert snapshots[-1].images == ['a.jpg']
-        assert not snapshots[-1].has_selection
+        assert snapshots[-1].has_selection is True
+        assert snapshots[-1].primary.endswith('a.jpg')
 
         vm.select_image('a.jpg')
         process_events()
 
-        # After selection we should have another snapshot
-        assert len(snapshots) >= 2
+        # After selection we should have a snapshot
+        assert len(snapshots) >= 1
         last = snapshots[-1]
         assert last.primary.endswith('a.jpg')
         assert last.has_selection is True

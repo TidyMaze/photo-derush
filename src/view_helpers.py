@@ -42,9 +42,14 @@ def select_overlay_detections(
     if not dets:
         return "none", []
 
-    # Separate bbox detections vs simple (no bbox)
     bbox_dets = [d for d in dets if d.bbox is not None]
     if bbox_dets:
+        high_conf_float = float(high_conf_threshold) if isinstance(high_conf_threshold, (int, float, str)) else 0.0
+        high = [d for d in bbox_dets if float(d.confidence) > high_conf_float]
+        high.sort(key=lambda d: float(d.confidence), reverse=True)
+        if len(high) > high_conf_cap:
+            bbox_dets = high[:high_conf_cap]
+
         # Convert Detection objects back to plain dicts for bbox mode so
         # downstream consumers (and tests) that expect mapping-like
         # detections continue to work. Preserve original fields when
@@ -61,6 +66,7 @@ def select_overlay_detections(
                 }
             # assume it's already a dict-like
             return d
+        return "bbox", [_to_dict(d) for d in bbox_dets]
 
     # simple named detections
     simple = [{"name": d.name, "score": float(d.confidence)} for d in dets]

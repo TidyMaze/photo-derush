@@ -311,6 +311,8 @@ class PhotoView(QMainWindow):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setWidget(self.grid_widget)
+        # Connect vertical scrollbar valueChanged to refresh visible thumbnail badges dynamically
+        self.scroll_area.verticalScrollBar().valueChanged.connect(self._refresh_thumbnail_badges)
         # Connect resize event to recalculate columns
         self.scroll_area.viewport().installEventFilter(self)
         self.left_layout.addWidget(self.scroll_area)
@@ -1426,7 +1428,10 @@ class PhotoView(QMainWindow):
 
     def _on_image_added(self, filename, idx):
         # Calculate columns dynamically based on available width
-        cols_per_row = self._calculate_images_per_row()
+        # OPTIMIZATION: Cache cols_per_row during batch loading to avoid layout thrashing
+        if not hasattr(self, "_cached_cols_per_row") or self._cached_cols_per_row is None:
+            self._cached_cols_per_row = self._calculate_images_per_row()
+        cols_per_row = self._cached_cols_per_row
         # Update _last_cols_per_row to match current column count
         # This ensures relayout optimization works correctly
         if self._last_cols_per_row != cols_per_row:
@@ -1531,7 +1536,10 @@ class PhotoView(QMainWindow):
         if idx == 0:
             self.scroll_area.verticalScrollBar().setValue(0)
 
-        self.viewmodel.load_thumbnail(filename)
+        # Eagerly load only the first 50 thumbnails to populate the initial screen,
+        # then let the viewport lazy loader fetch the rest dynamically as scrolling occurs.
+        if idx < 50:
+            self.viewmodel.load_thumbnail(filename)
         self._update_label_highlight(label, full_path)
 
     def _on_label_clicked(self, event, filename, label):
@@ -1968,14 +1976,19 @@ class PhotoView(QMainWindow):
             group_info_dict = getattr(state, "group_info", {}) if state else {}
             process_all_for_groups = bool(group_info_dict)
             
-            # Process group badges for all labels if group_info is present
-            if process_all_for_groups:
-                all_labels = list(self.label_refs.items())
-                # Removed frequent logging.info - called on every badge refresh (performance optimization)
-                # logging.info(f"[badge-refresh] Processing ALL {len(all_labels)} labels for group badges (group_info present)")
-            else:
-                all_labels = visible_labels
-                # logging.info(f"[badge-refresh] Processing {len(visible_labels)} visible labels out of {len(self.label_refs)} total")
+            # Process group badges and predictions only for visible labels to prevent UI freezing
+            # with large datasets. The scrollbar valueChanged signal handles dynamic refreshes as scrolling occurs.
+            all_labels = visible_labels
+            
+            # Request lazy loading of thumbnails only for currently visible labels
+            for (row, col), label in visible_labels:
+                if getattr(label, "base_pixmap", None) is None:
+                    try:
+                        fname = label._thumb_filename
+                        if fname:
+                            self.viewmodel.load_thumbnail(fname)
+                    except AttributeError:
+                        pass
             
             # Initialize counters for debugging
             badges_updated = 0
@@ -2261,13 +2274,6 @@ class PhotoView(QMainWindow):
                 # Always show widget (don't check isVisible() - force show)
                 widget.show()
                 widget.raise_()  # Ensure widget is on top after showing
-                # Also ensure parent is updated and raised BEFORE widget update
-                parent.update()
-                parent.raise_()  # Ensure parent is on top
-                # Force widget repaint AFTER parent is updated
-                widget.update()  # Schedule async repaint
-                widget.repaint()  # Force synchronous repaint (blocks until painted)
-                # Widget should now be visible and painted
             
             t1 = time.perf_counter()
             # Removed frequent logging.info - called on every badge refresh (performance optimization)
@@ -3574,9 +3580,10 @@ class PhotoView(QMainWindow):
                 self._visibility_relayout_timer = QTimer()
                 self._visibility_relayout_timer.setSingleShot(True)
                 self._visibility_relayout_timer.timeout.connect(lambda: self._relayout_grid())
-            # Restart timer on each visibility change (debounce) - only relayout if timer fires
-            self._visibility_relayout_timer.stop()
-            self._visibility_relayout_timer.start(200)  # 200ms debounce (increased from 100ms)
+            # Use throttle instead of debounce: only start if not already running
+            # to prevent starvation during rapid consecutive state updates.
+            if not self._visibility_relayout_timer.isActive():
+                self._visibility_relayout_timer.start(200)
 
         # Refresh label badges on all thumbnails since labels may have changed
         # This ensures all thumbnails show updated predictions after retraining

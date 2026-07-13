@@ -39,6 +39,7 @@ def vm(temp_images_dir):
         vm = PhotoViewModel(temp_images_dir, max_images=100)
         # Load images synchronously for testing
         vm.load_images()
+        vm._tasks._queue.join()
         return vm
 
 
@@ -270,8 +271,7 @@ def test_auto_label_updates_when_prediction_changes(vm):
 
     # Refresh auto-labels (simulates post-retrain workflow)
     vm._refresh_auto_labels()
-    from PySide6.QtCore import QThreadPool
-    QThreadPool.globalInstance().waitForDone()
+    vm._tasks._queue.join()
 
     # Verify labels were updated to match new predictions
     assert vm.model.get_state(path1) == 'trash', "Auto-label should update from 'keep' to 'trash'"
@@ -303,8 +303,7 @@ def test_auto_label_tracking_rebuilds_from_repository(vm):
 
     # Refresh should rebuild tracking from repository
     vm._refresh_auto_labels()
-    from PySide6.QtCore import QThreadPool
-    QThreadPool.globalInstance().waitForDone()
+    vm._tasks._queue.join()
 
     # Verify tracking was rebuilt and label was updated
     assert path1 in vm._auto.auto_assigned, "Should rebuild tracking from repository"
@@ -339,8 +338,7 @@ def test_auto_label_removed_when_prediction_below_threshold(vm):
 
     # Refresh auto-labels
     vm._refresh_auto_labels()
-    from PySide6.QtCore import QThreadPool
-    QThreadPool.globalInstance().waitForDone()
+    vm._tasks._queue.join()
 
     # Verify labels were removed (cleared to empty string)
     assert vm.model.get_state(path1) == '', "Auto-label should be removed when prediction below threshold"
@@ -379,8 +377,7 @@ def test_auto_label_mixed_update_and_removal(vm):
 
     # Refresh
     vm._refresh_auto_labels()
-    from PySide6.QtCore import QThreadPool
-    QThreadPool.globalInstance().waitForDone()
+    vm._tasks._queue.join()
 
     # Verify outcomes
     assert vm.model.get_state(path1) == 'trash', "Should update to new prediction"
@@ -399,6 +396,7 @@ def test_group_sort_dynamic_resort(vm):
         return
 
     # Setup static group_info
+    vm._auto.predicted_probabilities = {}
     vm._group_info = {
         vm.images[0]: {"group_id": 1, "pick_score": 0.5, "is_group_best": False},
         vm.images[1]: {"group_id": 1, "pick_score": 0.6, "is_group_best": True},

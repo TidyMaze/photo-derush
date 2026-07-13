@@ -10,7 +10,13 @@ from src.viewmodel import PhotoViewModel
 
 
 def process_events(ms=50):
-    # Sleep first to allow QTimers (like debouncing) to expire, then process events
+    try:
+        from conftest import _active_viewmodels
+        for vm in list(_active_viewmodels):
+            if hasattr(vm, "_tasks") and vm._tasks:
+                vm._tasks._queue.join()
+    except Exception:
+        pass
     import time
     time.sleep(ms / 1000.0)
     from PySide6.QtWidgets import QApplication

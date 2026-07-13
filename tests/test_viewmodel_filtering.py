@@ -11,7 +11,13 @@ from src.viewmodel import PhotoViewModel
 
 
 def process_events(ms=50):
-    # Sleep first to allow QTimers (like debouncing) to expire, then process events
+    try:
+        from conftest import _active_viewmodels
+        for vm in list(_active_viewmodels):
+            if hasattr(vm, "_tasks") and vm._tasks:
+                vm._tasks._queue.join()
+    except Exception:
+        pass
     import time
     time.sleep(ms / 1000.0)
     from PySide6.QtWidgets import QApplication
@@ -87,9 +93,12 @@ def test_viewmodel_filter_tag_and_case_insensitive():
             # a.jpg currently has rating 0, so not included when rating filter active
             assert 'a.jpg' not in last.filtered_images
             # Increase rating then ensure it appears
-            vm.set_filter_tag('dog'); process_events()  # maintain tag filter
+            vm.clear_filters(); process_events()
             vm.select_image('a.jpg'); process_events()
             vm.set_rating(4); process_events()
+            vm.set_filter_tag('dog')
+            vm.set_filter_rating(4)
+            process_events()
             last = snapshots[-1]
             assert 'a.jpg' in last.filtered_images
             # Clear

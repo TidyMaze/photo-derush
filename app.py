@@ -19,9 +19,11 @@ from PySide6.QtWidgets import QApplication
 
 # Configure logging BEFORE importing modules that emit logs at import time
 _LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
-# Only call basicConfig if no handlers are configured (prevents duplicate handlers)
-if not logging.getLogger().hasHandlers():
-    logging.basicConfig(level=getattr(logging, _LOG_LEVEL, logging.INFO), format='%(levelname)s:%(name)s:%(message)s')
+logging.basicConfig(
+    level=getattr(logging, _LOG_LEVEL, logging.INFO),
+    format='%(asctime)s [%(threadName)s] %(levelname)s: %(message)s',
+    force=True
+)
 
 from src.features import safe_initialize_feature_cache
 from src.timing import log_stats, reset_stats

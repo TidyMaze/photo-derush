@@ -52,9 +52,8 @@ class ProgressReporter:
         self._task._emit_progress(self._name, self._current, self._total, self._detail)
 
 
-class _RunnableTask(QRunnable):
+class _RunnableTask:
     def __init__(self, name: str, fn: Callable[[ProgressReporter], None], runner: TaskRunner):
-        super().__init__()
         self._name = name
         self._fn = fn
         self._runner = runner
@@ -87,21 +86,24 @@ class _RunnableTask(QRunnable):
             logging.debug(f"TaskRunner: task_progress signal ignored, runner deleted ({name})")
 
     def run(self):  # noqa: D401
-        logging.debug(f"[TaskRunner] Task '{self._name}' started")
+        logging.info(f"[TaskRunner] Task '{self._name}' started")
         try:
             self._runner.task_started.emit(self._name)
         except RuntimeError:
             logging.debug(f"TaskRunner: task_started signal ignored, runner deleted ({self._name})")
         ok = True
+        t0 = time.perf_counter()
         try:
             reporter = ProgressReporter(self, self._name)
             self._fn(reporter)
             # OPTIMIZATION: Flush any pending progress before task completes
             self._flush_progress()
-            logging.debug(f"[TaskRunner] Task '{self._name}' completed successfully")
+            elapsed = time.perf_counter() - t0
+            logging.info(f"[TaskRunner] Task '{self._name}' completed successfully in {elapsed:.3f}s")
         except Exception as e:  # pragma: no cover - defensive path
             ok = False
-            logging.error(f"Task '{self._name}' failed: {e}\n{traceback.format_exc()}")
+            elapsed = time.perf_counter() - t0
+            logging.error(f"Task '{self._name}' failed after {elapsed:.3f}s: {e}\n{traceback.format_exc()}")
         finally:
             try:
                 self._runner.task_finished.emit(self._name, ok)
@@ -116,18 +118,39 @@ class TaskRunner(QObject):
 
     def __init__(self, max_threads: int = 8):
         super().__init__()
-        self._pool = QThreadPool.globalInstance()
-        self._pool.setMaxThreadCount(max(self._pool.maxThreadCount(), max_threads))
+        import queue
+        import threading
+        
+        self._queue = queue.Queue()
+        self._shutdown_event = threading.Event()
+        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True, name="TaskRunnerWorker")
+        self._worker_thread.start()
+        logging.info("[TaskRunner] Sequential worker thread initialized and started")
 
     def run(self, name: str, fn: Callable[[ProgressReporter], None]):
         if not name or not callable(fn):
             logging.error("TaskRunner.run called with invalid arguments")
             return
-        logging.debug(
-            f"[TaskRunner] Submitting task '{name}' (pool: {self._pool.activeThreadCount()}/{self._pool.maxThreadCount()} active)"
+        logging.info(
+            f"[TaskRunner] Queueing task '{name}' (current queue size: {self._queue.qsize()})"
         )
         job = _RunnableTask(name, fn, self)
-        self._pool.start(job)
+        self._queue.put(job)
+
+    def _worker_loop(self):
+        import queue
+        while not self._shutdown_event.is_set():
+            try:
+                job = self._queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            
+            try:
+                job.run()
+            except Exception as e:
+                logging.exception(f"[TaskRunner] Unexpected exception in worker executing job '{getattr(job, '_name', 'unknown')}': {e}")
+            finally:
+                self._queue.task_done()
 
     # Convenience wrappers for common patterns
     def run_list(self, name: str, items, work: Callable[[object, ProgressReporter], None]):
@@ -145,15 +168,19 @@ class TaskRunner(QObject):
     
     def shutdown(self, timeout_ms: int = 3000):
         """Shutdown TaskRunner, waiting for active tasks to complete."""
-        try:
-            if self._pool:
-                # Wait for active tasks with timeout
-                self._pool.waitForDone(timeout_ms)
-                # Clear any remaining tasks
-                self._pool.clear()
-                logging.info(f"[TaskRunner] Shutdown complete (pool: {self._pool.activeThreadCount()} active threads)")
-        except Exception as e:
-            logging.warning(f"[TaskRunner] Error during shutdown: {e}")
+        import queue
+        logging.info("[TaskRunner] Shutting down worker thread")
+        self._shutdown_event.set()
+        # Wait for thread to finish
+        self._worker_thread.join(timeout=timeout_ms / 1000.0)
+        # Clear any remaining tasks in queue
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+                self._queue.task_done()
+            except queue.Empty:
+                break
+        logging.info("[TaskRunner] Shutdown complete")
 
 
 __all__ = ["TaskRunner", "ProgressReporter"]

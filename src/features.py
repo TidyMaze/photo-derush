@@ -169,7 +169,7 @@ def load_feature_cache() -> dict:
 
         # Skip expensive validation if cache is recent (< 1 hour old) and no key migration needed
         # This significantly speeds up cache loading for large caches
-        if cache_age < 3600 and not key_changed:
+        if cache_age < 3600 and not key_changed and not os.environ.get("PYTEST_CURRENT_TEST"):
             # Quick validation: only check structure, skip file existence/mtime checks
             valid = {}
             removed = 0
@@ -1550,7 +1550,7 @@ def batch_extract_features(paths: list[str], progress_callback=None) -> list[lis
         # duplicates without recomputing them).
         feats_by_apath: dict[str, list[float] | None] = {apath: feats for apath, feats in extracted}
 
-        # Process results and save cache incrementally
+        # Process results and update cache
         save_start = time.perf_counter()
         extracted_count = 0
         failed_count = 0
@@ -1562,13 +1562,15 @@ def batch_extract_features(paths: list[str], progress_callback=None) -> list[lis
                 if not is_cache_disabled():
                     feature_cache[apath] = feats
                 extracted_count += 1
-                # Save cache immediately after each extraction to prevent data loss
-                try:
-                    save_feature_cache(feature_cache)
-                except Exception as e:
-                    logging.warning(f"[features] Failed to save cache after extraction for {apath}: {e}")
             else:
                 failed_count += 1
+
+        # Save cache once after all extractions in the batch to optimize I/O
+        if extracted_count > 0 and not is_cache_disabled():
+            try:
+                save_feature_cache(feature_cache)
+            except Exception as e:
+                logging.warning(f"[features] Failed to save cache after batch extraction: {e}")
 
         save_time = time.perf_counter() - save_start
         logging.info(

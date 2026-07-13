@@ -179,3 +179,27 @@ class TestObjectDetection:
         # Verify class names match
         assert INTERESTING_CLASSES[1] == 'person'
         assert INTERESTING_CLASSES[3] == 'car'
+
+    def test_detect_objects_batch(self, temp_image_file, monkeypatch):
+        """Test batch object detection."""
+        from src.object_detection import detect_objects_batch
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        with patch('src.object_detection._load_model') as mock_load_model:
+            mock_model = MagicMock()
+            # It should return predictions list (one dict for each image)
+            mock_model.return_value = [
+                {
+                    "boxes": torch.tensor([[10., 10., 50., 50.]]),
+                    "labels": torch.tensor([0]), 
+                    "scores": torch.tensor([0.9])
+                }
+            ]
+            mock_load_model.return_value = (mock_model, None)
+
+            # Call detect_objects_batch
+            results = detect_objects_batch([temp_image_file])
+            assert len(results) == 1
+            base = os.path.basename(temp_image_file)
+            assert base in results
+            assert results[base][0]["class"] == "person"
+            assert results[base][0]["confidence"] == pytest.approx(0.9)

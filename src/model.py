@@ -23,9 +23,44 @@ class ImageModel:
         self.cache = cache or ThumbnailCache()
         self.allowed_exts = allowed_exts or [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"]
         self._repo = repo or RatingsTagsRepository()
-        # Metadata-only caches (small, in-memory)
-        self._exif_cache: dict[str, dict] = {}  # EXIF metadata dict per path (~1-5KB each)
+        # Metadata-only caches (persisted on disk)
+        self._exif_cache_path = os.path.join(".cache", "exif_cache.pkl")
+        self._exif_cache: dict[str, dict] = self._load_exif_cache()
         self._image_path_cache: dict[str, str] = {}  # Path strings (~100-200 bytes each)
+
+    def _load_exif_cache(self) -> dict[str, dict]:
+        """Load EXIF cache from disk if available."""
+        if os.environ.get("PYTEST_CURRENT_TEST") and self._exif_cache_path == os.path.join(".cache", "exif_cache.pkl"):
+            return {}
+        if not os.path.exists(self._exif_cache_path):
+            return {}
+        try:
+            import pickle
+            with open(self._exif_cache_path, "rb") as f:
+                data = pickle.load(f)
+            if isinstance(data, dict):
+                logging.info(f"Loaded {len(data)} cached EXIF entries from disk")
+                return data
+        except Exception as e:
+            logging.warning(f"Failed to load EXIF disk cache: {e}")
+        return {}
+
+    def save_exif_cache(self):
+        """Atomically save the EXIF cache to disk."""
+        if os.environ.get("PYTEST_CURRENT_TEST") and self._exif_cache_path == os.path.join(".cache", "exif_cache.pkl"):
+            return
+        if not self._exif_cache:
+            return
+        try:
+            os.makedirs(os.path.dirname(self._exif_cache_path), exist_ok=True)
+            import pickle
+            tmp_path = f"{self._exif_cache_path}.tmp"
+            with open(tmp_path, "wb") as f:
+                pickle.dump(self._exif_cache, f)
+            os.replace(tmp_path, self._exif_cache_path)
+            logging.info(f"Saved EXIF disk cache: {len(self._exif_cache)} entries")
+        except Exception as e:
+            logging.error(f"Failed to save EXIF disk cache: {e}")
 
     def set_allowed_exts(self, exts):
         is_valid_list = isinstance(exts, list) and all(isinstance(e, str) for e in exts)

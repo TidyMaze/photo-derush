@@ -57,11 +57,11 @@ def test_offscreen_overlays(tmp_path):
 
     assert saved, "No thumbnail images were saved during offscreen run"
 
-    # Quick pixel checks: ensure at least one saved PNG has non-transparent pixels
     def has_nontransparent(p: Path):
         im = Image.open(p).convert('RGBA')
-        px = im.getdata()
-        return any(a > 0 for (_, _, _, a) in px)
+        import numpy as np
+        arr = np.array(im)
+        return np.any(arr[:, :, 3] > 0)
 
     assert any(has_nontransparent(p) for p in saved), "All saved thumbnails are fully transparent"
 

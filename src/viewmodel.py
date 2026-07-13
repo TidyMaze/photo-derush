@@ -334,45 +334,58 @@ class PhotoViewModel(QObject):
                         # get_objects_for_images returns tuples without bboxes, so skip it
                         if reporter:
                             reporter.detail("detecting objects with bboxes")
-                        for idx, path in enumerate(to_process):
+                        # Filter to get only uncached paths that need actual detection
+                        uncached_paths = [p for p in to_process if os.path.basename(p) not in c]
+                        
+                        # Process cached paths first (instant)
+                        cached_count = 0
+                        for path in to_process:
                             base = os.path.basename(path)
-                            # Check cache again (might have been added by another thread or already cached)
                             if base in c:
-                                # Use cached result
                                 self._detected_objects[base] = c[base]
-                                self.object_detection_ready.emit(base)
-                                if reporter:
-                                    reporter.update(idx + 1, len(to_process))
-                                    reporter.detail(f"cached {base}")
-                                continue
-                            
-                            dets = []
-                            # Prefer full detections (with bbox) by calling detect_objects
-                            # This runs in the background task so it's acceptable to call
-                            # the potentially heavy detection routine here. It ensures
-                            # the cache contains bounding-box coordinates for UI overlay.
-                            dets = object_detection.detect_objects(path)
-                            # Model is now loaded - refresh UI state to show actual device/model
-                            # (The _emit_state_snapshot() at end of task will update UI with actual values)
-                            # Ensure all dict entries are canonical via sanitizer
-                            new_dets = []
-                            for d in dets:
-                                new_dets.append(object_detection.sanitize_detection(d))
-                            c[base] = new_dets
-                            self._detected_objects[base] = new_dets
-                            self.object_detection_ready.emit(base)
-                            
-                            # Save cache after each detection to prevent data loss
-                            # (but batch saves to reduce I/O - save every 10 images or at end)
-                            try:
-                                if (idx + 1) % 10 == 0 or idx == len(to_process) - 1:
+                                cached_count += 1
+                                # OPTIMIZATION: Do not emit object_detection_ready per cached item,
+                                # and throttle reporter updates to avoid event queue flooding.
+                                if reporter and cached_count % 100 == 0:
+                                    reporter.update(cached_count, len(to_process))
+                                    reporter.detail(f"loaded cached detections: {cached_count}/{len(to_process)}")
+
+                        # Final update for cached items
+                        if reporter and cached_count > 0:
+                            reporter.update(cached_count, len(to_process))
+                            reporter.detail(f"loaded cached detections: {cached_count}/{len(to_process)}")
+
+                        if uncached_paths:
+                            batch_size = 8
+                            for i in range(0, len(uncached_paths), batch_size):
+                                chunk = uncached_paths[i : i + batch_size]
+                                
+                                # Run batch detection
+                                try:
+                                    batch_results = object_detection.detect_objects_batch(chunk)
+                                except Exception as e:
+                                    logging.warning(f"Batch detection failed for chunk: {chunk}: {e}")
+                                    batch_results = {os.path.basename(p): [] for p in chunk}
+
+                                for path in chunk:
+                                    base = os.path.basename(path)
+                                    dets = batch_results.get(base, [])
+                                    new_dets = [object_detection.sanitize_detection(d) for d in dets]
+                                    
+                                    c[base] = new_dets
+                                    self._detected_objects[base] = new_dets
+                                    self.object_detection_ready.emit(base)
+                                
+                                # Save cache after each batch to prevent data loss
+                                try:
                                     object_detection.save_object_cache(c)
-                            except Exception as e:
-                                logging.warning(f"Failed to save cache after detection for {base}: {e}")
-                            
-                            if reporter:
-                                reporter.update(idx + 1, len(to_process))
-                                reporter.detail(f"detected {base}")
+                                except Exception as e:
+                                    logging.warning(f"Failed to save cache after batch detection: {e}")
+                                
+                                if reporter:
+                                    current_done = cached_count + min(i + batch_size, len(uncached_paths))
+                                    reporter.update(current_done, len(to_process))
+                                    reporter.detail(f"detected batch {i // batch_size + 1}/{(len(uncached_paths) + batch_size - 1) // batch_size}")
 
                         try:
                             # Final save to ensure all detections are persisted
@@ -962,6 +975,11 @@ class PhotoViewModel(QObject):
                                 except Exception as e:
                                     logging.debug(f"[viewmodel] EXIF pre-load error (non-fatal): {e}")
                         logging.info(f"[viewmodel] EXIF pre-loading completed for {len(image_paths)} images")
+                        try:
+                            if hasattr(self, "model") and self.model:
+                                self.model.save_exif_cache()
+                        except Exception as e:
+                            logging.warning(f"[viewmodel] Failed to save EXIF cache after preloading: {e}")
                         # Signal that pre-loading is complete
                         self._exif_preload_complete = True
                         # Start grouping now that EXIF is pre-loaded
@@ -1030,17 +1048,15 @@ class PhotoViewModel(QObject):
             self._auto.ensure_initial_labels()
 
         self.progress_changed.emit(self._progress_total, self._progress_total)
-
     def _process_next_batch(self, batch_size=20):
         if self._load_index >= len(self._files_to_load):
             self._finalize_image_loading()
             return
 
         # Scale batch size dynamically for larger folders to speed up loading
+        # OPTIMIZATION: Limit max batch size to 100 to prevent UI freezing (500 is too large)
         total = len(self._files_to_load)
-        if total > 5000:
-            batch_size = 500
-        elif total > 1000:
+        if total > 1000:
             batch_size = 100
 
         end_index = min(self._load_index + batch_size, total)
@@ -1048,17 +1064,21 @@ class PhotoViewModel(QObject):
             filename = self._files_to_load[idx]
             self.images.append(filename)
             self.image_added.emit(filename, idx)
-            self._progress_current = idx + 1
-            self.progress_changed.emit(self._progress_current, self._progress_total)
-            self.task_progress.emit("load-images", idx + 1, self._progress_total, filename)
+
+        self._progress_current = end_index
+        # Emit progress once per batch to avoid event queue flooding
+        self.progress_changed.emit(self._progress_current, self._progress_total)
+        if end_index > 0:
+            last_file = self._files_to_load[end_index - 1]
+            self.task_progress.emit("load-images", self._progress_current, self._progress_total, last_file)
 
         self._load_index = end_index
         # Optimization: Skip redundant _apply_filters() during incremental loading batches.
         # It is called once at finalization (_finalize_image_loading) which is enough.
         from PySide6.QtCore import QTimer
 
-        QTimer.singleShot(0, self._process_next_batch)
-
+        # OPTIMIZATION: Use 10ms delay to allow GUI events (clicks, scrolls) to be handled
+        QTimer.singleShot(10, self._process_next_batch)
     def _finalize_image_loading(self):
         self._apply_filters()
         # Wait for EXIF pre-loading to complete before starting grouping
@@ -1246,6 +1266,13 @@ class PhotoViewModel(QObject):
         except Exception as e:
             logging.warning(f"Error stopping TaskRunner: {e}")
         
+        # Save EXIF cache
+        try:
+            if hasattr(self, "model") and self.model:
+                self.model.save_exif_cache()
+        except Exception as e:
+            logging.warning(f"Error saving EXIF cache on cleanup: {e}")
+
         # Terminate multiprocessing pools
         try:
             from src.features import _cleanup_pools
