@@ -438,7 +438,9 @@ class PhotoViewModel(QObject):
                                 if rep_base and rep_base in c and base not in c:
                                     c[base] = c[rep_base]
                                     self._detected_objects[base] = c[rep_base]
-                                    self.object_detection_ready.emit(base)
+                                    # OPTIMIZATION: Do not emit object_detection_ready for propagated near-duplicates
+                                    # inside the loop to avoid flooding the Qt event queue.
+                                    # The final _emit_state_snapshot_immediate() at the end will refresh the entire view.
 
                         try:
                             # Final save to ensure all detections are persisted

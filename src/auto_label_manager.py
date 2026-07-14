@@ -1108,7 +1108,7 @@ class AutoLabelManager:
 
                 if changed:
                     logging.info(f"[refresh_auto_labels] Updated {changed} auto-labeled images after retrain")
-                    if self.callbacks.on_label_changed:
+                    if self.callbacks.on_label_changed and len(changed_files) <= 5:
                         for fname, old_label, new_label in changed_files:
                             try:
                                 self.callbacks.on_label_changed(fname, new_label)
@@ -1117,7 +1117,7 @@ class AutoLabelManager:
 
                 if removed:
                     logging.info(f"[refresh_auto_labels] Removed {removed} auto-labels (predictions below threshold)")
-                    if self.callbacks.on_label_changed:
+                    if self.callbacks.on_label_changed and len(removed_files) <= 5:
                         for fname, old_label in removed_files:
                             try:
                                 self.callbacks.on_label_changed(fname, "")
@@ -1157,7 +1157,7 @@ class AutoLabelManager:
 
             if changed:
                 logging.info(f"[refresh_auto_labels] Updated {changed} auto-labeled images after retrain")
-                if self.callbacks.on_label_changed:
+                if self.callbacks.on_label_changed and len(changed_files) <= 5:
                     for fname, old_label, new_label in changed_files:
                         try:
                             self.callbacks.on_label_changed(fname, new_label)
@@ -1166,7 +1166,7 @@ class AutoLabelManager:
 
             if removed:
                 logging.info(f"[refresh_auto_labels] Removed {removed} auto-labels (predictions below threshold)")
-                if self.callbacks.on_label_changed:
+                if self.callbacks.on_label_changed and len(removed_files) <= 5:
                     for fname, old_label in removed_files:
                         try:
                             self.callbacks.on_label_changed(fname, "")

@@ -325,6 +325,23 @@ class PhotoView(QMainWindow):
         # Unified progress bar for all operations (image loading, training, etc.)
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #3c3c3c;
+                border-radius: 4px;
+                background-color: #252525;
+                text-align: center;
+                color: #e0e0e0;
+                font-weight: bold;
+                font-size: 10px;
+                height: 18px;
+            }
+            QProgressBar::chunk {
+                background-color: #3b82f6; /* Modern sleek accent blue */
+                border-radius: 3px;
+            }
+        """)
         self.left_layout.addWidget(self.progress_bar)
         self.progress_bar.hide()
 
@@ -3298,7 +3315,8 @@ class PhotoView(QMainWindow):
         
         # Discard update if the task has already finished
         name = self._progress_update_pending["name"]
-        if not hasattr(self, "_active_tasks") or name not in self._active_tasks:
+        task_key = "load-images" if name == "Loading images" else name
+        if not hasattr(self, "_active_tasks") or task_key not in self._active_tasks:
             self._progress_update_pending = {}
             return
 
