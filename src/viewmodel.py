@@ -1627,8 +1627,6 @@ class PhotoViewModel(QObject):
         self._label = self.model.get_state(path) or None
         self.rating_changed.emit(self._rating)
         self.tags_changed.emit(self._tags)
-        if self._label:
-            self.label_changed.emit(filename, self._label)
 
     def _apply_pending_label_changes(self):
         pending = dict(self._pending_label_changes)
