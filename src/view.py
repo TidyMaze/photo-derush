@@ -1510,10 +1510,13 @@ class PhotoView(QMainWindow):
         )
         label.installEventFilter(self)
 
-        def _dbl(e, f=filename):
+        def _dbl(e, l=label):
             if e.type() == QEvent.Type.MouseButtonDblClick:  # type: ignore[attr-defined]
-                # Double-click disabled - focus on labeling workflow
-                pass
+                path = l.toolTip()
+                if path:
+                    from PySide6.QtCore import QUrl
+                    from PySide6.QtGui import QDesktopServices
+                    QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
         label.mouseDoubleClickEvent = _dbl
 
@@ -3536,28 +3539,30 @@ class PhotoView(QMainWindow):
             logging.info(f"[view] Browser state updated: {len(group_info)} photos with group_info, {group_count} groups, {best_count} best picks, {multi_photo_groups} photos in multi-photo groups")
         if detected_objects:
             logging.info(f"[view] Browser state updated: {len(detected_objects)} photos with detected_objects")
-        # Always trigger badge refresh when state changes (to show groups, bboxes, badges)
-        self._refresh_thumbnail_badges()
         pred_probs = getattr(state, "predicted_probabilities", {})
         pred_labels = getattr(state, "predicted_labels", {})
         detected_objects = getattr(state, "detected_objects", {})
         filtered_images = getattr(state, "filtered_images", None)
 
-        # Force relayout when predictions are complete to ensure final sorted order is applied
-        # This handles the case where initial relayout happened before predictions,
-        # so we need to re-layout with the final uncertainty-based sort
+        # Force relayout when predictions are complete to ensure final sorted order is applied.
+        # Only do this once to avoid blink on every state snapshot.
         if filtered_images and len(pred_probs) > 0:
             total_images = len(filtered_images)
             predictions_complete = len(pred_probs) >= total_images * 0.9  # 90% have predictions
 
-            # Track if we've already forced a relayout for this prediction completion
             if not hasattr(self, "_predictions_complete_relayout_forced"):
                 self._predictions_complete_relayout_forced = False
 
             if predictions_complete and not self._predictions_complete_relayout_forced:
-                # Reset last order to force relayout with final sorted order
                 self._last_filtered_images_order = None
-                self._predictions_complete_relayout_forced = True  # Only force once
+                self._predictions_complete_relayout_forced = True
+
+        # Only trigger badge refresh when predictions or labels actually changed.
+        new_pred_sig = (frozenset(pred_probs.items()) if pred_probs else frozenset(),
+                        frozenset(getattr(state, "predicted_labels", {}).items()))
+        if not hasattr(self, "_last_pred_sig") or self._last_pred_sig != new_pred_sig:
+            self._last_pred_sig = new_pred_sig
+            self._refresh_thumbnail_badges()
 
         # Auto-select image with most bounding boxes for testing
         if detected_objects and not hasattr(self, "_auto_selected_most_boxes"):
