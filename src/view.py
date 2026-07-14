@@ -1440,6 +1440,9 @@ class PhotoView(QMainWindow):
             # logging.info(f"[GRID] Final grid state: {len(self.label_refs)} positions, {len(set(self.label_refs.values()))} unique labels. Positions: {', '.join(grid_summary[:9])}")
         finally:
             self.grid_widget.setUpdatesEnabled(True)
+            # Restore selection highlight after any grid rebuild (widgets were hidden
+            # and re-added, which wipes their stylesheet state).
+            self._update_all_highlights()
 
     def _on_image_added(self, filename, idx):
         # Calculate columns dynamically based on available width
@@ -3580,6 +3583,11 @@ class PhotoView(QMainWindow):
 
         # Update grid visibility based on filtered images
         if filtered_images is not None:
+            new_visible_set = frozenset(filtered_images)
+            last_visible_set = getattr(self, "_last_visible_set", None)
+            visible_set_changed = last_visible_set != new_visible_set
+            self._last_visible_set = new_visible_set
+
             filtered_set = set(filtered_images)
             logging.debug(f"[view] Updating grid visibility: {len(filtered_images)} filtered images out of {len(self.label_refs)} total")
             visible_count = 0
@@ -3592,17 +3600,18 @@ class PhotoView(QMainWindow):
                     if should_show:
                         visible_count += 1
             logging.debug(f"[view] Made {visible_count} thumbnails visible, {len(self.label_refs) - visible_count} hidden")
-            # Only force relayout if visibility actually changed (not on every state update)
-            # Debounce relayout to avoid excessive calls
-            if not hasattr(self, "_visibility_relayout_timer"):
-                from PySide6.QtCore import QTimer
-                self._visibility_relayout_timer = QTimer()
-                self._visibility_relayout_timer.setSingleShot(True)
-                self._visibility_relayout_timer.timeout.connect(lambda: self._relayout_grid())
-            # Use throttle instead of debounce: only start if not already running
-            # to prevent starvation during rapid consecutive state updates.
-            if not self._visibility_relayout_timer.isActive():
-                self._visibility_relayout_timer.start(200)
+
+            # Only relayout when the visible SET changes (items added/removed).
+            # Sort-order-only changes are handled by _relayout_grid's own skip logic
+            # and do NOT cause a full rebuild here, eliminating post-retrain blinks.
+            if visible_set_changed:
+                if not hasattr(self, "_visibility_relayout_timer"):
+                    from PySide6.QtCore import QTimer
+                    self._visibility_relayout_timer = QTimer()
+                    self._visibility_relayout_timer.setSingleShot(True)
+                    self._visibility_relayout_timer.timeout.connect(lambda: self._relayout_grid())
+                if not self._visibility_relayout_timer.isActive():
+                    self._visibility_relayout_timer.start(200)
 
         # Refresh label badges on all thumbnails since labels may have changed
         # This ensures all thumbnails show updated predictions after retraining
