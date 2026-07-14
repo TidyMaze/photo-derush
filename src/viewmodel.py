@@ -338,8 +338,52 @@ class PhotoViewModel(QObject):
                         if reporter:
                             reporter.detail("detecting objects with bboxes")
                         # Filter to get only uncached paths that need actual detection
-                        uncached_paths = [p for p in to_process if os.path.basename(p) not in c]
+                        uncached_bases = {os.path.basename(p) for p in to_process if os.path.basename(p) not in c}
                         
+                        # Build group representative mapping: group_id -> representative_basename
+                        group_rep: dict[int, str] = {}
+                        filename_to_group_id: dict[str, int] = {}
+                        if self._group_info:
+                            for fname, info in self._group_info.items():
+                                group_id = info.get("group_id")
+                                is_best = info.get("is_group_best", False)
+                                if group_id is not None:
+                                    filename_to_group_id[fname] = group_id
+                                    if is_best:
+                                        p_candidate = self.model.get_image_path(fname) or os.path.join(self.model.directory, fname)
+                                        group_rep[group_id] = os.path.basename(p_candidate)
+
+                        # Representative bases that we actually need to run YOLOv8 on
+                        reps_to_detect: set[str] = set()
+                        for base in uncached_bases:
+                            fname_match = None
+                            for fname in self.images:
+                                if self._image_basename_cache.get(fname) == base:
+                                    fname_match = fname
+                                    break
+                            
+                            group_id = filename_to_group_id.get(fname_match) if fname_match else None
+                            rep_base = group_rep.get(group_id) if group_id is not None else None
+                            
+                            if rep_base:
+                                if rep_base not in c:
+                                    reps_to_detect.add(rep_base)
+                            else:
+                                reps_to_detect.add(base)
+                                
+                        # Build final uncached_paths list of full paths for representatives
+                        uncached_paths = []
+                        path_by_base = {os.path.basename(p): p for p in to_process}
+                        for base in reps_to_detect:
+                            path = path_by_base.get(base)
+                            if not path:
+                                for fname in self.images:
+                                    if self._image_basename_cache.get(fname) == base:
+                                        path = self.model.get_image_path(fname) or os.path.join(self.model.directory, fname)
+                                        break
+                            if path:
+                                uncached_paths.append(path)
+
                         # Process cached paths first (instant)
                         cached_count = 0
                         for path in to_process:
@@ -379,16 +423,22 @@ class PhotoViewModel(QObject):
                                     self._detected_objects[base] = new_dets
                                     self.object_detection_ready.emit(base)
                                 
-                                # Save cache after each batch to prevent data loss
-                                try:
-                                    object_detection.save_object_cache(c)
-                                except Exception as e:
-                                    logging.warning(f"Failed to save cache after batch detection: {e}")
-                                
                                 if reporter:
                                     current_done = cached_count + min(i + batch_size, len(uncached_paths))
                                     reporter.update(current_done, len(to_process))
                                     reporter.detail(f"detected batch {i // batch_size + 1}/{(len(uncached_paths) + batch_size - 1) // batch_size}")
+
+                        # Propagate detections to all images in each group
+                        if self._group_info:
+                            for fname in self.images:
+                                base = self._image_basename_cache.get(fname)
+                                group_id = filename_to_group_id.get(fname)
+                                rep_base = group_rep.get(group_id) if group_id is not None else None
+                                
+                                if rep_base and rep_base in c and base not in c:
+                                    c[base] = c[rep_base]
+                                    self._detected_objects[base] = c[rep_base]
+                                    self.object_detection_ready.emit(base)
 
                         try:
                             # Final save to ensure all detections are persisted

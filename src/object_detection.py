@@ -674,7 +674,7 @@ def detect_objects(
         if current_max != config.max_size:
             ratio = config.max_size / float(current_max)
             new_size = (max(1, int(image.size[0] * ratio)), max(1, int(image.size[1] * ratio)))
-            image = image.resize(new_size, Image.Resampling.LANCZOS)
+            image = image.resize(new_size, Image.Resampling.BILINEAR)
 
     # Record detection input size (after potential resize)
     det_w, det_h = image.size
@@ -886,7 +886,7 @@ def detect_objects_batch(
                     if current_max != config.max_size:
                         ratio = config.max_size / float(current_max)
                         new_size = (max(1, int(image.size[0] * ratio)), max(1, int(image.size[1] * ratio)))
-                        image = image.resize(new_size, Image.Resampling.LANCZOS)
+                        image = image.resize(new_size, Image.Resampling.BILINEAR)
                 
                 original_sizes[path] = image.size
                 images_to_run.append(image)
