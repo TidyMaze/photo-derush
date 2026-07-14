@@ -1439,10 +1439,11 @@ class PhotoView(QMainWindow):
             #     grid_summary.append(f"({r},{c})={fn}")
             # logging.info(f"[GRID] Final grid state: {len(self.label_refs)} positions, {len(set(self.label_refs.values()))} unique labels. Positions: {', '.join(grid_summary[:9])}")
         finally:
-            self.grid_widget.setUpdatesEnabled(True)
-            # Restore selection highlight after any grid rebuild (widgets were hidden
-            # and re-added, which wipes their stylesheet state).
+            # Restore selection highlight BEFORE re-enabling updates so the
+            # stylesheet changes are batched into the single repaint, not a
+            # separate second one (which causes a visible double-blink).
             self._update_all_highlights()
+            self.grid_widget.setUpdatesEnabled(True)
 
     def _on_image_added(self, filename, idx):
         # Calculate columns dynamically based on available width
