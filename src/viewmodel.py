@@ -87,6 +87,7 @@ class PhotoViewModel(QObject):
         self._grouping_computed = False
         # OPTIMIZATION: Cache timestamp lookups (15,366 calls -> cached)
         self._timestamp_cache: dict[str, datetime] = {}
+        self._is_loading = False
 
         import threading
         self._retrain_lock = threading.Lock()
@@ -209,6 +210,8 @@ class PhotoViewModel(QObject):
         # The initial UI snapshot is emitted elsewhere after initialization.
     def _load_object_detections(self):
         """Load object detections for current images."""
+        if getattr(self, "_is_loading", False):
+            return
         if getattr(self, "_loading_detections", False):
             return
         if not self.images:
@@ -422,21 +425,23 @@ class PhotoViewModel(QObject):
                         # This allows the model to learn from all new detection features at once
                         # Only trigger once - use a flag to prevent multiple triggers
                         if not getattr(self, "_detection_retrain_triggered", False):
-                            if self._auto:
-                                logging.info("[viewmodel] Scheduling retrain after detection task completes")
-                                self._auto.schedule_retrain()
-                                self._detection_retrain_triggered = True
+                            if not getattr(self, "_is_loading", False):
+                                if self._auto:
+                                    logging.info("[viewmodel] Scheduling retrain after detection task completes")
+                                    self._auto.schedule_retrain()
+                                    self._detection_retrain_triggered = True
                         else:
                             logging.warning("[viewmodel] _auto is None, cannot schedule retrain after detection")
                         # Start pending predictions if they were waiting
                         if self._pending_predictions:
-                            logging.info("[viewmodel] Starting pending predictions after object detection completes")
-                            self._pending_predictions = False
-                            if self._auto:
-                                logging.info("[viewmodel] Calling update_predictions_async()")
-                                self._auto.update_predictions_async()
-                            else:
-                                logging.warning("[viewmodel] _auto is None, cannot start predictions")
+                            if not getattr(self, "_is_loading", False):
+                                logging.info("[viewmodel] Starting pending predictions after object detection completes")
+                                self._pending_predictions = False
+                                if self._auto:
+                                    logging.info("[viewmodel] Calling update_predictions_async()")
+                                    self._auto.update_predictions_async()
+                                else:
+                                    logging.warning("[viewmodel] _auto is None, cannot start predictions")
 
                 # run detection in background task runner
                 try:
@@ -1013,6 +1018,7 @@ class PhotoViewModel(QObject):
         self.task_started.emit("load-images")
         self._files_to_load = files
         self._load_index = 0
+        self._is_loading = True
         self._process_next_batch()
 
     def _is_headless(self) -> bool:
@@ -1053,6 +1059,9 @@ class PhotoViewModel(QObject):
             self._finalize_image_loading()
             return
 
+        import time
+        t0 = time.perf_counter()
+
         # Scale batch size dynamically for larger folders to speed up loading
         # OPTIMIZATION: Limit max batch size to 100 to prevent UI freezing (500 is too large)
         total = len(self._files_to_load)
@@ -1077,10 +1086,15 @@ class PhotoViewModel(QObject):
         # It is called once at finalization (_finalize_image_loading) which is enough.
         from PySide6.QtCore import QTimer
 
+        duration = time.perf_counter() - t0
+        logging.info(f"[viewmodel] Processed loading batch: {self._load_index}/{total} in {duration:.3f}s ({(duration / batch_size) * 1000:.1f}ms per image)")
+
         # OPTIMIZATION: Use 10ms delay to allow GUI events (clicks, scrolls) to be handled
         QTimer.singleShot(10, self._process_next_batch)
     def _finalize_image_loading(self):
+        self._is_loading = False
         self._apply_filters()
+        
         # Wait for EXIF pre-loading to complete before starting grouping
         # This improves cache hit rate from ~79% to ~95%+
         if hasattr(self, '_exif_preload_complete') and not self._exif_preload_complete:
@@ -1108,6 +1122,9 @@ class PhotoViewModel(QObject):
         self._emit_state_snapshot()
 
         if getattr(self, "_auto_label_enabled", False) or (self._auto and self._auto.enabled):
+            if self._auto:
+                logging.info("[viewmodel] Scheduling initial retrain at finalization")
+                self._auto.schedule_retrain()
             self._auto.auto_label_unlabeled_async()
 
         # Wait for object detection to complete before starting predictions

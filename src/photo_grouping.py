@@ -178,8 +178,14 @@ def _add_edges_lsh(
     num_segments = 4
     segment_size = hash_bits // num_segments  # 16 bits per segment
     
-    # Build LSH index: segment_index -> segment_value -> list of (filename, hash_obj)
-    lsh_index: dict[int, dict[int, list[tuple[str, imagehash.ImageHash]]]] = {}
+    # Pre-map filenames to their indices for O(1) integer key generation
+    filename_to_idx = {fname: idx for idx, fname in enumerate(filenames)}
+    
+    # Pre-compute integer values of hashes to speed up bitwise popcount comparison
+    filename_to_hash_int: dict[str, int] = {}
+    
+    # Build LSH index: segment_index -> segment_value -> list of (filename, hash_int)
+    lsh_index: dict[int, dict[int, list[tuple[str, int]]]] = {}
     for idx in range(num_segments):
         lsh_index[idx] = {}
     
@@ -190,6 +196,7 @@ def _add_edges_lsh(
         
         try:
             hash_int = int(str(hash_obj), 16)  # Convert to integer
+            filename_to_hash_int[fname] = hash_int
             
             for seg_idx in range(num_segments):
                 # Extract segment (16 bits)
@@ -200,53 +207,43 @@ def _add_edges_lsh(
                 # Add to index
                 if segment_value not in lsh_index[seg_idx]:
                     lsh_index[seg_idx][segment_value] = []
-                lsh_index[seg_idx][segment_value].append((fname, hash_obj))
+                lsh_index[seg_idx][segment_value].append((fname, hash_int))
         except (ValueError, AttributeError):
             # Skip invalid hashes
             continue
     
-    # Build graph using LSH (only compare within same buckets)
-    compared_pairs = set()  # Track comparisons to avoid duplicates
+    # Build graph using LSH by comparing within buckets directly
+    compared_pairs = set()  # Track comparisons using integer keys: (idx1 << 32) | idx2
     comparisons_made = 0
     
-    for fname1, hash1 in filename_to_hash_obj.items():
-        if hash1 is None:
-            continue
-        
-        # Find candidate matches using LSH
-        candidates = set()
-        
-        try:
-            hash1_int = int(str(hash1), 16)
-            
-            # Check each segment - if any segment matches, add to candidates
-            for seg_idx in range(num_segments):
-                shift = seg_idx * segment_size
-                mask = (1 << segment_size) - 1
-                segment_value = (hash1_int >> shift) & mask
-                
-                # Get all hashes in this bucket
-                bucket = lsh_index[seg_idx].get(segment_value, [])
-                for fname2, hash2 in bucket:
-                    if fname2 != fname1:
-                        candidates.add((fname2, hash2))
-        except (ValueError, AttributeError):
-            continue
-        
-        # Compare only with candidates (much smaller set)
-        for fname2, hash2 in candidates:
-            # Avoid duplicate comparisons
-            pair = tuple(sorted([fname1, fname2]))
-            if pair in compared_pairs:
+    for seg_idx in range(num_segments):
+        for segment_value, bucket in lsh_index[seg_idx].items():
+            if len(bucket) < 2:
                 continue
-            compared_pairs.add(pair)
             
-            comparisons_made += 1
-            try:
-                if hash1 - hash2 <= hamming_threshold:
-                    G.add_edge(fname1, fname2)
-            except (ValueError, TypeError):
-                continue
+            # Compare all pairs in this bucket
+            for i in range(len(bucket)):
+                fname1, val1 = bucket[i]
+                idx1 = filename_to_idx[fname1]
+                for j in range(i + 1, len(bucket)):
+                    fname2, val2 = bucket[j]
+                    idx2 = filename_to_idx[fname2]
+                    
+                    # Ensure idx1 < idx2
+                    if idx1 > idx2:
+                        pair_key = (idx2 << 32) | idx1
+                    else:
+                        pair_key = (idx1 << 32) | idx2
+                    
+                    if pair_key in compared_pairs:
+                        continue
+                    compared_pairs.add(pair_key)
+                    
+                    comparisons_made += 1
+                    # Compute popcount of bitwise XOR (6x faster than ImageHash subtraction)
+                    dist = bin(val1 ^ val2).count('1')
+                    if dist <= hamming_threshold:
+                        G.add_edge(fname1, fname2)
     
     naive_comparisons = len(filenames) * (len(filenames) - 1) // 2
     reduction_pct = (1 - comparisons_made / naive_comparisons) * 100 if naive_comparisons > 0 else 0

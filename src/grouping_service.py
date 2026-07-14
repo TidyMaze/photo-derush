@@ -228,6 +228,8 @@ def compute_grouping_for_photos(
     # OPTIMIZATION: Pre-compute all hashes in parallel for better performance
     # This helps when cache is cold or partially warm
     sorted_filenames_for_grouping = [p.filename for p in photos]
+    filename_to_hash_dict = {}
+    
     if len(sorted_filenames_for_grouping) > 50:  # Only parallelize for larger datasets
         from concurrent.futures import ThreadPoolExecutor
         import os as os_module
@@ -239,8 +241,13 @@ def compute_grouping_for_photos(
         logging.info(f"[grouping_service] Computing {len(sorted_filenames_for_grouping)} hashes in parallel...")
         with ThreadPoolExecutor(max_workers=min(4, os_module.cpu_count() or 2)) as executor:
             # Pre-compute all hashes in parallel
-            list(executor.map(compute_hash_parallel, sorted_filenames_for_grouping))
+            results = list(executor.map(compute_hash_parallel, sorted_filenames_for_grouping))
+            for fname, h_str in results:
+                filename_to_hash_dict[fname] = h_str
         logging.info(f"[grouping_service] Hash computation complete (cache hits: {cache_hits}, misses: {cache_misses})")
+    else:
+        for filename in sorted_filenames_for_grouping:
+            filename_to_hash_dict[filename] = hash_fn(filename)
 
     # Save cache after all hashes are computed
     hash_cache.save()
@@ -253,9 +260,11 @@ def compute_grouping_for_photos(
         # Use sorted filenames to match the order of photos, sessions, bursts
         sorted_filenames_for_grouping = [p.filename for p in photos]
         # Pass image_dir and hash_cache to group_near_duplicates for cache access
+        # Pass fast O(1) in-memory lookup to avoid redundant os.stat calls
+        fast_hash_fn = lambda fname: filename_to_hash_dict.get(fname)
         groups = group_near_duplicates(
             sorted_filenames_for_grouping,  # Use sorted order to match photos/sessions/bursts
-            hash_fn,
+            fast_hash_fn,
             hamming_threshold=phash_threshold,
             progress_reporter=progress_reporter,
             image_dir=image_dir,  # For cache key generation
@@ -455,4 +464,3 @@ def compute_grouping_for_photos(
     if grouping_elapsed > 60:
         logging.warning(f"[grouping_service] ⚠️  Grouping took {grouping_elapsed:.2f}s (exceeds 60s limit)")
     return result
-

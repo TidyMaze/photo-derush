@@ -1518,17 +1518,6 @@ class PhotoView(QMainWindow):
             if existing_label != label:
                 logging.error(f"[DUPLICATE] Filename {filename} already in grid at different position! Existing label: {existing_label}, New label: {label}, row={row}, col={col}")
 
-        # Check if this label is already used for a different filename (would cause duplicate images)
-        for existing_filename, existing_label in self._all_widgets.items():
-            if existing_label == label and existing_filename != filename:
-                logging.error(f"[DUPLICATE] Label {id(label)} already used for {existing_filename}, now being reused for {filename} at ({row}, {col})! This will cause duplicate images. Removing from grid.")
-                # Remove label from grid layout to prevent duplicate display
-                self.grid_layout.removeWidget(label)
-                if (row, col) in self.label_refs:
-                    del self.label_refs[(row, col)]
-                label.hide()
-                return  # Don't add duplicate label
-
         self._all_widgets[filename] = label  # Track all widgets by filename
         # Removed frequent logging.info - called for every image (performance optimization)
         # logging.info(f"[GRID] Added image {filename} at position ({row}, {col}), label_id={id(label)}")

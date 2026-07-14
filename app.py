@@ -161,20 +161,8 @@ def main():
         # Initialize feature cache after QApplication to avoid heavy work before GUI ready
         safe_initialize_feature_cache()
         
-        # OPTIMIZATION: Pre-load YOLOv8 model in background thread to avoid 204s delay on first detection
-        def preload_model():
-            try:
-                from src.object_detection import _load_model
-                logging.info("[OPTIMIZATION] Pre-loading YOLOv8 model in background...")
-                _load_model("auto")
-                logging.info("[OPTIMIZATION] YOLOv8 model pre-loaded successfully")
-            except Exception as e:
-                logging.warning(f"[OPTIMIZATION] Failed to pre-load YOLOv8 model: {e}")
-        
-        # Pre-load model in background thread (non-blocking)
-        import threading
-        model_preload_thread = threading.Thread(target=preload_model, daemon=True)
-        model_preload_thread.start()
+        # Note: YOLO model pre-loading has been moved to finalize_image_loading in PhotoViewModel
+        # to prevent thread/GIL contention during the initial image loading phase.
 
         # Install SIGINT and SIGTERM handlers for clean shutdown
         def _handle_signal(signum, frame):
