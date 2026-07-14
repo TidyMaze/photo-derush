@@ -1308,25 +1308,6 @@ class PhotoView(QMainWindow):
         if hasattr(self.viewmodel, 'current_filtered_images'):
             filtered_images = list(self.viewmodel.current_filtered_images())
 
-        # Optimization: Skip relayout if column count hasn't changed AND widgets are already in layout
-        # AND filtered_images order hasn't changed (sort order is the same)
-        # BUT: Always run if widgets exist but aren't in layout (label_refs empty but _all_widgets not empty)
-        widgets_in_layout = len(self.label_refs) > 0
-        # Compare as tuples to handle list vs tuple comparison
-        filtered_images_tuple = tuple(filtered_images) if filtered_images else None
-        # Order changed if: (1) last order is None (first time), OR (2) last order exists and is different
-        filtered_order_changed = (self._last_filtered_images_order is None or
-                                   filtered_images_tuple != self._last_filtered_images_order)
-        # Skip ONLY if: column count unchanged AND widgets in layout AND order hasn't changed
-        if (self._last_cols_per_row == cols_per_row and
-            self._last_cols_per_row is not None and
-            widgets_in_layout and
-            not filtered_order_changed):
-            return
-        self._last_cols_per_row = cols_per_row
-        # Store filtered_images order to detect sort changes (already retrieved above)
-        self._last_filtered_images_order = filtered_images_tuple
-
         # Collect widgets that should be visible based on filtered_images
         # CRITICAL: Iterate filtered_images in order to preserve uncertainty-based sorting
         items = []
@@ -1349,8 +1330,6 @@ class PhotoView(QMainWindow):
             # This ensures images are displayed even if filters haven't been applied yet
             # CRITICAL: Deduplicate - same label might be stored under multiple filenames (bug)
             label_to_first_filename = {}  # Track which filename each label was first seen under
-            # Removed frequent logging.info - called on every relayout (performance optimization)
-            # logging.info(f"[GRID] Collecting items from _all_widgets (has {len(self._all_widgets)} entries)")
             for filename, label in self._all_widgets.items():
                 if label in seen_labels:
                     first_filename = label_to_first_filename.get(label, "unknown")
@@ -1359,6 +1338,25 @@ class PhotoView(QMainWindow):
                 seen_labels.add(label)
                 label_to_first_filename[label] = filename
                 items.append(label)
+
+        # Optimization: Skip relayout if column count hasn't changed AND widgets are already in layout
+        # AND filtered_images order hasn't changed (sort order is the same)
+        # BUT: Always run if widgets count in layout does not match items count
+        widgets_in_layout = len(self.label_refs) == len(items) and len(items) > 0
+        # Compare as tuples to handle list vs tuple comparison
+        filtered_images_tuple = tuple(filtered_images) if filtered_images else None
+        # Order changed if: (1) last order is None (first time), OR (2) last order exists and is different
+        filtered_order_changed = (self._last_filtered_images_order is None or
+                                   filtered_images_tuple != self._last_filtered_images_order)
+        # Skip ONLY if: column count unchanged AND widgets in layout AND order hasn't changed
+        if (self._last_cols_per_row == cols_per_row and
+            self._last_cols_per_row is not None and
+            widgets_in_layout and
+            not filtered_order_changed):
+            return
+        self._last_cols_per_row = cols_per_row
+        # Store filtered_images order to detect sort changes (already retrieved above)
+        self._last_filtered_images_order = filtered_images_tuple
             # Removed frequent logging.info - called on every relayout (performance optimization)
             # logging.info(f"[GRID] Collected {len(items)} unique items (deduplicated from {len(self._all_widgets)} entries)")
 
@@ -3348,6 +3346,10 @@ class PhotoView(QMainWindow):
         if not hasattr(self, "_active_tasks"):
             self._active_tasks = set()
         self._active_tasks.discard(name)
+        if name == "load-images":
+            self._cached_cols_per_row = None
+            self._last_filtered_images_order = None
+            self._relayout_grid()
         self.progress_bar.setFormat(f"{name}: {'done' if ok else 'failed'}")
         if name == "training":
             # Re-enable train button
