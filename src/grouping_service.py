@@ -304,13 +304,14 @@ def compute_grouping_for_photos(
                 else:
                     group_parent[root1] = root2
 
-        # Compute hashes for all images (needed for burst merging)
-        all_hashes: dict[str, str] = {}
-        for filename in sorted_filenames_for_grouping:
-            path = os.path.join(image_dir, filename)
-            h = hash_fn(filename)
-            if h:
-                all_hashes[filename] = h
+        # Pre-compute integer values of hashes to speed up bitwise popcount comparison in post-processing
+        filename_to_hash_int: dict[str, int] = {}
+        for fname, h_str in filename_to_hash_dict.items():
+            if h_str and not h_str.startswith("error_"):
+                try:
+                    filename_to_hash_int[fname] = int(h_str, 16)
+                except Exception:
+                    pass
 
         # For each burst, check pairwise hash distances between groups
         merged_bursts = 0
@@ -344,17 +345,12 @@ def compute_grouping_for_photos(
                         min_dist = float('inf')
                         for f1 in groups_in_burst[gid1]:
                             for f2 in groups_in_burst[gid2]:
-                                h1 = all_hashes.get(f1)
-                                h2 = all_hashes.get(f2)
-                                if h1 and h2:
-                                    try:
-                                        hash1 = imagehash.hex_to_hash(h1)
-                                        hash2 = imagehash.hex_to_hash(h2)
-                                        dist = hash1 - hash2
-                                        if dist < min_dist:
-                                            min_dist = dist
-                                    except Exception:
-                                        pass
+                                val1 = filename_to_hash_int.get(f1)
+                                val2 = filename_to_hash_int.get(f2)
+                                if val1 is not None and val2 is not None:
+                                    dist = bin(val1 ^ val2).count('1')
+                                    if dist < min_dist:
+                                        min_dist = dist
 
                         # If groups are visually similar enough, merge them
                         if min_dist <= BURST_MERGE_THRESHOLD:

@@ -3295,9 +3295,14 @@ class PhotoView(QMainWindow):
         """Apply debounced progress bar update."""
         if not self._progress_update_pending:
             return
+        
+        # Discard update if the task has already finished
+        name = self._progress_update_pending["name"]
+        if not hasattr(self, "_active_tasks") or name not in self._active_tasks:
+            self._progress_update_pending = {}
+            return
 
         pending = self._progress_update_pending
-        name = pending["name"]
         current = pending["current"]
         total = pending["total"]
         detail = pending.get("detail")
