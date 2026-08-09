@@ -127,7 +127,6 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
     local temp_dir_path = (os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_directory.txt"):gsub("\\", "/")
     local temp_labels_path = (os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_labels.json"):gsub("\\", "/")
     local temp_files_path = (os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_files.json"):gsub("\\", "/")
-    local temp_bat_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\run_derush.bat"
 
     if folder_path and folder_path ~= "" then
         local f = io.open(temp_dir_path, "w")
@@ -156,15 +155,8 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
         end
     end
 
-    -- Write clean batch runner script to eliminate Windows cmd quote stripping errors
-    local bat_file = io.open(temp_bat_path, "w")
-    if bat_file then
-        bat_file:write(string.format('@echo off\n"%s" "%s" %%*\n', python_bin, script_path))
-        bat_file:close()
-    end
-
-    local command = string.format('"%s" %s --directory-file "%s"%s',
-        temp_bat_path, cmd_name, temp_dir_path, extra_arg)
+    local command = string.format('"%s" "%s" %s --directory-file "%s"%s',
+        python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
 
     log_debug("COMMAND: " .. command)
 
