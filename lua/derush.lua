@@ -29,6 +29,32 @@ local function get_target_images()
     return {}
 end
 
+-- Helper to get common root directory for all images in active collection
+local function get_collection_root_dir(images)
+    if not images or #images == 0 then return os.getenv("USERPROFILE") end
+    local common_dir = nil
+    for _, img in ipairs(images) do
+        local pth = img.path
+        if pth and pth ~= "" then
+            if not common_dir then
+                common_dir = pth
+            else
+                while common_dir ~= "" and not pth:lower():find(common_dir:lower(), 1, true) do
+                    common_dir = common_dir:match("^(.+)[/\\][^/\\]+$") or ""
+                end
+            end
+        end
+    end
+    if not common_dir or common_dir == "" then
+        local first = images[1]
+        common_dir = (first and first.film and first.film.path) or (first and first.path)
+    end
+    if not common_dir or common_dir == "" then
+        common_dir = os.getenv("USERPROFILE")
+    end
+    return common_dir
+end
+
 -- Exclusive Keep / Trash Shortcuts (K / T hotkeys)
 dt.register_event("derush_set_keep", "shortcut", function(event, shortcut)
     local ok, err = pcall(function()
@@ -254,31 +280,7 @@ local predict_btn = dt.new_widget("button") {
                 job = dt.gui.create_job("Derush: Scoring " .. total_count .. " photos...", true)
             end)
 
--- Helper to get common root directory for all images in active collection
-local function get_collection_root_dir(images)
-    if not images or #images == 0 then return os.getenv("USERPROFILE") end
-    local common_dir = nil
-    for _, img in ipairs(images) do
-        local pth = img.path
-        if pth and pth ~= "" then
-            if not common_dir then
-                common_dir = pth
-            else
-                while common_dir ~= "" and not pth:lower():find(common_dir:lower(), 1, true) do
-                    common_dir = common_dir:match("^(.+)[/\\][^/\\]+$") or ""
-                end
-            end
-        end
-    end
-    if not common_dir or common_dir == "" then
-        local first = images[1]
-        common_dir = (first and first.film and first.film.path) or (first and first.path)
-    end
-    if not common_dir or common_dir == "" then
-        common_dir = os.getenv("USERPROFILE")
-    end
-    return common_dir
-end
+            local folder_path = get_collection_root_dir(images)
 
             local file_paths = {}
             for _, img in ipairs(images) do
