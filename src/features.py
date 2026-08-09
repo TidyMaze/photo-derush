@@ -1369,9 +1369,8 @@ def _parallel_extract(paths: list[str], progress_callback, hits: int, total: int
     # Use more workers for better parallelism (cap at 8, benchmarked: 4->6->8 workers
     # gave 4.0s->3.59s->3.45s on 200 images, diminishing but still positive past 4)
     max_workers = int(os.environ.get("FEATURE_EXTRACT_WORKERS", min(cpu_count(), 8)))
-    workers = min(max_workers, len(paths))
-    # In pytest environments force a single worker to avoid multiprocessing deadlocks
-    if os.environ.get("PYTEST_CURRENT_TEST"):
+    # In Windows or pytest environments, use sequential worker fallback if pool serialization is risky
+    if os.name == "nt" or os.environ.get("PYTEST_CURRENT_TEST"):
         workers = 1
 
     if progress_callback:
@@ -1447,11 +1446,13 @@ def _parallel_extract(paths: list[str], progress_callback, hits: int, total: int
             # Clear pool reference before releasing lock
             _active_pool = None
     finally:
-        # Close pool but keep reference for cleanup tracking
+        # Close and join pool to release all worker resources cleanly
         if pool is not None:
-            pool.close()
-            # Don't join here - let next extraction handle cleanup via lock
-            # This allows the lock to serialize pool creation/destruction
+            try:
+                pool.close()
+                pool.join()
+            except Exception:
+                pass
 
     parallel_time = time.perf_counter() - parallel_start
     rate = len(extracted) / parallel_time if parallel_time > 0 else 0
@@ -1535,6 +1536,9 @@ def batch_extract_features(paths: list[str], progress_callback=None) -> list[lis
         extraction_start = time.perf_counter()
         if os.environ.get("PYTEST_CURRENT_TEST"):
             logging.info(f"[features] PYTEST detected: forcing sequential extraction ({len(unique_needed)} images)")
+            extracted = _sequential_extract(unique_needed, progress_callback, hits, total)
+        elif os.name == "nt":
+            logging.info(f"[features] Windows detected: using sequential extraction ({len(unique_needed)} images)")
             extracted = _sequential_extract(unique_needed, progress_callback, hits, total)
         else:
             if len(unique_needed) > 10:

@@ -10,6 +10,7 @@ Performance: OS file system cache provides similar benefits with minimal memory 
 
 import contextlib
 import logging
+import os
 from typing import Optional
 
 from PIL import Image
@@ -17,17 +18,77 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
+RAW_EXTS = {".arw", ".cr2", ".nef", ".dng", ".orf", ".rw2", ".pef", ".srw"}
+RASTER_EXTS = [".JPG", ".jpg", ".jpeg", ".JPEG"]
+
+
+def find_paired_jpg(raw_path: str) -> Optional[str]:
+    """Find rastered JPG version for a RAW file if it exists in the same directory."""
+    stem, ext = os.path.splitext(raw_path)
+    if ext.lower() in RAW_EXTS:
+        for r_ext in RASTER_EXTS:
+            candidate = stem + r_ext
+            if os.path.isfile(candidate):
+                return candidate
+            # Also check darktable_exported subfolder
+            parent, fname = os.path.split(stem)
+            exp_candidate = os.path.join(parent, "darktable_exported", fname + r_ext)
+            if os.path.isfile(exp_candidate):
+                return exp_candidate
+    return None
+
+
 @contextlib.contextmanager
 def get_cached_image(path: str):
     """
     Open an image file with a context manager to ensure it is closed and locks are released.
+    Prefers rastered JPG version (.JPG/.jpg) if path is RAW (.ARW).
+    Includes fallback for RAW formats by extracting largest embedded JPEG preview if no JPG file exists.
     """
+    if path.lower().endswith((".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")):
+        yield None
+        return
+    paired_jpg = find_paired_jpg(path)
+    actual_path = paired_jpg if paired_jpg else path
     img = None
     try:
-        img = Image.open(path)
+        img = Image.open(actual_path)
         yield img
     except Exception as e:
-        logger.warning(f"Failed to open image {path}: {e}")
+        # Fallback for RAW files: extract largest embedded JPEG preview
+        ext = os.path.splitext(actual_path)[1].lower()
+        if ext in RAW_EXTS:
+            try:
+                import io
+                with open(actual_path, "rb") as f:
+                    data = f.read()
+
+                largest_img = None
+                largest_area = 0
+                pos = 0
+                while True:
+                    idx = data.find(b"\xff\xd8\xff", pos)
+                    if idx == -1:
+                        break
+                    end_idx = data.find(b"\xff\xd9", idx)
+                    if end_idx != -1:
+                        try:
+                            candidate = Image.open(io.BytesIO(data[idx : end_idx + 2]))
+                            area = candidate.size[0] * candidate.size[1]
+                            if area > largest_area:
+                                largest_area = area
+                                largest_img = candidate
+                        except Exception:
+                            pass
+                    pos = idx + 1
+
+                if largest_img is not None:
+                    yield largest_img
+                    return
+            except Exception as ex:
+                logger.warning(f"RAW preview extraction error for {actual_path}: {ex}")
+
+        logger.warning(f"Failed to open image {actual_path}: {e}")
         yield None
     finally:
         if img is not None:
@@ -38,13 +99,16 @@ def get_cached_image(path: str):
 def get_cached_image_for_exif(path: str):
     """
     Open an image file for EXIF extraction with a context manager to ensure locks are released.
+    Prefers rastered JPG version (.JPG/.jpg) if path is RAW (.ARW).
     """
+    paired_jpg = find_paired_jpg(path)
+    actual_path = paired_jpg if paired_jpg else path
     img = None
     try:
-        img = Image.open(path)
+        img = Image.open(actual_path)
         yield img
     except Exception as e:
-        logger.warning(f"Failed to open image for EXIF {path}: {e}")
+        logger.warning(f"Failed to open image for EXIF {actual_path}: {e}")
         yield None
     finally:
         if img is not None:

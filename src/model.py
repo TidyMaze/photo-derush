@@ -8,6 +8,12 @@ from .image_cache import get_cached_image, get_cached_image_for_exif
 from .repository import RatingsTagsRepository
 
 
+DEFAULT_ALLOWED_EXTS = [
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
+    ".arw", ".cr2", ".nef", ".dng", ".orf", ".rw2", ".pef", ".srw"
+]
+
+
 class ImageModel:
     def __init__(
         self,
@@ -21,7 +27,7 @@ class ImageModel:
         self.directory = directory
         self.max_images = max_images
         self.cache = cache or ThumbnailCache()
-        self.allowed_exts = allowed_exts or [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"]
+        self.allowed_exts = allowed_exts or list(DEFAULT_ALLOWED_EXTS)
         self._repo = repo or RatingsTagsRepository()
         # Metadata-only caches (persisted on disk)
         self._exif_cache_path = os.path.join(".cache", "exif_cache.pkl")
@@ -81,6 +87,8 @@ class ImageModel:
             # Skip hidden/system directories starting with '.' and also 'thumbnails'
             dirs[:] = [d for d in dirs if not d.startswith('.') and d.lower() != 'thumbnails']
             for f in filenames:
+                if f.lower().endswith((".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")):
+                    continue
                 if os.path.splitext(f)[1].lower() in self.allowed_exts:
                     # Skip files that have a dimensions suffix (e.g. _256x340.jpg, _64x85.jpg)
                     # to prevent "miniatures of miniatures" or loading resized copies.

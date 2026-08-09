@@ -37,8 +37,11 @@ def build_dataset(
     if displayed_filenames is not None:
         all_files = displayed_filenames
         logging.info(f"[dataset] Using displayed filenames: {len(all_files)}")
-    else:
-        all_files = [f for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))]
+        ignored_exts = (".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")
+        all_files = [
+            f for f in os.listdir(image_dir)
+            if os.path.isfile(os.path.join(image_dir, f)) and not f.lower().endswith(ignored_exts)
+        ]
         logging.info(f"[dataset] Using all files: {len(all_files)}")
     file_list_time = time.perf_counter() - file_list_start
     logging.info(f"[dataset] File listing completed in {file_list_time*1000:.1f}ms")
@@ -48,17 +51,39 @@ def build_dataset(
     auto_skipped = 0
     labeled_files = []
     labels = []
+    # Deduplicate RAW/JPG pairs by stem: train on JPG version if present
+    stems_map: dict[str, list[str]] = {}
     for fname in all_files:
-        state = repo.get_state(fname)
+        stem = os.path.splitext(fname)[0]
+        stems_map.setdefault(stem, []).append(fname)
+
+    for stem, f_list in stems_map.items():
+        state = ""
+        source = "manual"
+        for f in f_list:
+            st = repo.get_state(f)
+            if st in ("keep", "trash"):
+                state = st
+                source = repo.get_label_source(f)
+                break
+        if not state:
+            state = repo.get_state(stem)
         if state not in ("keep", "trash"):
             continue
-        source = repo.get_label_source(fname)
         if source != "manual":
             auto_skipped += 1
-            logging.debug(f"[dataset] Skip auto-labeled {fname} state={state} source={source}")
             continue
+
+        # Choose best file representation for training: prefer rastered JPG/JPEG
+        best_file = f_list[0]
+        for f in f_list:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in (".jpg", ".jpeg"):
+                best_file = f
+                break
+
         manual_count += 1
-        labeled_files.append(fname)
+        labeled_files.append(best_file)
         labels.append(1 if state == "keep" else 0)
     label_check_time = time.perf_counter() - label_check_start
     logging.info(f"[dataset] Label checking completed in {label_check_time*1000:.1f}ms: {manual_count} manual, {auto_skipped} auto skipped")

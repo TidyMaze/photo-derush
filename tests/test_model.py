@@ -32,11 +32,12 @@ def test_get_image_path_invalid():
     assert model.get_image_path(None) is None
 
 def test_set_allowed_exts_invalid():
+    from src.model import DEFAULT_ALLOWED_EXTS
     model = ImageModel('.')
     model.set_allowed_exts('jpg')
-    assert model.allowed_exts == ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']
+    assert model.allowed_exts == DEFAULT_ALLOWED_EXTS
     model.set_allowed_exts([1, 2])
-    assert model.allowed_exts == ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']
+    assert model.allowed_exts == DEFAULT_ALLOWED_EXTS
 
 def test_set_rating_invalid():
     model = ImageModel('.')

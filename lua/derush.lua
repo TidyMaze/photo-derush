@@ -4,39 +4,550 @@
 --]]
 
 local dt = require "darktable"
-local dt_sys = require "darktable.sys"
 
--- Plugin registration
-dt.register_event("shortcut", function(event, shortcut)
-    dt.print("Photo-Derush shortcut triggered")
-end, "Photo-Derush Action")
+local update_panel_stats = nil
 
-local function run_derush_command(cmd_name, folder_path)
-    local python_bin = "py -m poetry run python"
-    local script_path = dt_sys.get_user_config_dir() .. "/lua/derush/cli_bridge.py"
-    local command = string.format("%s %s %s --directory %q", python_bin, script_path, cmd_name, folder_path)
+local function get_target_images()
+    local act_imgs = nil
+    pcall(function() act_imgs = dt.gui.action_images end)
+    if act_imgs and #act_imgs > 0 then
+        return act_imgs
+    end
+    local hover_img = nil
+    pcall(function() hover_img = dt.gui.hover() end)
+    if not hover_img then
+        pcall(function() hover_img = dt.gui.hovered end)
+    end
+    if hover_img then
+        return { hover_img }
+    end
+    local sel = nil
+    pcall(function() sel = dt.gui.selection() end)
+    if sel and #sel > 0 then
+        return sel
+    end
+    return {}
+end
 
-    local handle = io.popen(command)
-    if not handle then return nil end
+-- Exclusive Keep / Trash Shortcuts (K / T hotkeys)
+dt.register_event("derush_set_keep", "shortcut", function(event, shortcut)
+    local ok, err = pcall(function()
+        local images = get_target_images()
+        if #images > 0 then
+            for _, img in ipairs(images) do
+                img.red = false
+                img.green = true
+                img.rating = 5
+            end
+            if update_panel_stats then pcall(update_panel_stats) end
+            dt.print(string.format("Derush: Marked %d photo(s) as Keep (Green + 5 Stars)", #images))
+        else
+            dt.print("Derush: Select or hover over a photo to mark as Keep")
+        end
+    end)
+    if not ok then
+        log_debug("SHORTCUT K ERROR: " .. tostring(err))
+        dt.print("Derush Error: " .. tostring(err))
+    end
+end, "Derush: Set Exclusive Keep (Green + 5 Stars)")
+
+dt.register_event("derush_set_trash", "shortcut", function(event, shortcut)
+    local ok, err = pcall(function()
+        local images = get_target_images()
+        if #images > 0 then
+            for _, img in ipairs(images) do
+                img.green = false
+                img.red = true
+                img.rating = -1
+            end
+            if update_panel_stats then pcall(update_panel_stats) end
+            dt.print(string.format("Derush: Marked %d photo(s) as Trash (Red + Rejected)", #images))
+        else
+            dt.print("Derush: Select or hover over a photo to mark as Trash")
+        end
+    end)
+    if not ok then
+        log_debug("SHORTCUT T ERROR: " .. tostring(err))
+        dt.print("Derush Error: " .. tostring(err))
+    end
+end, "Derush: Set Exclusive Trash (Red + Rejected)")
+
+-- Hot-Reload helper function
+local function hot_reload()
+    local plugin_path = os.getenv("LOCALAPPDATA") .. "/darktable/lua/derush/derush.lua"
+    package.loaded["derush/derush"] = nil
+    dt.print("Hot-reloading Derush plugin from disk...")
+    local ok, err = pcall(dofile, plugin_path)
+    if not ok then
+        dt.print("Hot-reload error: " .. tostring(err))
+    else
+        dt.print("Derush plugin hot-reloaded successfully!")
+    end
+end
+
+-- Log to debug file
+local function log_debug(msg)
+    local log_path = os.getenv("LOCALAPPDATA") .. [[\darktable\derush_debug.log]]
+    local f = io.open(log_path, "a")
+    if f then
+        f:write("[" .. os.date("%Y-%m-%d %H:%M:%S") .. "] " .. msg .. "\n")
+        f:close()
+    end
+end
+
+local function run_derush_command(cmd_name, folder_path, extra_json)
+    local python_bin = os.getenv("USERPROFILE") .. [[\AppData\Local\pypoetry\Cache\virtualenvs\photo-app-rBz6-pE0-py3.12\Scripts\python.exe]]
+    local script_path = os.getenv("LOCALAPPDATA") .. [[\darktable\lua\derush\cli_bridge.py]]
+    local temp_dir_path = os.getenv("LOCALAPPDATA") .. [[\darktable\temp_directory.txt]]
+    local temp_json_path = os.getenv("LOCALAPPDATA") .. [[\darktable\temp_labels.json]]
+
+    -- Write folder path to temp file to bypass cmd.exe encoding issues (non-breaking spaces etc.)
+    local dir_f = io.open(temp_dir_path, "w")
+    if dir_f then
+        dir_f:write(folder_path)
+        dir_f:close()
+    end
+
+    -- If extra_json is provided, write to temp file to avoid Windows cmd escaping issues
+    local extra_arg = ""
+    if extra_json and extra_json ~= "" then
+        local f = io.open(temp_json_path, "w")
+        if f then
+            f:write(extra_json)
+            f:close()
+            extra_arg = string.format(' --labels-file "%s"', temp_json_path)
+        end
+    end
+
+    -- Use --directory-file instead of --directory to avoid cmd.exe mangling special chars
+    local command = string.format('""%s" "%s" %s --directory-file "%s"%s"',
+        python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
+
+    log_debug("COMMAND: " .. command)
+
+    local handle = io.popen(command .. " 2>&1")
+    if not handle then
+        dt.print("Derush Error: Could not execute command handle")
+        log_debug("ERROR: io.popen returned nil")
+        return nil
+    end
     local result = handle:read("*a")
     handle:close()
+
+    log_debug("OUTPUT:\n" .. tostring(result))
+
     return result
 end
 
+-- Function to attach Derush ML Score to image metadata in Darktable
+local function set_image_derush_score(img, score)
+    -- Remove previous derush score tags if re-predicting
+    local existing_tags = dt.tags.get_tags(img)
+    if existing_tags then
+        for _, t in ipairs(existing_tags) do
+            if t.name:find("^derush|score_") or t.name == "derush|predicted" then
+                dt.tags.detach(t, img)
+            end
+        end
+    end
+
+    -- 1. Attach new standard Darktable Score Tag
+    local tag_name = string.format("derush|score_%0.2f", score)
+    local score_tag = dt.tags.create(tag_name)
+    dt.tags.attach(score_tag, img)
+
+    -- 2. Set Title & Description for Image Information panel
+    pcall(function()
+        img.description = string.format("Derush Score: %0.2f", score)
+    end)
+    pcall(function()
+        img.title = string.format("Derush Score %0.2f", score)
+    end)
+
+    -- Check if rating was set by ML previously or is currently unrated
+    local is_ml_predicted = false
+    if existing_tags then
+        for _, t in ipairs(existing_tags) do
+            if t.name == "derush|predicted" then
+                is_ml_predicted = true
+                break
+            end
+        end
+    end
+
+    -- 3. Update star rating if image is unrated (0) OR was previously ML-predicted
+    --    Only skip if user manually set stars without the derush|predicted marker!
+    if img.rating == 0 or is_ml_predicted then
+        local star_rating = 1
+        if score >= 0.85 then
+            star_rating = 5
+        elseif score >= 0.70 then
+            star_rating = 4
+        elseif score >= 0.50 then
+            star_rating = 3
+        elseif score >= 0.30 then
+            star_rating = 2
+        else
+            star_rating = 1
+        end
+        img.rating = star_rating
+
+        -- Attach marker tag so future re-predictions know this star rating came from ML
+        local pred_tag = dt.tags.create("derush|predicted")
+        dt.tags.attach(pred_tag, img)
+    end
+end
+
+-- Panel Status Labels
+local label_stats_selected       = dt.new_widget("label") { label = "Photos in View: -" }
+local label_stats_manual         = dt.new_widget("label") { label = "Manual Labels: -" }
+local label_stats_predictions    = dt.new_widget("label") { label = "Auto Predicted: -" }
+local label_stats_trained        = dt.new_widget("label") { label = "Training Samples: -" }
+local label_stats_score          = dt.new_widget("label") { label = "Model Accuracy: -" }
+local label_stats_scores_detail  = dt.new_widget("label") { label = "Avg Scores: -" }
+
 -- UI Panel Widget in Lighttable
+local predict_btn = dt.new_widget("button") {
+    label = "Run Burst Grouping & Scoring",
+    tooltip = "Compute pHash burst grouping & ML scores",
+    clicked_callback = function(widget)
+        -- Wrap entire callback in pcall so errors show as toasts
+        local ok, err = pcall(function()
+            log_debug("SCORING: Button clicked")
+            local images = dt.gui.selection()
+            if not images or #images == 0 then
+                images = {}
+                -- dt.collection is the current lighttable collection
+                local col_ok, col = pcall(function() return dt.collection end)
+                if col_ok and col then
+                    for i = 1, #col do
+                        table.insert(images, col[i])
+                    end
+                else
+                    -- Fallback: iterate entire database
+                    for i = 1, #dt.database do
+                        table.insert(images, dt.database[i])
+                    end
+                end
+            end
+            local total_count = #images
+            if total_count == 0 then
+                dt.print("Derush Error: No images found in collection")
+                return
+            end
+
+            label_stats_selected.label = string.format("Selected Photos: %d", total_count)
+
+            -- Create progress job
+            local job = nil
+            pcall(function()
+                job = dt.gui.create_job("Derush: Scoring " .. total_count .. " photos...", true)
+            end)
+
+            local first_img = images[1]
+            local folder_path = first_img.path
+            if first_img.film and first_img.film.path then
+                folder_path = first_img.film.path
+            else
+                folder_path = folder_path:match("(.*)[/\\]") or folder_path
+            end
+
+            dt.print(string.format("Derush: Running ML predictions for %d images...", total_count))
+            log_debug("SCORING: folder=" .. tostring(folder_path) .. " images=" .. total_count)
+            local raw_json = run_derush_command("predict", folder_path)
+
+            if not raw_json or raw_json == "" then
+                if job then pcall(function() job.valid = false end) end
+                dt.print("Derush Error: Backend returned empty response")
+                return
+            end
+
+            local predictions = {}
+            for filename, score in raw_json:gmatch('"([^"]+)":%s*([%d%.]+)') do
+                local val = tonumber(score)
+                if val then
+                    predictions[filename] = val
+                    predictions[filename:lower()] = val
+                end
+            end
+
+            local count = 0
+            local matched_count = 0
+            local count_keep = 0
+            local count_trash = 0
+            local sum_keep = 0
+            local sum_trash = 0
+            local sum_total = 0
+
+            for i, img in ipairs(images) do
+                local fn = img.filename or ""
+                local pth = img.path or ""
+                local score = predictions[fn]
+                    or predictions[fn:lower()]
+                    or predictions[pth]
+                    or predictions[pth:lower()]
+
+                if not score then
+                    local fn_stem = fn:match("^(.+)%..+$") or fn
+                    for k, v in pairs(predictions) do
+                        local k_stem = k:match("^(.+)%..+$") or k
+                        if k_stem:lower() == fn_stem:lower() then
+                            score = v
+                            break
+                        end
+                    end
+                end
+
+                if score then
+                    matched_count = matched_count + 1
+                else
+                    score = 0.50
+                end
+
+                if score >= 0.50 then
+                    count_keep = count_keep + 1
+                    sum_keep = sum_keep + score
+                else
+                    count_trash = count_trash + 1
+                    sum_trash = sum_trash + score
+                end
+                sum_total = sum_total + score
+
+                set_image_derush_score(img, score)
+                count = count + 1
+                if job then
+                    pcall(function() job.percent = count / total_count end)
+                end
+            end
+
+            if job then pcall(function() job.valid = false end) end
+
+            local avg_total = count > 0 and (sum_total / count) or 0
+            local avg_keep  = count_keep > 0 and (sum_keep / count_keep) or 0
+            local avg_trash = count_trash > 0 and (sum_trash / count_trash) or 0
+
+            label_stats_selected.label      = string.format("Analysed Photos: %d (%d matched)", count, matched_count)
+            label_stats_predictions.label   = string.format("Predictions: %d Keep / %d Trash", count_keep, count_trash)
+            label_stats_scores_detail.label = string.format("Avg Scores: Total %.2f (Keep %.2f | Trash %.2f)", avg_total, avg_keep, avg_trash)
+
+            log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d (avg %.2f), Trash: %d (avg %.2f)",
+                matched_count, count, count_keep, avg_keep, count_trash, avg_trash))
+            dt.print(string.format("Derush: Analysed %d photos! %d Keep (avg %.2f), %d Trash (avg %.2f)",
+                count, count_keep, avg_keep, count_trash, avg_trash))
+        end)
+        if not ok then
+            log_debug("SCORING ERROR: " .. tostring(err))
+            dt.print("Derush Error: " .. tostring(err))
+        end
+    end
+}
+
+local train_btn = dt.new_widget("button") {
+    label = "🎓 Retrain Model with Darktable Labels",
+    tooltip = "Train ML model using Green Color Labels (Keep) and Red Color Labels (Trash)",
+    clicked_callback = function(widget)
+        -- Wrap entire callback in pcall so errors show as toasts
+        local ok, err = pcall(function()
+            log_debug("TRAINING: Button clicked")
+            local images = dt.gui.selection()
+            if not images or #images == 0 then
+                images = {}
+                local col_ok, col = pcall(function() return dt.collection end)
+                if col_ok and col then
+                    for i = 1, #col do
+                        table.insert(images, col[i])
+                    end
+                else
+                    for i = 1, #dt.database do
+                        table.insert(images, dt.database[i])
+                    end
+                end
+            end
+            local total_images = #images
+            if total_images == 0 then
+                dt.print("Derush Error: No images found to train")
+                return
+            end
+
+            label_stats_selected.label = string.format("Selected Photos: %d", total_images)
+
+            -- Create progress job
+            local job = nil
+            pcall(function()
+                job = dt.gui.create_job("Derush: Training on " .. total_images .. " photos...", true)
+            end)
+
+            local label_map = {}
+            local keep_count = 0
+            local trash_count = 0
+
+            for i, img in ipairs(images) do
+                -- Read Darktable color labels or Star Ratings
+                if img.green or img.rating == 5 then
+                    label_map[img.filename] = "keep"
+                    keep_count = keep_count + 1
+                elseif img.red or img.rating == -1 then
+                    label_map[img.filename] = "trash"
+                    trash_count = trash_count + 1
+                end
+                if job then
+                    pcall(function() job.percent = (i / total_images) * 0.40 end)
+                end
+            end
+
+            if keep_count == 0 or trash_count == 0 then
+                if job then pcall(function() job.valid = false end) end
+                label_stats_manual.label  = string.format("Manual Labels: %d (%d Keep, %d Trash)", keep_count + trash_count, keep_count, trash_count)
+                label_stats_trained.label = "Training: Failed (Insufficient Labels)"
+                label_stats_score.label   = "Error: Need >=1 Keep (Green/5⭐) & >=1 Trash (Red/1⭐)"
+                dt.print(string.format("Derush Error: Need at least 1 Keep and 1 Trash label! Found: %d Keep, %d Trash.", keep_count, trash_count))
+                return
+            end
+
+            label_stats_manual.label = string.format("Manual Labels: %d (%d Keep, %d Trash)", keep_count + trash_count, keep_count, trash_count)
+
+            dt.print(string.format("Derush: Training with %d Keep + %d Trash...", keep_count, trash_count))
+
+            -- Convert Lua table to JSON payload
+            local json_parts = {}
+            for fn, st in pairs(label_map) do
+                table.insert(json_parts, string.format('"%s":"%s"', fn, st))
+            end
+            local labels_json = "{" .. table.concat(json_parts, ",") .. "}"
+
+            local first_img = images[1]
+            local folder_path = first_img.path
+            if first_img.film and first_img.film.path then
+                folder_path = first_img.film.path
+            else
+                folder_path = folder_path:match("(.*)[/\\]") or folder_path
+            end
+
+            if job then pcall(function() job.percent = 0.60 end) end
+            log_debug("TRAINING: folder=" .. tostring(folder_path) .. " keep=" .. keep_count .. " trash=" .. trash_count)
+            local result = run_derush_command("train", folder_path, labels_json)
+            if job then pcall(function() job.percent = 1.00 end); pcall(function() job.valid = false end) end
+
+            local err_msg = result and result:match('"message":%s*"([^"]+)"')
+            local n_samples = tonumber(result and result:match('"n_samples":%s*(%d+)'))
+            local n_keep = tonumber(result and result:match('"n_keep":%s*(%d+)'))
+            local n_trash = tonumber(result and result:match('"n_trash":%s*(%d+)'))
+            local cv_acc = tonumber(result and result:match('"cv_accuracy_mean":%s*([%d%.]+)'))
+
+            if err_msg and not cv_acc then
+                label_stats_trained.label = "Training: Failed"
+                label_stats_score.label   = "Error: " .. err_msg
+                dt.print("Derush Error: " .. err_msg)
+                return
+            end
+
+            if n_samples and n_keep and n_trash then
+                label_stats_trained.label = string.format("Training Samples: %d unique JPGs (%d Keep, %d Trash)", n_samples, n_keep, n_trash)
+            end
+            if cv_acc then
+                label_stats_score.label = string.format("Model Accuracy: %.1f%%", cv_acc * 100)
+            end
+
+            local score_str = cv_acc and string.format(" (Accuracy: %.1f%%)", cv_acc * 100) or ""
+            dt.print(string.format("Derush: Trained on %d unique JPGs (%d Keep, %d Trash)%s!",
+                n_samples or (keep_count + trash_count),
+                n_keep or keep_count,
+                n_trash or trash_count,
+                score_str))
+        end)
+        if not ok then
+            log_debug("TRAINING ERROR: " .. tostring(err))
+        end
+    end
+}
+
+-- Live Panel Stats Auto-Scanner (scans before button click)
+update_panel_stats = function()
+    pcall(function()
+        local images = dt.gui.selection()
+        if not images or #images == 0 then
+            images = {}
+            local col_ok, col = pcall(function() return dt.collection end)
+            if col_ok and col then
+                for i = 1, #col do
+                    table.insert(images, col[i])
+                end
+            else
+                for i = 1, #dt.database do
+                    table.insert(images, dt.database[i])
+                end
+            end
+        end
+
+        local total_images = #images
+        if total_images == 0 then
+            label_stats_selected.label    = "Photos in View: 0"
+            label_stats_manual.label      = "Manual Labels: 0 (0 Keep, 0 Trash)"
+            label_stats_predictions.label = "Auto Predicted: 0"
+            return
+        end
+
+        local keep_count = 0
+        local trash_count = 0
+        local predicted_count = 0
+
+        for _, img in ipairs(images) do
+            -- Check manual Green/5⭐ (Keep) or Red/1⭐/Rejected (Trash)
+            if img.green or img.rating == 5 then
+                keep_count = keep_count + 1
+            elseif img.red or img.rating == -1 then
+                trash_count = trash_count + 1
+            end
+
+            -- Check if auto-predicted by Derush ML
+            local existing_tags = dt.tags.get_tags(img)
+            if existing_tags then
+                for _, t in ipairs(existing_tags) do
+                    if t.name == "derush|predicted" or t.name:find("^derush|score_") then
+                        predicted_count = predicted_count + 1
+                        break
+                    end
+                end
+            end
+        end
+
+        local manual_total = keep_count + trash_count
+        label_stats_selected.label    = string.format("Photos in View: %d", total_images)
+        label_stats_manual.label      = string.format("Manual Labels: %d (%d Keep, %d Trash)", manual_total, keep_count, trash_count)
+        label_stats_predictions.label = string.format("Auto Predicted: %d photos", predicted_count)
+    end)
+end
+
+-- Auto-trigger stats scanning on Selection Changed or Collection Changed
+pcall(function()
+    dt.register_event("derush_event_sel", "selection-changed", function()
+        update_panel_stats()
+    end)
+end)
+
+pcall(function()
+    dt.register_event("derush_event_col", "collection-changed", function()
+        update_panel_stats()
+    end)
+end)
+
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
     dt.new_widget("label") { label = "Photo-Derush ML Assistant" },
-    dt.new_widget("button") {
-        label = "Run Burst Grouping (pHash)",
-        tooltip = "Group duplicate and burst photos automatically",
-        connect_callback = function()
-            local images = dt.gui.action("selection/get_selected", "")
-            dt.print("Running Derush burst grouping...")
-        end
-    }
+    predict_btn,
+    train_btn,
+    dt.new_widget("label") { label = "--- Live Image & Model Stats ---" },
+    label_stats_selected,
+    label_stats_manual,
+    label_stats_predictions,
+    label_stats_trained,
+    label_stats_score,
+    label_stats_scores_detail
 }
 
 dt.register_lib("derush_panel", "Photo-Derush", true, false, {
-    [dt.gui.views.lighttable] = {"selection", 100}
+    [dt.gui.views.lighttable] = {"DT_UI_CONTAINER_PANEL_RIGHT_CENTER", 100}
 }, widget_box)
+
+-- Initial scan on plugin load
+update_panel_stats()

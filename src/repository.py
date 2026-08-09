@@ -133,17 +133,40 @@ class RatingsTagsRepository:
             entry = self._data.setdefault(filename, {})
             entry["state"] = state
             entry["label_source"] = source
+            # Propagate label to stem key as well for RAW/JPG pair sharing
+            stem = os.path.splitext(filename)[0]
+            if stem != filename:
+                stem_entry = self._data.setdefault(stem, {})
+                stem_entry["state"] = state
+                stem_entry["label_source"] = source
         else:
             if filename in self._data:
                 entry = self._data[filename]
                 entry.pop("state", None)
-                # Preserve label_source only if other metadata remains; else delete entry
                 if not entry:
                     del self._data[filename]
+            stem = os.path.splitext(filename)[0]
+            if stem != filename and stem in self._data:
+                stem_entry = self._data[stem]
+                stem_entry.pop("state", None)
+                if not stem_entry:
+                    del self._data[stem]
         self._save()
 
     def get_state(self, filename: str) -> str:
+        self._ensure_loaded()
+        assert self._data is not None
         result = self.get(filename).get("state", "")
+        if not result:
+            stem = os.path.splitext(filename)[0]
+            if stem in self._data:
+                result = self._data[stem].get("state", "")
+            if not result:
+                for ext in [".JPG", ".jpg", ".jpeg", ".ARW", ".arw", ".CR2", ".cr2", ".NEF", ".nef"]:
+                    alt = stem + ext
+                    if alt in self._data and self._data[alt].get("state"):
+                        result = self._data[alt]["state"]
+                        break
         return str(result) if result else ""
 
     def set_objects(self, filename: str, objects):
