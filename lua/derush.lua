@@ -95,20 +95,21 @@ local function log_debug(msg)
     end
 end
 
-local function run_derush_command(cmd_name, folder_path, extra_json)
+local function run_derush_command(cmd_name, folder_path, extra_json, files_json)
     local python_bin = os.getenv("USERPROFILE") .. [[\AppData\Local\pypoetry\Cache\virtualenvs\photo-app-rBz6-pE0-py3.12\Scripts\python.exe]]
     local script_path = os.getenv("LOCALAPPDATA") .. [[\darktable\lua\derush\cli_bridge.py]]
     local temp_dir_path = os.getenv("LOCALAPPDATA") .. [[\darktable\temp_directory.txt]]
     local temp_json_path = os.getenv("LOCALAPPDATA") .. [[\darktable\temp_labels.json]]
+    local temp_files_path = os.getenv("LOCALAPPDATA") .. [[\darktable\temp_files.json]]
 
-    -- Write folder path to temp file to bypass cmd.exe encoding issues (non-breaking spaces etc.)
+    -- Write folder path to temp file to bypass cmd.exe encoding issues
     local dir_f = io.open(temp_dir_path, "w")
     if dir_f then
-        dir_f:write(folder_path)
+        dir_f:write(folder_path or "")
         dir_f:close()
     end
 
-    -- If extra_json is provided, write to temp file to avoid Windows cmd escaping issues
+    -- Write labels JSON to temp file if provided
     local extra_arg = ""
     if extra_json and extra_json ~= "" then
         local f = io.open(temp_json_path, "w")
@@ -119,7 +120,16 @@ local function run_derush_command(cmd_name, folder_path, extra_json)
         end
     end
 
-    -- Use --directory-file instead of --directory to avoid cmd.exe mangling special chars
+    -- Write exact image files JSON to temp file if provided
+    if files_json and files_json ~= "" then
+        local ff = io.open(temp_files_path, "w")
+        if ff then
+            ff:write(files_json)
+            ff:close()
+            extra_arg = extra_arg .. string.format(' --files-file "%s"', temp_files_path)
+        end
+    end
+
     local command = string.format('""%s" "%s" %s --directory-file "%s"%s"',
         python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
 
@@ -267,11 +277,16 @@ local function get_collection_root_dir(images)
     return common_dir
 end
 
-            local folder_path = get_collection_root_dir(images)
+            local file_paths = {}
+            for _, img in ipairs(images) do
+                local full_p = (img.path and img.path ~= "") and (img.path .. "/" .. img.filename) or img.filename
+                table.insert(file_paths, string.format('"%s"', full_p:gsub("\\", "/")))
+            end
+            local files_json = "[" .. table.concat(file_paths, ",") .. "]"
 
             dt.print(string.format("Derush: Running ML predictions for %d images...", total_count))
             log_debug("SCORING: folder=" .. tostring(folder_path) .. " images=" .. total_count)
-            local raw_json = run_derush_command("predict", folder_path)
+            local raw_json = run_derush_command("predict", folder_path, nil, files_json)
 
             if not raw_json or raw_json == "" then
                 if job then pcall(function() job.valid = false end) end
@@ -432,11 +447,16 @@ local train_btn = dt.new_widget("button") {
             end
             local labels_json = "{" .. table.concat(json_parts, ",") .. "}"
 
-            local folder_path = get_collection_root_dir(images)
+            local file_paths = {}
+            for _, img in ipairs(images) do
+                local full_p = (img.path and img.path ~= "") and (img.path .. "/" .. img.filename) or img.filename
+                table.insert(file_paths, string.format('"%s"', full_p:gsub("\\", "/")))
+            end
+            local files_json = "[" .. table.concat(file_paths, ",") .. "]"
 
             if job then pcall(function() job.percent = 0.60 end) end
             log_debug("TRAINING: folder=" .. tostring(folder_path) .. " keep=" .. keep_count .. " trash=" .. trash_count)
-            local result = run_derush_command("train", folder_path, labels_json)
+            local result = run_derush_command("train", folder_path, labels_json, files_json)
             if job then pcall(function() job.percent = 1.00 end); pcall(function() job.valid = false end) end
 
             local err_msg = result and result:match('"message":%s*"([^"]+)"')

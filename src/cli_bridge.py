@@ -59,24 +59,35 @@ def cmd_group(args):
 def cmd_predict(args):
     """Predict keep probabilities using ML classifier."""
     directory = args.directory
-    model = PhotoModel(directory=directory, max_images=None)
-    image_names = model.get_image_files()
+    file_list = None
+    if getattr(args, "files_file", None) and os.path.exists(args.files_file):
+        try:
+            with open(args.files_file, "r", encoding="utf-8") as f:
+                file_list = json.load(f)
+        except Exception as e:
+            sys.stderr.write(f"Failed reading files file: {e}\n")
+
+    if file_list:
+        image_names = [os.path.basename(f) for f in file_list]
+        image_paths = file_list
+    else:
+        model = PhotoModel(directory=directory, max_images=None)
+        image_names = model.get_image_files()
+        image_paths = [model.get_image_path(fn) for fn in image_names if model.get_image_path(fn)]
 
     RAW_EXTS = {".arw", ".cr2", ".nef", ".dng", ".orf", ".rw2", ".pef", ".srw"}
-    # Deduplicate paired RAW + JPG files: predict on JPG version when available
     stem_map = {}
-    for fn in image_names:
-        stem = os.path.splitext(fn)[0]
-        path = model.get_image_path(fn)
+    for fn, path in zip(image_names, image_paths):
         if not path:
             continue
+        stem = os.path.splitext(fn)[0]
         if stem not in stem_map:
             stem_map[stem] = (fn, path)
         else:
-            prev_fn, _ = stem_map[stem]
+            prev_fn, prev_path = stem_map[stem]
             prev_ext = os.path.splitext(prev_fn)[1].lower()
             curr_ext = os.path.splitext(fn)[1].lower()
-            if prev_ext in RAW_EXTS and curr_ext in (".jpg", ".jpeg"):
+            if prev_ext in RAW_EXTS and curr_ext not in RAW_EXTS:
                 stem_map[stem] = (fn, path)
 
     stems = list(stem_map.keys())
@@ -95,13 +106,12 @@ def cmd_predict(args):
         sys.stderr.write(f"Prediction error: {e}\n")
 
     # Propagate predictions to all files (RAW + JPG) and paths matching the stem
-    for fn in image_names:
+    for fn, path in zip(image_names, image_paths):
         stem = os.path.splitext(fn)[0]
         if stem in probs:
             p_val = probs[stem]
             probs[fn] = p_val
             probs[fn.lower()] = p_val
-            path = model.get_image_path(fn)
             if path:
                 probs[path] = p_val
                 probs[path.lower()] = p_val
@@ -138,12 +148,20 @@ def cmd_train(args):
         except Exception as e:
             sys.stderr.write(f"Failed to parse labels JSON: {e}\n")
 
+    file_list = None
+    if getattr(args, "files_file", None) and os.path.exists(args.files_file):
+        try:
+            with open(args.files_file, "r", encoding="utf-8") as f:
+                file_list = json.load(f)
+        except Exception as e:
+            sys.stderr.write(f"Failed reading files file: {e}\n")
+
     # Retrain model
     retrain_result = {}
     try:
         from src.training_core import train_keep_trash_model
         model_path = os.path.expanduser("~/.photo-derush-keep-trash-model.joblib")
-        res = train_keep_trash_model(directory, repo=repo, model_path=model_path, fast_mode=True)
+        res = train_keep_trash_model(directory, repo=repo, model_path=model_path, fast_mode=True, displayed_filenames=file_list)
         if res:
             retrain_result = {
                 "status": "success",
@@ -184,6 +202,7 @@ def main():
     predict_parser = subparsers.add_parser("predict")
     predict_parser.add_argument("--directory", required=False, help="Path to photo directory")
     predict_parser.add_argument("--directory-file", required=False, help="Path to file containing directory path")
+    predict_parser.add_argument("--files-file", required=False, help="Path to JSON file containing list of image paths")
 
     # Train command
     train_parser = subparsers.add_parser("train")
@@ -191,6 +210,7 @@ def main():
     train_parser.add_argument("--directory-file", required=False, help="Path to file containing directory path")
     train_parser.add_argument("--labels-json", required=False, help="JSON map of filename -> keep/trash state")
     train_parser.add_argument("--labels-file", required=False, help="Path to JSON file containing labels")
+    train_parser.add_argument("--files-file", required=False, help="Path to JSON file containing list of image paths")
 
     args = parser.parse_args()
 
