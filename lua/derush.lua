@@ -211,133 +211,139 @@ local label_stats_scores_detail  = dt.new_widget("label") { label = "Avg Scores:
 
 -- UI Panel Widget in Lighttable
 local predict_btn = dt.new_widget("button") {
-    label = "Run Burst Grouping & Scoring",
-    tooltip = "Compute pHash burst grouping & ML scores",
+    label = "✨ Predict / Score Photos",
+    tooltip = "Compute ML prediction scores for photos in active collection",
     clicked_callback = function(widget)
-        -- Wrap entire callback in pcall so errors show as toasts
         local ok, err = pcall(function()
-            log_debug("SCORING: Button clicked")
             local images = dt.gui.selection()
             if not images or #images == 0 then
                 images = {}
-                -- dt.collection is the current lighttable collection
                 local col_ok, col = pcall(function() return dt.collection end)
                 if col_ok and col then
                     for i = 1, #col do
                         table.insert(images, col[i])
                     end
                 else
-                    -- Fallback: iterate entire database
                     for i = 1, #dt.database do
                         table.insert(images, dt.database[i])
                     end
                 end
             end
+
             local total_count = #images
             if total_count == 0 then
-                dt.print("Derush Error: No images found in collection")
+                dt.print("Derush Error: No images found to predict")
                 return
             end
 
             label_stats_selected.label = string.format("Selected Photos: %d", total_count)
 
-            -- Create progress job
-            local job = nil
-            pcall(function()
-                job = dt.gui.create_job("Derush: Scoring " .. total_count .. " photos...", true)
-            end)
+            local run_scoring = function(job)
+                local folder_path = get_collection_root_dir(images)
 
-            local folder_path = get_collection_root_dir(images)
-
-            local file_paths = {}
-            for _, img in ipairs(images) do
-                local full_p = (img.path and img.path ~= "") and (img.path .. "/" .. img.filename) or img.filename
-                table.insert(file_paths, string.format('"%s"', full_p:gsub("\\", "/")))
-            end
-            local files_json = "[" .. table.concat(file_paths, ",") .. "]"
-
-            dt.print(string.format("Derush: Running ML predictions for %d images...", total_count))
-            log_debug("SCORING: folder=" .. tostring(folder_path) .. " images=" .. total_count)
-            local raw_json = run_derush_command("predict", folder_path, nil, files_json)
-
-            if not raw_json or raw_json == "" then
-                if job then pcall(function() job.valid = false end) end
-                dt.print("Derush Error: Backend returned empty response")
-                return
-            end
-
-            local predictions = {}
-            for filename, score in raw_json:gmatch('"([^"]+)":%s*([%d%.]+)') do
-                local val = tonumber(score)
-                if val then
-                    predictions[filename] = val
-                    predictions[filename:lower()] = val
+                local file_paths = {}
+                for _, img in ipairs(images) do
+                    local full_p = (img.path and img.path ~= "") and (img.path .. "/" .. img.filename) or img.filename
+                    table.insert(file_paths, string.format('"%s"', full_p:gsub("\\", "/")))
                 end
-            end
+                local files_json = "[" .. table.concat(file_paths, ",") .. "]"
 
-            local count = 0
-            local matched_count = 0
-            local count_keep = 0
-            local count_trash = 0
-            local sum_keep = 0
-            local sum_trash = 0
-            local sum_total = 0
+                dt.print(string.format("Derush: Running ML predictions for %d images...", total_count))
+                log_debug("SCORING: folder=" .. tostring(folder_path) .. " images=" .. total_count)
 
-            for i, img in ipairs(images) do
-                local fn = img.filename or ""
-                local pth = img.path or ""
-                local score = predictions[fn]
-                    or predictions[fn:lower()]
-                    or predictions[pth]
-                    or predictions[pth:lower()]
+                if job then pcall(function() job.percent = 0.10 end) end
+                local raw_json = run_derush_command("predict", folder_path, nil, files_json)
 
-                if not score then
-                    local fn_stem = fn:match("^(.+)%..+$") or fn
-                    for k, v in pairs(predictions) do
-                        local k_stem = k:match("^(.+)%..+$") or k
-                        if k_stem:lower() == fn_stem:lower() then
-                            score = v
-                            break
-                        end
+                if not raw_json or raw_json == "" then
+                    if job then pcall(function() job.valid = false end) end
+                    dt.print("Derush Error: Backend returned empty response")
+                    return
+                end
+
+                local predictions = {}
+                for filename, score in raw_json:gmatch('"([^"]+)":%s*([%d%.]+)') do
+                    local val = tonumber(score)
+                    if val then
+                        predictions[filename] = val
+                        predictions[filename:lower()] = val
                     end
                 end
 
-                if score then
-                    matched_count = matched_count + 1
-                else
-                    score = 0.50
+                local count = 0
+                local matched_count = 0
+                local count_keep = 0
+                local count_trash = 0
+                local sum_keep = 0
+                local sum_trash = 0
+                local sum_total = 0
+
+                for i, img in ipairs(images) do
+                    local fn = img.filename or ""
+                    local pth = img.path or ""
+                    local score = predictions[fn]
+                        or predictions[fn:lower()]
+                        or predictions[pth]
+                        or predictions[pth:lower()]
+
+                    if not score then
+                        local fn_stem = fn:match("^(.+)%..+$") or fn
+                        for k, v in pairs(predictions) do
+                            local k_stem = k:match("^(.+)%..+$") or k
+                            if k_stem:lower() == fn_stem:lower() then
+                                score = v
+                                break
+                            end
+                        end
+                    end
+
+                    if score then
+                        matched_count = matched_count + 1
+                    else
+                        score = 0.50
+                    end
+
+                    if score >= 0.50 then
+                        count_keep = count_keep + 1
+                        sum_keep = sum_keep + score
+                    else
+                        count_trash = count_trash + 1
+                        sum_trash = sum_trash + score
+                    end
+                    sum_total = sum_total + score
+
+                    set_image_derush_score(img, score)
+                    count = count + 1
+                    if job then
+                        pcall(function() job.percent = 0.10 + 0.90 * (count / total_count) end)
+                    end
                 end
 
-                if score >= 0.50 then
-                    count_keep = count_keep + 1
-                    sum_keep = sum_keep + score
-                else
-                    count_trash = count_trash + 1
-                    sum_trash = sum_trash + score
-                end
-                sum_total = sum_total + score
+                if job then pcall(function() job.valid = false end) end
 
-                set_image_derush_score(img, score)
-                count = count + 1
-                if job then
-                    pcall(function() job.percent = count / total_count end)
-                end
+                local avg_total = count > 0 and (sum_total / count) or 0
+                local avg_keep  = count_keep > 0 and (sum_keep / count_keep) or 0
+                local avg_trash = count_trash > 0 and (sum_trash / count_trash) or 0
+
+                label_stats_selected.label      = string.format("Analysed Photos: %d (%d matched)", count, matched_count)
+                label_stats_predictions.label   = string.format("Predictions: %d Keep / %d Trash", count_keep, count_trash)
+                label_stats_scores_detail.label = string.format("Avg Scores: Total %.2f (Keep %.2f | Trash %.2f)", avg_total, avg_keep, avg_trash)
+
+                log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d (avg %.2f), Trash: %d (avg %.2f)",
+                    matched_count, count, count_keep, avg_keep, count_trash, avg_trash))
+                dt.print(string.format("Derush: Analysed %d photos! %d Keep (avg %.2f), %d Trash (avg %.2f)",
+                    count, count_keep, avg_keep, count_trash, avg_trash))
             end
 
-            if job then pcall(function() job.valid = false end) end
-
-            local avg_total = count > 0 and (sum_total / count) or 0
-            local avg_keep  = count_keep > 0 and (sum_keep / count_keep) or 0
-            local avg_trash = count_trash > 0 and (sum_trash / count_trash) or 0
-
-            label_stats_selected.label      = string.format("Analysed Photos: %d (%d matched)", count, matched_count)
-            label_stats_predictions.label   = string.format("Predictions: %d Keep / %d Trash", count_keep, count_trash)
-            label_stats_scores_detail.label = string.format("Avg Scores: Total %.2f (Keep %.2f | Trash %.2f)", avg_total, avg_keep, avg_trash)
-
-            log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d (avg %.2f), Trash: %d (avg %.2f)",
-                matched_count, count, count_keep, avg_keep, count_trash, avg_trash))
-            dt.print(string.format("Derush: Analysed %d photos! %d Keep (avg %.2f), %d Trash (avg %.2f)",
-                count, count_keep, avg_keep, count_trash, avg_trash))
+            local created = false
+            pcall(function()
+                dt.gui.create_job("Derush: Scoring " .. total_count .. " photos...", true, run_scoring)
+                created = true
+            end)
+            if not created then
+                local job = nil
+                pcall(function() job = dt.gui.create_job("Derush: Scoring " .. total_count .. " photos...", true) end)
+                run_scoring(job)
+            end
         end)
         if not ok then
             log_debug("SCORING ERROR: " .. tostring(err))
@@ -350,9 +356,7 @@ local train_btn = dt.new_widget("button") {
     label = "🎓 Retrain Model with Darktable Labels",
     tooltip = "Train ML model using Green Color Labels (Keep) and Red Color Labels (Trash)",
     clicked_callback = function(widget)
-        -- Wrap entire callback in pcall so errors show as toasts
         local ok, err = pcall(function()
-            log_debug("TRAINING: Button clicked")
             local images = dt.gui.selection()
             if not images or #images == 0 then
                 images = {}
@@ -375,89 +379,94 @@ local train_btn = dt.new_widget("button") {
 
             label_stats_selected.label = string.format("Selected Photos: %d", total_images)
 
-            -- Create progress job
-            local job = nil
+            local run_training = function(job)
+                local label_map = {}
+                local keep_count = 0
+                local trash_count = 0
+
+                for i, img in ipairs(images) do
+                    if img.green or img.rating > 1 then
+                        label_map[img.filename] = "keep"
+                        keep_count = keep_count + 1
+                    elseif img.red or img.rating == -1 then
+                        label_map[img.filename] = "trash"
+                        trash_count = trash_count + 1
+                    end
+                    if job then
+                        pcall(function() job.percent = (i / total_images) * 0.40 end)
+                    end
+                end
+
+                if keep_count == 0 or trash_count == 0 then
+                    if job then pcall(function() job.valid = false end) end
+                    label_stats_manual.label  = string.format("Manual Labels: %d (%d Keep, %d Trash)", keep_count + trash_count, keep_count, trash_count)
+                    label_stats_trained.label = "Training: Failed (Insufficient Labels)"
+                    label_stats_score.label   = "Error: Need >=1 Keep (Green/5⭐) & >=1 Trash (Red/1⭐)"
+                    dt.print(string.format("Derush Error: Need at least 1 Keep and 1 Trash label! Found: %d Keep, %d Trash.", keep_count, trash_count))
+                    return
+                end
+
+                label_stats_manual.label = string.format("Manual Labels: %d (%d Keep, %d Trash)", keep_count + trash_count, keep_count, trash_count)
+
+                dt.print(string.format("Derush: Training with %d Keep + %d Trash...", keep_count, trash_count))
+
+                local json_parts = {}
+                for fn, st in pairs(label_map) do
+                    table.insert(json_parts, string.format('"%s":"%s"', fn, st))
+                end
+                local labels_json = "{" .. table.concat(json_parts, ",") .. "}"
+
+                local file_paths = {}
+                for _, img in ipairs(images) do
+                    local full_p = (img.path and img.path ~= "") and (img.path .. "/" .. img.filename) or img.filename
+                    table.insert(file_paths, string.format('"%s"', full_p:gsub("\\", "/")))
+                end
+                local files_json = "[" .. table.concat(file_paths, ",") .. "]"
+
+                local folder_path = get_collection_root_dir(images)
+                if job then pcall(function() job.percent = 0.60 end) end
+                log_debug("TRAINING: folder=" .. tostring(folder_path) .. " keep=" .. keep_count .. " trash=" .. trash_count)
+                local result = run_derush_command("train", folder_path, labels_json, files_json)
+                if job then pcall(function() job.percent = 1.00 end); pcall(function() job.valid = false end) end
+
+                local err_msg = result and result:match('"message":%s*"([^"]+)"')
+                local n_samples = tonumber(result and result:match('"n_samples":%s*(%d+)'))
+                local n_keep = tonumber(result and result:match('"n_keep":%s*(%d+)'))
+                local n_trash = tonumber(result and result:match('"n_trash":%s*(%d+)'))
+                local cv_acc = tonumber(result and result:match('"cv_accuracy_mean":%s*([%d%.]+)'))
+
+                if err_msg and not cv_acc then
+                    label_stats_trained.label = "Training: Failed"
+                    label_stats_score.label   = "Error: " .. err_msg
+                    dt.print("Derush Error: " .. err_msg)
+                    return
+                end
+
+                if n_samples and n_keep and n_trash then
+                    label_stats_trained.label = string.format("Training Samples: %d unique JPGs (%d Keep, %d Trash)", n_samples, n_keep, n_trash)
+                end
+                if cv_acc then
+                    label_stats_score.label = string.format("Model Accuracy: %.1f%%", cv_acc * 100)
+                end
+
+                local score_str = cv_acc and string.format(" (Accuracy: %.1f%%)", cv_acc * 100) or ""
+                dt.print(string.format("Derush: Trained on %d unique JPGs (%d Keep, %d Trash)%s!",
+                    n_samples or (keep_count + trash_count),
+                    n_keep or keep_count,
+                    n_trash or trash_count,
+                    score_str))
+            end
+
+            local created = false
             pcall(function()
-                job = dt.gui.create_job("Derush: Training on " .. total_images .. " photos...", true)
+                dt.gui.create_job("Derush: Training on " .. total_images .. " photos...", true, run_training)
+                created = true
             end)
-
-            local label_map = {}
-            local keep_count = 0
-            local trash_count = 0
-
-            for i, img in ipairs(images) do
-                -- Read Darktable color labels or Star Ratings
-                if img.green or img.rating > 1 then
-                    label_map[img.filename] = "keep"
-                    keep_count = keep_count + 1
-                elseif img.red or img.rating == -1 then
-                    label_map[img.filename] = "trash"
-                    trash_count = trash_count + 1
-                end
-                if job then
-                    pcall(function() job.percent = (i / total_images) * 0.40 end)
-                end
+            if not created then
+                local job = nil
+                pcall(function() job = dt.gui.create_job("Derush: Training on " .. total_images .. " photos...", true) end)
+                run_training(job)
             end
-
-            if keep_count == 0 or trash_count == 0 then
-                if job then pcall(function() job.valid = false end) end
-                label_stats_manual.label  = string.format("Manual Labels: %d (%d Keep, %d Trash)", keep_count + trash_count, keep_count, trash_count)
-                label_stats_trained.label = "Training: Failed (Insufficient Labels)"
-                label_stats_score.label   = "Error: Need >=1 Keep (Green/5⭐) & >=1 Trash (Red/1⭐)"
-                dt.print(string.format("Derush Error: Need at least 1 Keep and 1 Trash label! Found: %d Keep, %d Trash.", keep_count, trash_count))
-                return
-            end
-
-            label_stats_manual.label = string.format("Manual Labels: %d (%d Keep, %d Trash)", keep_count + trash_count, keep_count, trash_count)
-
-            dt.print(string.format("Derush: Training with %d Keep + %d Trash...", keep_count, trash_count))
-
-            -- Convert Lua table to JSON payload
-            local json_parts = {}
-            for fn, st in pairs(label_map) do
-                table.insert(json_parts, string.format('"%s":"%s"', fn, st))
-            end
-            local labels_json = "{" .. table.concat(json_parts, ",") .. "}"
-
-            local file_paths = {}
-            for _, img in ipairs(images) do
-                local full_p = (img.path and img.path ~= "") and (img.path .. "/" .. img.filename) or img.filename
-                table.insert(file_paths, string.format('"%s"', full_p:gsub("\\", "/")))
-            end
-            local files_json = "[" .. table.concat(file_paths, ",") .. "]"
-
-            local folder_path = get_collection_root_dir(images)
-            if job then pcall(function() job.percent = 0.60 end) end
-            log_debug("TRAINING: folder=" .. tostring(folder_path) .. " keep=" .. keep_count .. " trash=" .. trash_count)
-            local result = run_derush_command("train", folder_path, labels_json, files_json)
-            if job then pcall(function() job.percent = 1.00 end); pcall(function() job.valid = false end) end
-
-            local err_msg = result and result:match('"message":%s*"([^"]+)"')
-            local n_samples = tonumber(result and result:match('"n_samples":%s*(%d+)'))
-            local n_keep = tonumber(result and result:match('"n_keep":%s*(%d+)'))
-            local n_trash = tonumber(result and result:match('"n_trash":%s*(%d+)'))
-            local cv_acc = tonumber(result and result:match('"cv_accuracy_mean":%s*([%d%.]+)'))
-
-            if err_msg and not cv_acc then
-                label_stats_trained.label = "Training: Failed"
-                label_stats_score.label   = "Error: " .. err_msg
-                dt.print("Derush Error: " .. err_msg)
-                return
-            end
-
-            if n_samples and n_keep and n_trash then
-                label_stats_trained.label = string.format("Training Samples: %d unique JPGs (%d Keep, %d Trash)", n_samples, n_keep, n_trash)
-            end
-            if cv_acc then
-                label_stats_score.label = string.format("Model Accuracy: %.1f%%", cv_acc * 100)
-            end
-
-            local score_str = cv_acc and string.format(" (Accuracy: %.1f%%)", cv_acc * 100) or ""
-            dt.print(string.format("Derush: Trained on %d unique JPGs (%d Keep, %d Trash)%s!",
-                n_samples or (keep_count + trash_count),
-                n_keep or keep_count,
-                n_trash or trash_count,
-                score_str))
         end)
         if not ok then
             log_debug("TRAINING ERROR: " .. tostring(err))
