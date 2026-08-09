@@ -156,19 +156,33 @@ local function run_derush_command(cmd_name, folder_path, extra_json, files_json)
         end
     end
 
-    local command = string.format('cmd.exe /c ""%s" "%s" %s --directory-file "%s"%s"',
-        python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
+    local temp_out_path = (os.getenv("TEMP") or "C:/Windows/Temp") .. "/derush_output.json"
+    temp_out_path = temp_out_path:gsub("\\", "/")
+
+    local command = string.format('cmd.exe /c ""%s" "%s" %s --directory-file "%s"%s > "%s" 2>&1"',
+        python_bin, script_path, cmd_name, temp_dir_path, extra_arg, temp_out_path)
 
     log_debug("COMMAND: " .. command)
 
-    local handle = io.popen(command .. " 2>&1")
-    if not handle then
-        dt.print("Derush Error: Could not execute command handle")
-        log_debug("ERROR: io.popen returned nil")
-        return nil
+    local exec_ok = pcall(function()
+        dt.control.execute(command)
+    end)
+
+    local result = ""
+    local handle = io.open(temp_out_path, "r")
+    if handle then
+        result = handle:read("*a")
+        handle:close()
+    else
+        -- Fallback to io.popen if dt.control.execute output couldn't be opened
+        local pop_cmd = string.format('cmd.exe /c ""%s" "%s" %s --directory-file "%s"%s"',
+            python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
+        local ph = io.popen(pop_cmd .. " 2>&1")
+        if ph then
+            result = ph:read("*a")
+            ph:close()
+        end
     end
-    local result = handle:read("*a")
-    handle:close()
 
     log_debug("OUTPUT:\n" .. tostring(result))
 
