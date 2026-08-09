@@ -205,56 +205,36 @@ def _get_xgb_params(n_estimators: int, n_samples: int = None, n_trash: int = Non
 
 
 def _build_pipeline(
-    random_state: int, scale_pos_weight: float, xgb_params: dict, early_stopping_rounds: int | None, use_catboost: bool = True, n_handcrafted_features: int = 78, fast_mode: bool = False
+    random_state: int, scale_pos_weight: float, xgb_params: dict, early_stopping_rounds: int | None, use_catboost: bool = True, n_handcrafted_features: int = 78, fast_mode: bool = False, n_samples: int | None = None
 ) -> Pipeline:
-    """Build model pipeline with scaler (CatBoost by default with optimal settings, XGBoost as fallback).
-    
-    Uses optimal CatBoost hyperparameters from iterative coordinate descent optimization:
-    - iterations: 200 (without early stopping), 932 (with early stopping)
-    - learning_rate: 0.0430 (optimized via iterative search)
-    - depth: 6
-    - l2_leaf_reg: 1.0
-    - early_stopping: eval_metric="Logloss", patience=10 (optimized via iterative search)
-    
-    Best model performance (honest evaluation, no leakage):
-    - CV Accuracy: 77.66% ± 3.29% (StratifiedGroupKFold, per-fold threshold tuning)
-    - Keep-Loss Rate: 2.85% (meets <2% target)
-    - ROC-AUC: 0.7519
-    - F1 Score: 0.8128
-    
-    Args:
-        use_catboost: If True, use CatBoost (best model). If False or unavailable, use XGBoost.
-    """
+    """Build model pipeline with scaler (CatBoost by default with optimal settings, XGBoost as fallback)."""
     import os
     
-    # Try CatBoost first (best performance: 84% accuracy with optimal hyperparameters)
     if use_catboost:
         try:
             from catboost import CatBoostClassifier
             
-            # Use optimal CatBoost hyperparameters from 5-fold StratifiedGroupKFold CV study:
-            # - LR=0.1: Best learning rate (validated with CV)
-            # - iterations=200 (without early stopping), 2000 (with early stopping)
-            # - depth=6, l2_leaf_reg=1.0
-            # - early_stopping: eval_metric="Logloss" (aligned with keep-loss goal, not accuracy)
-            # - patience=200 (allows model to reach full potential)
-            # Best model: 75.31% ± 2.51% CV accuracy, 1.03% keep-loss rate (honest evaluation, no leakage)
-            if early_stopping_rounds is not None:
-                # Use iteratively optimized settings (coordinate descent) for both fast and non-fast modes
-                # Optimized via iterative hyperparameter search with CV:
-                # - LR=0.0430, iterations=932, patience=10 → CV-Acc=77.66%±3.29%, Keep-Loss=2.85%
-                max_iterations = 932  # Optimized via iterative search
-                # Increased patience from 10 to 50 for better stability (reduces variation in scores/features)
-                effective_patience = max(early_stopping_rounds, 50)  # Increased for stability
+            # For small datasets (<500 samples), a 10% validation set has too few samples (high variance),
+            # causing early stopping to trigger prematurely after 5-10 trees.
+            # Train 200 trees directly with LR=0.05 for optimal generalization.
+            if n_samples is not None and n_samples < 500:
+                early_stopping_rounds = None
+                max_iterations = 200
+                learning_rate = 0.05
+            elif early_stopping_rounds is not None:
+                max_iterations = 932
+                effective_patience = max(early_stopping_rounds, 50)
+                learning_rate = 0.0430
             else:
-                max_iterations = 200  # Optimal value from CV study
+                max_iterations = 200
+                learning_rate = 0.05
                 effective_patience = None
             
             cb_params = {
                 "iterations": max_iterations,
-                "learning_rate": 0.0430,  # Optimized via iterative search: LR=0.0430 (best for both modes)
-                "depth": 6,  # Optimal value from evaluation
-                "l2_leaf_reg": 1.0,  # Default regularization
+                "learning_rate": learning_rate,
+                "depth": 6,
+                "l2_leaf_reg": 1.0,
                 "scale_pos_weight": scale_pos_weight,
                 "random_seed": random_state,
                 "verbose": False,
@@ -262,16 +242,14 @@ def _build_pipeline(
                 "allow_writing_files": False,
             }
             
-            # Add early stopping if provided
             if early_stopping_rounds is not None:
                 cb_params["early_stopping_rounds"] = effective_patience
-                # Use Logloss for early stopping (aligned with keep-loss goal, not accuracy)
                 cb_params["eval_metric"] = "Logloss"
                 cb_params["use_best_model"] = True
-                cb_params["verbose"] = 10  # Log every 10 iterations to show progress
-                logging.info(f"[train] Early stopping enabled: patience={effective_patience}, max_iterations={max_iterations}, eval_metric=Logloss")
+                cb_params["verbose"] = 10
+                logging.info(f"[train] Early stopping enabled: patience={effective_patience}, max_iterations={max_iterations}")
             else:
-                logging.info(f"[train] Early stopping disabled, using {max_iterations} iterations")
+                logging.info(f"[train] Early stopping disabled for dataset size ({n_samples or 'N/A'}), using {max_iterations} iterations")
             
             logging.info("[train] Using CatBoost with optimal hyperparameters (LR=0.0430, iterations=932, patience=10, best model: 77.66% ± 3.29% CV, 2.85% keep-loss)")
             
@@ -996,7 +974,7 @@ def train_keep_trash_model(
                 logging.exception("Error in optimizer step")
                 raise
         # Use CatBoost by default with optimal hyperparameters (84% accuracy vs 72% baseline)
-        clf = _build_pipeline(random_state, scale_pos_weight, xgb_params, early_stopping_rounds, use_catboost=True, fast_mode=fast_mode)
+        clf = _build_pipeline(random_state, scale_pos_weight, xgb_params, early_stopping_rounds, use_catboost=True, fast_mode=fast_mode, n_samples=n_samples)
         # Store feature_indices on pipeline for later retrieval (None = all features)
         clf._feature_indices = feature_indices  # type: ignore[attr-defined]
         _check_cancel("pipeline-built")
