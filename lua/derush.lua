@@ -122,12 +122,12 @@ local function log_debug(msg)
 end
 
 local function run_derush_command(cmd_name, folder_path, labels_json, files_json)
-    local python_bin = (os.getenv("USERPROFILE") .. "\\AppData\\Local\\pypoetry\\Cache\\virtualenvs\\photo-app-rBz6-pE0-py3.12\\Scripts\\python.exe"):gsub("\\", "/")
-    local script_path = (os.getenv("LOCALAPPDATA") .. "\\darktable\\lua\\derush\\cli_bridge.py"):gsub("\\", "/")
+    local python_bin = os.getenv("USERPROFILE") .. "\\AppData\\Local\\pypoetry\\Cache\\virtualenvs\\photo-app-rBz6-pE0-py3.12\\Scripts\\python.exe"
+    local script_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\lua\\derush\\cli_bridge.py"
     local temp_dir_path = (os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_directory.txt"):gsub("\\", "/")
     local temp_labels_path = (os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_labels.json"):gsub("\\", "/")
     local temp_files_path = (os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_files.json"):gsub("\\", "/")
-    local temp_bat_path = (os.getenv("LOCALAPPDATA") .. "\\darktable\\run_derush.bat"):gsub("\\", "/")
+    local temp_bat_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\run_derush.bat"
 
     if folder_path and folder_path ~= "" then
         local f = io.open(temp_dir_path, "w")
