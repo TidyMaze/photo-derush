@@ -35,15 +35,33 @@ def build_dataset(
     
     file_list_start = time.perf_counter()
     ignored_exts = (".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")
+    file_lookup: dict[str, str] = {}
+
+    def scan_directory(d_path: str):
+        if not os.path.isdir(d_path):
+            return
+        for root, dirs, fnames in os.walk(d_path):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d.lower() != "thumbnails"]
+            for fn in fnames:
+                if not fn.lower().endswith(ignored_exts):
+                    if fn not in file_lookup:
+                        file_lookup[fn] = os.path.join(root, fn)
+
     if displayed_filenames is not None:
-        all_files = [f for f in displayed_filenames if not f.lower().endswith(ignored_exts)]
-        logging.info(f"[dataset] Using displayed filenames: {len(all_files)}")
+        for f in displayed_filenames:
+            if not f.lower().endswith(ignored_exts):
+                fn = os.path.basename(f)
+                if os.path.isabs(f) and os.path.exists(f):
+                    file_lookup[fn] = f
+                else:
+                    file_lookup[fn] = os.path.join(image_dir, f)
+        logging.info(f"[dataset] Using displayed filenames: {len(file_lookup)}")
     else:
-        all_files = [
-            f for f in os.listdir(image_dir)
-            if os.path.isfile(os.path.join(image_dir, f)) and not f.lower().endswith(ignored_exts)
-        ]
-        logging.info(f"[dataset] Using all files: {len(all_files)}")
+        scan_directory(image_dir)
+        parent_dir = os.path.dirname(image_dir)
+        if parent_dir and os.path.isdir(parent_dir):
+            scan_directory(parent_dir)
+        logging.info(f"[dataset] Total resolved files: {len(file_lookup)}")
     file_list_time = time.perf_counter() - file_list_start
     logging.info(f"[dataset] File listing completed in {file_list_time*1000:.1f}ms")
     
@@ -53,22 +71,27 @@ def build_dataset(
     labeled_files = []
     labels = []
     # Deduplicate RAW/JPG pairs by stem: train on JPG version if present
-    stems_map: dict[str, list[str]] = {}
-    for fname in all_files:
-        stem = os.path.splitext(fname)[0]
-        stems_map.setdefault(stem, []).append(fname)
+    stems_map: dict[str, list[tuple[str, str]]] = {}
+    for fn, full_p in file_lookup.items():
+        stem = os.path.splitext(fn)[0]
+        stems_map.setdefault(stem, []).append((fn, full_p))
 
     for stem, f_list in stems_map.items():
         state = ""
         source = "manual"
-        for f in f_list:
-            st = repo.get_state(f)
+        for fn, full_p in f_list:
+            st = repo.get_state(fn) or repo.get_state(stem)
             if st in ("keep", "trash"):
                 state = st
-                source = repo.get_label_source(f)
+                source = repo.get_label_source(fn) or repo.get_label_source(stem)
                 break
-        if not state:
-            state = repo.get_state(stem)
+        if state not in ("keep", "trash"):
+            for k in (stem, stem + ".JPG", stem + ".jpg", stem + ".ARW", stem + ".arw"):
+                st = repo.get_state(k)
+                if st in ("keep", "trash"):
+                    state = st
+                    source = repo.get_label_source(k)
+                    break
         if state not in ("keep", "trash"):
             continue
         if source != "manual":
@@ -76,15 +99,15 @@ def build_dataset(
             continue
 
         # Choose best file representation for training: prefer rastered JPG/JPEG
-        best_file = f_list[0]
-        for f in f_list:
-            ext = os.path.splitext(f)[1].lower()
+        best_path = f_list[0][1]
+        for fn, full_p in f_list:
+            ext = os.path.splitext(fn)[1].lower()
             if ext in (".jpg", ".jpeg"):
-                best_file = f
+                best_path = full_p
                 break
 
         manual_count += 1
-        labeled_files.append(best_file)
+        labeled_files.append(best_path)
         labels.append(1 if state == "keep" else 0)
     label_check_time = time.perf_counter() - label_check_start
     logging.info(f"[dataset] Label checking completed in {label_check_time*1000:.1f}ms: {manual_count} manual, {auto_skipped} auto skipped")
@@ -95,7 +118,7 @@ def build_dataset(
         logging.info(f"[dataset] No labeled files found")
         return np.zeros((0, FEATURE_COUNT)), np.zeros((0,), dtype=int), []
     
-    image_paths = [os.path.join(image_dir, f) for f in labeled_files]
+    image_paths = labeled_files
     logging.info(f"[dataset] Starting feature extraction for {len(image_paths)} images...")
     feats_all = batch_extract_features(image_paths, progress_callback=progress_callback)
     
