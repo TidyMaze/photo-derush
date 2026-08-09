@@ -109,8 +109,8 @@ def _validate_cache_entries(cache: dict) -> tuple[dict, int]:
             import time
 
             age_sec = time.time() - mtime
-            if age_sec < 0:
-                logging.warning(f"[features] File mtime in future (clock skew?): {path}")
+            if age_sec < -5:
+                logging.warning(f"[features] File mtime significantly in future (clock skew?): {path}")
                 removed += 1
                 continue
         except (OSError, Exception) as e:
