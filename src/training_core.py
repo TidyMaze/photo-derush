@@ -24,7 +24,7 @@ from .model import RatingsTagsRepository
 from .model_version import create_model_metadata
 from .tuning import load_best_params
 
-DEFAULT_MODEL_PATH = os.path.expanduser("~/.photo-derush-keep-trash-model.joblib")
+DEFAULT_MODEL_PATH = os.path.normpath(os.path.expanduser("~/.photo-derush-keep-trash-model.joblib"))
 
 
 @dataclass
@@ -1232,7 +1232,7 @@ def train_keep_trash_model(
         logging.info("[train] Done total_time=%.3fs", total_time)
 
         return TrainingResult(
-            model_path=model_path,
+            model_path=os.path.normpath(model_path),
             n_samples=n_samples,
             n_keep=n_keep,
             n_trash=n_trash,
