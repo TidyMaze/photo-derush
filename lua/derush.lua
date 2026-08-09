@@ -121,32 +121,33 @@ local function log_debug(msg)
     end
 end
 
-local function run_derush_command(cmd_name, folder_path, extra_json, files_json)
-    local python_bin = os.getenv("USERPROFILE") .. [[\AppData\Local\pypoetry\Cache\virtualenvs\photo-app-rBz6-pE0-py3.12\Scripts\python.exe]]
-    local script_path = os.getenv("LOCALAPPDATA") .. [[\darktable\lua\derush\cli_bridge.py]]
-    local temp_dir_path = os.getenv("LOCALAPPDATA") .. [[\darktable\temp_directory.txt]]
-    local temp_json_path = os.getenv("LOCALAPPDATA") .. [[\darktable\temp_labels.json]]
-    local temp_files_path = os.getenv("LOCALAPPDATA") .. [[\darktable\temp_files.json]]
+local function run_derush_command(cmd_name, folder_path, labels_json, files_json)
+    local python_bin = os.getenv("USERPROFILE") .. "\\AppData\\Local\\pypoetry\\Cache\\virtualenvs\\photo-app-rBz6-pE0-py3.12\\Scripts\\python.exe"
+    local script_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\lua\\derush\\cli_bridge.py"
+    local temp_dir_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_directory.txt"
+    local temp_labels_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_labels.json"
+    local temp_files_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_files.json"
+    local temp_bat_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\run_derush.bat"
+    local temp_out_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_out.json"
 
-    -- Write folder path to temp file to bypass cmd.exe encoding issues
-    local dir_f = io.open(temp_dir_path, "w")
-    if dir_f then
-        dir_f:write(folder_path or "")
-        dir_f:close()
-    end
-
-    -- Write labels JSON to temp file if provided
-    local extra_arg = ""
-    if extra_json and extra_json ~= "" then
-        local f = io.open(temp_json_path, "w")
+    if folder_path and folder_path ~= "" then
+        local f = io.open(temp_dir_path, "w")
         if f then
-            f:write(extra_json)
+            f:write(folder_path)
             f:close()
-            extra_arg = string.format(' --labels-file "%s"', temp_json_path)
         end
     end
 
-    -- Write exact image files JSON to temp file if provided
+    local extra_arg = ""
+    if labels_json and labels_json ~= "" then
+        local lf = io.open(temp_labels_path, "w")
+        if lf then
+            lf:write(labels_json)
+            lf:close()
+            extra_arg = extra_arg .. string.format(' --labels-file "%s"', temp_labels_path)
+        end
+    end
+
     if files_json and files_json ~= "" then
         local ff = io.open(temp_files_path, "w")
         if ff then
@@ -156,15 +157,19 @@ local function run_derush_command(cmd_name, folder_path, extra_json, files_json)
         end
     end
 
-    local temp_out_path = (os.getenv("TEMP") or "C:/Windows/Temp") .. "/derush_output.json"
-    temp_out_path = temp_out_path:gsub("\\", "/")
+    -- Write clean batch runner script to eliminate Windows cmd quote stripping errors
+    local bat_file = io.open(temp_bat_path, "w")
+    if bat_file then
+        bat_file:write(string.format('@echo off\n"%s" "%s" %%* > "%s" 2>&1\n', python_bin, script_path, temp_out_path))
+        bat_file:close()
+    end
 
-    local command = string.format('cmd.exe /c ""%s" "%s" %s --directory-file "%s"%s > "%s" 2>&1"',
-        python_bin, script_path, cmd_name, temp_dir_path, extra_arg, temp_out_path)
+    local command = string.format('"%s" %s --directory-file "%s"%s',
+        temp_bat_path, cmd_name, temp_dir_path, extra_arg)
 
     log_debug("COMMAND: " .. command)
 
-    local exec_ok = pcall(function()
+    pcall(function()
         dt.control.execute(command)
     end)
 
@@ -174,13 +179,16 @@ local function run_derush_command(cmd_name, folder_path, extra_json, files_json)
         result = handle:read("*a")
         handle:close()
     else
-        -- Fallback to io.popen if dt.control.execute output couldn't be opened
-        local pop_cmd = string.format('cmd.exe /c ""%s" "%s" %s --directory-file "%s"%s"',
-            python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
-        local ph = io.popen(pop_cmd .. " 2>&1")
+        -- Fallback: execute bat file via io.popen
+        local ph = io.popen(command)
         if ph then
-            result = ph:read("*a")
+            ph:read("*a")
             ph:close()
+            local h2 = io.open(temp_out_path, "r")
+            if h2 then
+                result = h2:read("*a")
+                h2:close()
+            end
         end
     end
 
