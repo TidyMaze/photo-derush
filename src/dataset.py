@@ -127,7 +127,7 @@ def build_dataset(
         if feats is not None:
             X.append(feats)
             y.append(label)
-            filenames.append(fname)
+            filenames.append(os.path.basename(fname))
     result_build_time = time.perf_counter() - result_build_start
     logging.info(f"[dataset] Result building completed in {result_build_time*1000:.1f}ms: {len(X)} valid samples")
     
