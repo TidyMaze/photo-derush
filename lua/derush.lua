@@ -244,13 +244,30 @@ local predict_btn = dt.new_widget("button") {
                 job = dt.gui.create_job("Derush: Scoring " .. total_count .. " photos...", true)
             end)
 
-            local first_img = images[1]
-            local folder_path = first_img.path
-            if first_img.film and first_img.film.path then
-                folder_path = first_img.film.path
+-- Helper to get common root directory for all images in active collection
+local function get_collection_root_dir(images)
+    if not images or #images == 0 then return nil end
+    local common_dir = nil
+    for _, img in ipairs(images) do
+        local pth = img.path
+        if pth and pth ~= "" then
+            if not common_dir then
+                common_dir = pth
             else
-                folder_path = folder_path:match("(.*)[/\\]") or folder_path
+                while common_dir ~= "" and not pth:lower():find(common_dir:lower(), 1, true) do
+                    common_dir = common_dir:match("^(.+)[/\\][^/\\]+$") or ""
+                end
             end
+        end
+    end
+    if not common_dir or common_dir == "" then
+        local first = images[1]
+        common_dir = (first and first.film and first.film.path) or (first and first.path)
+    end
+    return common_dir
+end
+
+            local folder_path = get_collection_root_dir(images)
 
             dt.print(string.format("Derush: Running ML predictions for %d images...", total_count))
             log_debug("SCORING: folder=" .. tostring(folder_path) .. " images=" .. total_count)
@@ -415,13 +432,7 @@ local train_btn = dt.new_widget("button") {
             end
             local labels_json = "{" .. table.concat(json_parts, ",") .. "}"
 
-            local first_img = images[1]
-            local folder_path = first_img.path
-            if first_img.film and first_img.film.path then
-                folder_path = first_img.film.path
-            else
-                folder_path = folder_path:match("(.*)[/\\]") or folder_path
-            end
+            local folder_path = get_collection_root_dir(images)
 
             if job then pcall(function() job.percent = 0.60 end) end
             log_debug("TRAINING: folder=" .. tostring(folder_path) .. " keep=" .. keep_count .. " trash=" .. trash_count)
