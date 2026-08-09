@@ -383,7 +383,7 @@ local train_btn = dt.new_widget("button") {
 
             for i, img in ipairs(images) do
                 -- Read Darktable color labels or Star Ratings
-                if img.green or img.rating == 5 then
+                if img.green or img.rating > 1 then
                     label_map[img.filename] = "keep"
                     keep_count = keep_count + 1
                 elseif img.red or img.rating == -1 then
@@ -493,7 +493,7 @@ update_panel_stats = function()
 
         for _, img in ipairs(images) do
             -- Check manual Green/5⭐ (Keep) or Red/1⭐/Rejected (Trash)
-            if img.green or img.rating == 5 then
+            if img.green or img.rating > 1 then
                 keep_count = keep_count + 1
             elseif img.red or img.rating == -1 then
                 trash_count = trash_count + 1
