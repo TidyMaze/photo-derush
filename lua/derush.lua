@@ -163,7 +163,7 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
         bat_file:close()
     end
 
-    local command = string.format('"%s" %s --directory-file "%s"%s',
+    local command = string.format('cmd.exe /c ""%s" %s --directory-file "%s"%s"',
         temp_bat_path, cmd_name, temp_dir_path, extra_arg)
 
     log_debug("COMMAND: " .. command)
