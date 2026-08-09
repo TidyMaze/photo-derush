@@ -130,7 +130,7 @@ local function run_derush_command(cmd_name, folder_path, extra_json, files_json)
         end
     end
 
-    local command = string.format('""%s" "%s" %s --directory-file "%s"%s"',
+    local command = string.format('"%s" "%s" %s --directory-file "%s"%s',
         python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
 
     log_debug("COMMAND: " .. command)
@@ -256,7 +256,7 @@ local predict_btn = dt.new_widget("button") {
 
 -- Helper to get common root directory for all images in active collection
 local function get_collection_root_dir(images)
-    if not images or #images == 0 then return nil end
+    if not images or #images == 0 then return os.getenv("USERPROFILE") end
     local common_dir = nil
     for _, img in ipairs(images) do
         local pth = img.path
@@ -273,6 +273,9 @@ local function get_collection_root_dir(images)
     if not common_dir or common_dir == "" then
         local first = images[1]
         common_dir = (first and first.film and first.film.path) or (first and first.path)
+    end
+    if not common_dir or common_dir == "" then
+        common_dir = os.getenv("USERPROFILE")
     end
     return common_dir
 end
