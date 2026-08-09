@@ -34,10 +34,11 @@ def build_dataset(
         return np.zeros((0, FEATURE_COUNT)), np.zeros((0,), dtype=int), []
     
     file_list_start = time.perf_counter()
+    ignored_exts = (".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")
     if displayed_filenames is not None:
-        all_files = displayed_filenames
+        all_files = [f for f in displayed_filenames if not f.lower().endswith(ignored_exts)]
         logging.info(f"[dataset] Using displayed filenames: {len(all_files)}")
-        ignored_exts = (".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")
+    else:
         all_files = [
             f for f in os.listdir(image_dir)
             if os.path.isfile(os.path.join(image_dir, f)) and not f.lower().endswith(ignored_exts)
