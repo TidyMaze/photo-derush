@@ -128,7 +128,6 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
     local temp_labels_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_labels.json"
     local temp_files_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_files.json"
     local temp_bat_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\run_derush.bat"
-    local temp_out_path = os.getenv("LOCALAPPDATA") .. "\\darktable\\temp_out.json"
 
     if folder_path and folder_path ~= "" then
         local f = io.open(temp_dir_path, "w")
@@ -160,7 +159,7 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
     -- Write clean batch runner script to eliminate Windows cmd quote stripping errors
     local bat_file = io.open(temp_bat_path, "w")
     if bat_file then
-        bat_file:write(string.format('@echo off\n"%s" "%s" %%* > "%s" 2>&1\n', python_bin, script_path, temp_out_path))
+        bat_file:write(string.format('@echo off\n"%s" "%s" %%*\n', python_bin, script_path))
         bat_file:close()
     end
 
@@ -169,28 +168,15 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
 
     log_debug("COMMAND: " .. command)
 
-    pcall(function()
-        dt.control.execute(command)
-    end)
-
-    local result = ""
-    local handle = io.open(temp_out_path, "r")
-    if handle then
-        result = handle:read("*a")
-        handle:close()
-    else
-        -- Fallback: execute bat file via io.popen
-        local ph = io.popen(command)
-        if ph then
-            ph:read("*a")
-            ph:close()
-            local h2 = io.open(temp_out_path, "r")
-            if h2 then
-                result = h2:read("*a")
-                h2:close()
-            end
-        end
+    local handle = io.popen(command .. " 2>&1")
+    if not handle then
+        dt.print("Derush Error: Could not execute command handle")
+        log_debug("ERROR: io.popen returned nil")
+        return nil
     end
+
+    local result = handle:read("*a")
+    handle:close()
 
     log_debug("OUTPUT:\n" .. tostring(result))
 
