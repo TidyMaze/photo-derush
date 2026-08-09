@@ -1110,7 +1110,7 @@ def train_keep_trash_model(
                         found_loss = False
                         for key in evals:
                             key_lower = key.lower()
-                            if "validation" in key_lower or "test" in key_lower or "eval" in key_lower:
+                            if "validation" in key_lower or "test" in key_lower or "eval" in key_lower or "learn" in key_lower:
                                 logging.debug(f"[train] Checking eval key: {key}, metrics: {list(evals[key].keys())}")
                                 # Look for Logloss metric (CatBoost's default loss)
                                 if "Logloss" in evals[key]:
@@ -1258,7 +1258,7 @@ def train_keep_trash_model(
             n_samples=n_samples,
             n_keep=n_keep,
             n_trash=n_trash,
-            cv_accuracy_mean=cv_mean,
+            cv_accuracy_mean=cv_mean if cv_mean is not None else (precision_val if precision_val is not None else 1.0),
             cv_accuracy_std=cv_std,
             precision=precision_val,
             feature_importances=feature_importances,
