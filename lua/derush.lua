@@ -162,8 +162,8 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
 
     local command = inner_cmd
     if is_windows then
-        -- Wrap with extra pair of quotes so Windows cmd.exe /c quote-stripping leaves inner quotes intact
-        command = string.format('""%s""', inner_cmd)
+        -- Wrap with a single outer pair of quotes so Windows cmd.exe /c strips outer quotes cleanly
+        command = string.format('"%s"', inner_cmd)
     end
 
     log_debug("COMMAND: " .. command)
