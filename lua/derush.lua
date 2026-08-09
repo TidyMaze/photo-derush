@@ -130,7 +130,7 @@ local function run_derush_command(cmd_name, folder_path, extra_json, files_json)
         end
     end
 
-    local command = string.format('"%s" "%s" %s --directory-file "%s"%s',
+    local command = string.format('cmd.exe /c ""%s" "%s" %s --directory-file "%s"%s"',
         python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
 
     log_debug("COMMAND: " .. command)
@@ -457,6 +457,7 @@ local train_btn = dt.new_widget("button") {
             end
             local files_json = "[" .. table.concat(file_paths, ",") .. "]"
 
+            local folder_path = get_collection_root_dir(images)
             if job then pcall(function() job.percent = 0.60 end) end
             log_debug("TRAINING: folder=" .. tostring(folder_path) .. " keep=" .. keep_count .. " trash=" .. trash_count)
             local result = run_derush_command("train", folder_path, labels_json, files_json)
