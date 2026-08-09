@@ -259,6 +259,7 @@ def _build_pipeline(
                 "random_seed": random_state,
                 "verbose": False,
                 "thread_count": 1 if os.environ.get("PYTEST_CURRENT_TEST") else -1,
+                "allow_writing_files": False,
             }
             
             # Add early stopping if provided
