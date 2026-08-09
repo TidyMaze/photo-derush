@@ -199,39 +199,6 @@ local function set_image_derush_score(img, score)
     pcall(function()
         img.title = string.format("Derush Score %0.2f", score)
     end)
-
-    -- Check if rating was set by ML previously or is currently unrated
-    local is_ml_predicted = false
-    if existing_tags then
-        for _, t in ipairs(existing_tags) do
-            if t.name == "derush|predicted" then
-                is_ml_predicted = true
-                break
-            end
-        end
-    end
-
-    -- 3. Update star rating if image is unrated (0) OR was previously ML-predicted
-    --    Only skip if user manually set stars without the derush|predicted marker!
-    if img.rating == 0 or is_ml_predicted then
-        local star_rating = 1
-        if score >= 0.85 then
-            star_rating = 5
-        elseif score >= 0.70 then
-            star_rating = 4
-        elseif score >= 0.50 then
-            star_rating = 3
-        elseif score >= 0.30 then
-            star_rating = 2
-        else
-            star_rating = 1
-        end
-        img.rating = star_rating
-
-        -- Attach marker tag so future re-predictions know this star rating came from ML
-        local pred_tag = dt.tags.create("derush|predicted")
-        dt.tags.attach(pred_tag, img)
-    end
 end
 
 -- Panel Status Labels
@@ -568,11 +535,80 @@ pcall(function()
     end)
 end)
 
+local map_stars_btn = dt.new_widget("button") {
+    label = "⭐ Map Scores to Stars",
+    tooltip = "Apply star ratings (1 to 5) based on computed Derush ML scores",
+    clicked_callback = function(widget)
+        pcall(function()
+            local images = dt.gui.selection()
+            if not images or #images == 0 then
+                images = {}
+                local col_ok, col = pcall(function() return dt.collection end)
+                if col_ok and col then
+                    for i = 1, #col do
+                        table.insert(images, col[i])
+                    end
+                else
+                    for i = 1, #dt.database do
+                        table.insert(images, dt.database[i])
+                    end
+                end
+            end
+
+            if #images == 0 then
+                dt.print("Derush: No images found in current selection/view")
+                return
+            end
+
+            local mapped_count = 0
+            for _, img in ipairs(images) do
+                local score = nil
+                local existing_tags = dt.tags.get_tags(img)
+                if existing_tags then
+                    for _, t in ipairs(existing_tags) do
+                        local s_str = t.name:match("^derush|score_([%d%.]+)")
+                        if s_str then
+                            score = tonumber(s_str)
+                            break
+                        end
+                    end
+                end
+                if not score and img.description then
+                    local s_str = img.description:match("Derush Score:%s*([%d%.]+)")
+                    if s_str then
+                        score = tonumber(s_str)
+                    end
+                end
+
+                if score then
+                    local star_rating = 1
+                    if score >= 0.85 then
+                        star_rating = 5
+                    elseif score >= 0.70 then
+                        star_rating = 4
+                    elseif score >= 0.50 then
+                        star_rating = 3
+                    elseif score >= 0.30 then
+                        star_rating = 2
+                    else
+                        star_rating = 1
+                    end
+                    img.rating = star_rating
+                    mapped_count = mapped_count + 1
+                end
+            end
+
+            dt.print(string.format("Derush: Mapped scores to stars for %d image(s)!", mapped_count))
+        end)
+    end
+}
+
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
     dt.new_widget("label") { label = "Photo-Derush ML Assistant" },
     predict_btn,
     train_btn,
+    map_stars_btn,
     dt.new_widget("label") { label = "--- Live Image & Model Stats ---" },
     label_stats_selected,
     label_stats_manual,
