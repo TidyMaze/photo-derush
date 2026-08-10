@@ -48,6 +48,21 @@ local function get_target_images()
     return images, "database"
 end
 
+-- Helper to force Darktable Lighttable UI to refresh group stacks and redrawing
+local function refresh_darktable_lighttable_view()
+    log_debug("REFRESH_UI: Triggering Lighttable view & grouping refresh...")
+    local ok1 = pcall(function() dt.gui.action("lib/tools/grouping/expand", {}, "toggle") end)
+    if ok1 then
+        pcall(function() dt.gui.action("lib/tools/grouping/expand", {}, "toggle") end)
+    else
+        pcall(function() dt.gui.action("lib/tools/grouping/expand", {}, "on") end)
+        pcall(function() dt.gui.action("lib/tools/grouping/expand", {}, "off") end)
+    end
+    pcall(function() dt.gui.action("view/lighttable/redraw", {}, "on") end)
+    pcall(function() dt.gui.action("view/redraw", {}, "on") end)
+    pcall(function() dt.gui.action("collection/update", {}, "on") end)
+end
+
 -- Helper to get common root directory for all images in active collection
 local function get_collection_root_dir(images)
     if not images or #images == 0 then return os.getenv("USERPROFILE") end
@@ -900,6 +915,7 @@ local btn_group_bursts = dt.new_widget("button") {
                     end
                     dt.print(string.format("Derush: Auto-grouped %d burst stack(s) in Darktable!", #multi_clusters))
                     log_debug(string.format("AUTO-GROUP COMPLETE: %d stacks formed", #multi_clusters))
+                    refresh_darktable_lighttable_view()
                 end
             end
         end)
