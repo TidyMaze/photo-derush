@@ -458,9 +458,8 @@ local train_btn = dt.new_widget("button") {
             local n_keep = tonumber(result and result:match('"n_keep":%s*(%d+)'))
             local n_trash = tonumber(result and result:match('"n_trash":%s*(%d+)'))
             local cv_acc = tonumber(result and result:match('"cv_accuracy_mean":%s*([%d%.]+)'))
-                or tonumber(result and result:match('"precision":%s*([%d%.]+)'))
+                or tonumber(result and result:match('"accuracy":%s*([%d%.]+)'))
                 or tonumber(result and result:match('"roc_auc":%s*([%d%.]+)'))
-                or tonumber(result and result:match('"f1":%s*([%d%.]+)'))
 
             if err_msg and not (cv_acc or n_samples) then
                 label_stats_trained.label = "Training: Failed"

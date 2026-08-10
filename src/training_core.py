@@ -15,7 +15,7 @@ import joblib
 import numpy as np
 # Lazy import: xgboost is heavy, only import when actually needed
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import confusion_matrix, precision_score, recall_score, roc_auc_score, precision_recall_curve
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, roc_auc_score, precision_recall_curve
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import cross_val_score, train_test_split, StratifiedGroupKFold
 from sklearn.metrics import auc as roc_auc_func
@@ -41,6 +41,7 @@ class TrainingResult:
     n_trash: int
     cv_accuracy_mean: float | None
     cv_accuracy_std: float | None
+    accuracy: float | None = None
     precision: float | None = None
     feature_importances: list[tuple[int, float]] | None = None
     roc_auc: float | None = None
@@ -753,6 +754,7 @@ def _compute_metrics(
         else:
             y_pred = clf.predict(X)
         
+        accuracy_val = float(accuracy_score(y, y_pred))
         precision_val = float(precision_score(y, y_pred, zero_division=0))
 
         if y_prob is not None:
@@ -788,7 +790,7 @@ def _compute_metrics(
     except Exception as e:
         logging.debug("[train] Metrics computation failed: %s", e)
 
-    return precision_val, roc_auc_val, f1_val, confusion_vals, asymmetric_metrics
+    return precision_val, roc_auc_val, f1_val, accuracy_val, confusion_vals, asymmetric_metrics
 
 
 def _save_model(
@@ -1143,10 +1145,10 @@ def train_keep_trash_model(
                     logging.debug(f"[train] Failed to tune threshold: {e}, using default 0.5")
         
         if X_test_holdout is not None:
-            precision_val, roc_auc_val, f1_val, confusion_vals, asymmetric_metrics = _compute_metrics(clf, X_test_holdout, y_test_holdout, threshold=test_threshold)
+            precision_val, roc_auc_val, f1_val, accuracy_val, confusion_vals, asymmetric_metrics = _compute_metrics(clf, X_test_holdout, y_test_holdout, threshold=test_threshold)
             logging.info(
-                "[train] Metrics computed on holdout test set: precision=%.4f, roc_auc=%.4f, f1=%.4f",
-                precision_val or 0.0, roc_auc_val or 0.0, f1_val or 0.0
+                "[train] Metrics computed on holdout test set: accuracy=%.4f, precision=%.4f, roc_auc=%.4f, f1=%.4f",
+                accuracy_val or 0.0, precision_val or 0.0, roc_auc_val or 0.0, f1_val or 0.0
             )
             if asymmetric_metrics:
                 logging.info(
@@ -1160,7 +1162,7 @@ def train_keep_trash_model(
             logging.info("[train] Using model trained on 80%% of data for production (honest evaluation)")
         else:
             # Too small for holdout - use all data (will be optimistic)
-            precision_val, roc_auc_val, f1_val, confusion_vals, asymmetric_metrics = _compute_metrics(clf, X, y, threshold=0.5)
+            precision_val, roc_auc_val, f1_val, accuracy_val, confusion_vals, asymmetric_metrics = _compute_metrics(clf, X, y, threshold=0.5)
             logging.info(
                 "[train] Dataset too small for holdout - metrics computed on training data (optimistic)"
             )
@@ -1249,6 +1251,7 @@ def train_keep_trash_model(
             n_trash=n_trash,
             cv_accuracy_mean=cv_mean,
             cv_accuracy_std=cv_std,
+            accuracy=accuracy_val,
             precision=precision_val,
             feature_importances=feature_importances,
             roc_auc=roc_auc_val,
