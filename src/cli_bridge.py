@@ -45,7 +45,7 @@ def cmd_group(args):
     image_names = model.get_image_files()
 
     # Preload EXIF for grouping calculation
-    exif_data = {fn: model.get_exif(model.get_image_path(fn)) for fn in image_names if model.get_image_path(fn)}
+    exif_data = {fn: model.load_exif(model.get_image_path(fn)) for fn in image_names if model.get_image_path(fn)}
     group_info = compute_grouping_for_photos(
         filenames=image_names,
         image_dir=directory,
@@ -143,7 +143,7 @@ def cmd_predict(args_or_dir, labels_file=None, files_json=None, burst_limit=Fals
     # Compute grouping for images
     group_info = {}
     try:
-        exif_data = {fn: model.get_exif(p) for fn, p in zip(image_names, image_paths) if p and os.path.exists(p)}
+        exif_data = {fn: model.load_exif(p) for fn, p in zip(image_names, image_paths) if p and os.path.exists(p)}
         group_info = compute_grouping_for_photos(
             filenames=image_names,
             image_dir=directory,
