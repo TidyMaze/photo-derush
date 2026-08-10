@@ -888,15 +888,15 @@ local btn_group_bursts = dt.new_widget("button") {
                         for _, img in ipairs(cluster) do
                             if img ~= best_img then
                                 local ok, err = pcall(function()
-                                    if best_img.group_with then
-                                        best_img:group_with(img)
-                                    elseif img.group_with then
+                                    if img.group_with then
                                         img:group_with(best_img)
+                                    elseif best_img.group_with then
+                                        best_img:group_with(img)
                                     end
                                 end)
                                 if not ok then
-                                    log_debug(string.format("GROUP_WITH ERROR between %s and %s: %s",
-                                        tostring(best_img.filename), tostring(img.filename), tostring(err)))
+                                    log_debug(string.format("GROUP_WITH ERROR putting %s into %s group: %s",
+                                        tostring(img.filename), tostring(best_img.filename), tostring(err)))
                                 end
                             end
                         end
