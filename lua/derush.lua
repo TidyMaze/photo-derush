@@ -209,13 +209,13 @@ local function set_image_derush_score(img, score)
     end)
 end
 
----- Panel Status Labels (left-aligned for native Darktable sidebar fit)
-local label_stats_selected       = dt.new_widget("label") { label = "Photos in View: -", halign = "start" }
-local label_stats_manual         = dt.new_widget("label") { label = "Manual Labels: -", halign = "start" }
-local label_stats_predictions    = dt.new_widget("label") { label = "Auto Predicted: -", halign = "start" }
-local label_stats_trained        = dt.new_widget("label") { label = "Training Data: -", halign = "start" }
-local label_stats_score          = dt.new_widget("label") { label = "Model Accuracy: -", halign = "start" }
-local label_stats_scores_detail  = dt.new_widget("label") { label = "Analysis Detail: -", halign = "start" }
+-- Panel Status Labels
+local label_stats_selected       = dt.new_widget("label") { label = "Photos in View: -" }
+local label_stats_manual         = dt.new_widget("label") { label = "Manual Labels: -" }
+local label_stats_predictions    = dt.new_widget("label") { label = "Auto Predicted: -" }
+local label_stats_trained        = dt.new_widget("label") { label = "Training Data: -" }
+local label_stats_score          = dt.new_widget("label") { label = "Model Accuracy: -" }
+local label_stats_scores_detail  = dt.new_widget("label") { label = "Analysis Detail: -" }
 
 -- UI Panel Buttons
 local predict_btn = dt.new_widget("button") {
@@ -624,11 +624,11 @@ local map_stars_btn = dt.new_widget("button") {
 
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
-    dt.new_widget("label") { label = "<b>ACTIONS</b>", use_markup = true, halign = "start" },
+    dt.new_widget("label") { label = "ACTIONS" },
     predict_btn,
     train_btn,
     map_stars_btn,
-    dt.new_widget("label") { label = "<b>COLLECTION & MODEL STATS</b>", use_markup = true, halign = "start" },
+    dt.new_widget("label") { label = "COLLECTION & MODEL STATS" },
     label_stats_selected,
     label_stats_manual,
     label_stats_predictions,
