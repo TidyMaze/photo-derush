@@ -29,6 +29,25 @@ local function get_target_images()
     return {}
 end
 
+-- Helper to get target images (Prioritize selection if non-empty, fallback to active collection, then database)
+local function get_target_images()
+    local images = nil
+    pcall(function() images = dt.gui.selection() end)
+    if images and #images > 0 then
+        return images, "selection"
+    end
+    images = {}
+    local col_ok, col = pcall(function() return dt.collection end)
+    if col_ok and col and #col > 0 then
+        for i = 1, #col do table.insert(images, col[i]) end
+        return images, "collection"
+    end
+    pcall(function()
+        for i = 1, #dt.database do table.insert(images, dt.database[i]) end
+    end)
+    return images, "database"
+end
+
 -- Helper to get common root directory for all images in active collection
 local function get_collection_root_dir(images)
     if not images or #images == 0 then return os.getenv("USERPROFILE") end
@@ -352,21 +371,7 @@ local predict_btn = dt.new_widget("button") {
     tooltip = "Compute ML prediction scores for photos in active collection",
     clicked_callback = function(widget)
         local ok, err = pcall(function()
-            local images = dt.gui.selection()
-            if not images or #images == 0 then
-                images = {}
-                local col_ok, col = pcall(function() return dt.collection end)
-                if col_ok and col then
-                    for i = 1, #col do
-                        table.insert(images, col[i])
-                    end
-                else
-                    for i = 1, #dt.database do
-                        table.insert(images, dt.database[i])
-                    end
-                end
-            end
-
+            local images, src_mode = get_target_images()
             local total_count = #images
             if total_count == 0 then
                 dt.print("Derush Error: No images found to predict")
@@ -529,20 +534,7 @@ local train_btn = dt.new_widget("button") {
     clicked_callback = function(widget)
         local ok, err = pcall(function()
             log_debug("TRAINING: Button clicked")
-            local images = dt.gui.selection()
-            if not images or #images == 0 then
-                images = {}
-                local col_ok, col = pcall(function() return dt.collection end)
-                if col_ok and col then
-                    for i = 1, #col do
-                        table.insert(images, col[i])
-                    end
-                else
-                    for i = 1, #dt.database do
-                        table.insert(images, dt.database[i])
-                    end
-                end
-            end
+            local images, src_mode = get_target_images()
             local total_images = #images
             if total_images == 0 then
                 dt.print("Derush Error: No images found to train")
@@ -793,26 +785,14 @@ local btn_group_bursts = dt.new_widget("button") {
     tooltip = "Group burst photos into Darktable stacks (dt.group) and set the #1 best photo as group leader!",
     clicked_callback = function(widget)
         pcall(function()
-            local images = {}
-            local col_ok, col = pcall(function() return dt.collection end)
-            if col_ok and col and #col > 0 then
-                for i = 1, #col do table.insert(images, col[i]) end
-            else
-                local sel_ok, sel = pcall(function() return dt.gui.selection() end)
-                if sel_ok and sel then
-                    for i = 1, #sel do table.insert(images, sel[i]) end
-                end
-                if #images == 0 then
-                    for i = 1, #dt.database do table.insert(images, dt.database[i]) end
-                end
-            end
+            local images, src_mode = get_target_images()
             if #images == 0 then
                 dt.print("Derush Error: No images found to group")
                 return
             end
 
-            log_debug(string.format("AUTO-GROUP: Processing %d images from Darktable collection", #images))
-            dt.print(string.format("Derush: Auto-grouping bursts across %d photos...", #images))
+            log_debug(string.format("AUTO-GROUP: Processing %d images (source: %s)", #images, src_mode))
+            dt.print(string.format("Derush: Auto-grouping bursts across %d photos (%s)...", #images, src_mode))
             local folder_path = get_collection_root_dir(images)
             local file_paths = {}
             for _, img in ipairs(images) do
