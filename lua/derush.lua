@@ -393,6 +393,8 @@ local train_btn = dt.new_widget("button") {
                 job = dt.gui.create_job("Derush: Training on " .. total_images .. " photos...")
             end)
 
+            dt.print(string.format("Derush: Scanning Darktable labels across %d photos...", total_images))
+
             local label_map = {}
             local keep_count = 0
             local trash_count = 0
@@ -404,6 +406,9 @@ local train_btn = dt.new_widget("button") {
                 elseif img.red or img.rating == -1 then
                     label_map[img.filename] = "trash"
                     trash_count = trash_count + 1
+                end
+                if i % 100 == 0 or i == total_images then
+                    if job then pcall(function() job.percent = (i / total_images) * 0.30 end) end
                 end
             end
 
@@ -418,7 +423,7 @@ local train_btn = dt.new_widget("button") {
 
             label_stats_manual.label = string.format("Manual Labels: %d (%d Keep, %d Trash)", keep_count + trash_count, keep_count, trash_count)
 
-            dt.print(string.format("Derush: Training with %d Keep + %d Trash...", keep_count, trash_count))
+            dt.print(string.format("Derush: Extracting features & fitting CatBoost model (%d Keep + %d Trash)...", keep_count, trash_count))
 
             local json_parts = {}
             for fn, st in pairs(label_map) do
