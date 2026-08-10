@@ -755,7 +755,6 @@ pcall(function()
     local img_path = (dt.configuration.config_dir .. "/lua/derush/clippy.png"):gsub("\\", "/")
     maxclippy_avatar = dt.new_widget("button") {
         image = img_path,
-        label = " 📎 MaxClippy Avatar ",
         tooltip = "Click MaxClippy to get a random sarcastic roast!",
         clicked_callback = function(widget)
             pcall(function()
