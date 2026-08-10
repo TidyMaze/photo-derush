@@ -60,22 +60,27 @@ def cmd_group(args):
     print(json.dumps(output))
 
 
-def cmd_predict(args):
-    """Predict keep probabilities using ML classifier."""
-    directory = args.directory
-    file_list = None
-    if getattr(args, "files_file", None) and os.path.exists(args.files_file):
-        try:
-            with open(args.files_file, "r", encoding="utf-8") as f:
-                file_list = json.load(f)
-        except Exception as e:
-            sys.stderr.write(f"Failed reading files file: {e}\n")
+def cmd_predict(args_or_dir, labels_file=None, files_json=None, burst_limit=False):
+    """Predict keep probabilities using ML classifier and compute burst groups."""
+    if isinstance(args_or_dir, str):
+        directory = args_or_dir
+        file_list = json.loads(files_json) if files_json else None
+    else:
+        directory = args_or_dir.directory
+        file_list = None
+        if getattr(args_or_dir, "files_file", None) and os.path.exists(args_or_dir.files_file):
+            try:
+                with open(args_or_dir.files_file, "r", encoding="utf-8") as f:
+                    file_list = json.load(f)
+            except Exception as e:
+                sys.stderr.write(f"Failed reading files file: {e}\n")
+        burst_limit = getattr(args_or_dir, "burst_limit", False) or burst_limit
 
+    model = PhotoModel(directory=directory, max_images=None)
     if file_list:
         image_names = [os.path.basename(f) for f in file_list]
         image_paths = file_list
     else:
-        model = PhotoModel(directory=directory, max_images=None)
         image_names = model.get_image_files()
         image_paths = [model.get_image_path(fn) for fn in image_names if model.get_image_path(fn)]
 
@@ -135,13 +140,31 @@ def cmd_predict(args):
     except Exception:
         pass
 
+    # Compute grouping for images
+    group_info = {}
+    try:
+        exif_data = {fn: model.get_exif(p) for fn, p in zip(image_names, image_paths) if p and os.path.exists(p)}
+        group_info = compute_grouping_for_photos(
+            filenames=image_names,
+            image_dir=directory,
+            exif_data=exif_data,
+            keep_probabilities=probs,
+            burst_gap_sec=2.0
+        )
+    except Exception as e:
+        sys.stderr.write(f"Grouping computation error: {e}\n")
+
     output = {
         "status": "success",
         "total_images": len(image_names),
         "threshold": round(float(decision_threshold), 4),
-        "predictions": probs
+        "predictions": probs,
+        "groups": group_info
     }
-    print(json.dumps(output))
+    result_str = json.dumps(output)
+    if isinstance(args_or_dir, str):
+        return result_str
+    print(result_str)
 
 
 def cmd_train(args):

@@ -420,12 +420,14 @@ def compute_grouping_for_photos(
         pick_scores.append(pick_score)
         timestamps.append(photo.timestamp)
 
-    # Step 6: Recommend best picks
+    # Step 6: Recommend best picks for both near-duplicate groups and time bursts
     if progress_reporter:
         progress_reporter.update(8, 8)
         progress_reporter.detail("Recommending best picks...")
     logging.info("[grouping_service] Step 8/8: Recommending best picks...")
     best_flags = recommend_best_pick(groups, pick_scores, timestamps=timestamps)
+    burst_best_flags = recommend_best_pick(bursts, pick_scores, timestamps=timestamps)
+
     best_count = sum(best_flags)
     logging.info(f"[grouping_service] Step 8: Selected {best_count} best picks")
     if progress_reporter:
@@ -450,6 +452,7 @@ def compute_grouping_for_photos(
             "group_id": groups[idx],
             "group_size": group_sizes[groups[idx]],
             "is_group_best": best_flags[idx],
+            "is_burst_best": burst_best_flags[idx],
             "pick_score": pick_scores[idx],
         }
 

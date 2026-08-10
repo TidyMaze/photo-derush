@@ -699,6 +699,105 @@ local map_stars_btn = dt.new_widget("button") {
     end
 }
 
+local chk_burst_limit = dt.new_widget("check_button") {
+    label = "Keep Max 1 Photo per Burst",
+    tooltip = "When checked, only the single best frame in each burst cluster is kept, duplicate burst photos are marked Trash.",
+    value = true
+}
+
+local btn_group_bursts = dt.new_widget("button") {
+    label = "⚡ Auto-Group Bursts in Darktable",
+    tooltip = "Group burst photos into Darktable stacks (dt.group) and set the #1 best photo as group leader!",
+    clicked_callback = function(widget)
+        pcall(function()
+            local images = dt.gui.selection()
+            if not images or #images == 0 then
+                images = {}
+                local col_ok, col = pcall(function() return dt.collection end)
+                if col_ok and col then
+                    for i = 1, #col do table.insert(images, col[i]) end
+                else
+                    for i = 1, #dt.database do table.insert(images, dt.database[i]) end
+                end
+            end
+            if #images == 0 then
+                dt.print("Derush Error: No images found to group")
+                return
+            end
+
+            dt.print(string.format("Derush: Auto-grouping bursts across %d photos...", #images))
+            local folder_path = get_collection_root_dir(images)
+            local file_paths = {}
+            for _, img in ipairs(images) do
+                local pth = img.path
+                local fn = img.filename
+                local full_p = (pth and pth ~= "") and (pth .. "/" .. fn) or fn
+                table.insert(file_paths, string.format('"%s"', full_p:gsub("\\", "/")))
+            end
+            local files_json = "[" .. table.concat(file_paths, ",") .. "]"
+            local raw_json = run_derush_command("predict", folder_path, nil, files_json)
+
+            if raw_json and raw_json ~= "" then
+                local burst_id_map = {}
+                local is_burst_best_map = {}
+                for fn, b_id, is_b_best in raw_json:gmatch('"([^"]+)":%s*%{[^%}]*"burst_id":%s*(%d+)[^%}]*"is_burst_best":%s*(true|false)') do
+                    local b_num = tonumber(b_id)
+                    local b_best = (is_b_best == "true")
+                    burst_id_map[fn] = b_num
+                    burst_id_map[fn:lower()] = b_num
+                    is_burst_best_map[fn] = b_best
+                    is_burst_best_map[fn:lower()] = b_best
+                end
+
+                local burst_clusters = {}
+                for _, img in ipairs(images) do
+                    local fn = img.filename or ""
+                    local bid = burst_id_map[fn] or burst_id_map[fn:lower()]
+                    if bid then
+                        if not burst_clusters[bid] then burst_clusters[bid] = {} end
+                        table.insert(burst_clusters[bid], img)
+                    end
+                end
+
+                local grouped_count = 0
+                for bid, cluster in pairs(burst_clusters) do
+                    if #cluster > 1 then
+                        local best_img = nil
+                        for _, img in ipairs(cluster) do
+                            local fn = img.filename or ""
+                            if is_burst_best_map[fn] or is_burst_best_map[fn:lower()] then
+                                best_img = img
+                                break
+                            end
+                        end
+                        if not best_img then best_img = cluster[1] end
+
+                        for _, img in ipairs(cluster) do
+                            if img ~= best_img then
+                                pcall(function()
+                                    if best_img.group_with then
+                                        best_img:group_with(img)
+                                    elseif img.group_with then
+                                        img:group_with(best_img)
+                                    end
+                                end)
+                            end
+                        end
+
+                        pcall(function()
+                            if best_img.make_group_leader then
+                                best_img:make_group_leader()
+                            end
+                        end)
+                        grouped_count = grouped_count + 1
+                    end
+                end
+                dt.print(string.format("Derush: Auto-grouped %d burst stacks in Darktable!", grouped_count))
+            end
+        end)
+    end
+}
+
 local sec_actions = dt.new_widget("section_label") { label = "ML ACTIONS & SETTINGS" }
 local sec_summary = dt.new_widget("section_label") { label = "OVERVIEW STATS" }
 local box_summary = dt.new_widget("box") {
@@ -751,7 +850,9 @@ local widget_box = dt.new_widget("box") {
     orientation = "vertical",
     sec_actions,
     target_ratio_cmb,
+    chk_burst_limit,
     predict_btn,
+    btn_group_bursts,
     train_btn,
     map_stars_btn,
     sec_summary,
