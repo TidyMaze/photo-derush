@@ -330,7 +330,10 @@ local predict_btn = dt.new_widget("button") {
 
                 set_image_derush_score(img, score)
                 count = count + 1
-                if job and count % 50 == 0 then
+                if count % 100 == 0 or count == total_count then
+                    dt.print(string.format("Derush: Tagging scores... %d/%d photos done", count, total_count))
+                end
+                if job then
                     pcall(function() job.percent = 0.10 + 0.90 * (count / total_count) end)
                 end
             end
