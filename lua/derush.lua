@@ -149,16 +149,23 @@ local function format_human_readable_log(cmd_name, raw_output)
     local groups_block = raw_output:match('"groups":%s*{(.*)}')
     if groups_block then
         local burst_map = {}
+        local seen_photos = {}
         for fn, details in groups_block:gmatch('"([^"]+)":%s*%{([^%}]+)%}') do
-            local b_id = details:match('"burst_id":%s*(%d+)')
-            local is_b_best = details:match('"is_burst_best":%s*(%a+)')
-            local p_score = details:match('"pick_score":%s*([%d%.]+)')
+            if fn:find("%.") then
+                local b_id = details:match('"burst_id":%s*(%d+)')
+                local is_b_best = details:match('"is_burst_best":%s*(%a+)')
+                local p_score = details:match('"pick_score":%s*([%d%.]+)')
 
-            if b_id and is_b_best and p_score then
-                local b_num = tonumber(b_id)
-                local score = (tonumber(p_score) or 0) * 100
-                if not burst_map[b_num] then burst_map[b_num] = {} end
-                table.insert(burst_map[b_num], { fn = fn, score = score, is_best = (is_b_best == "true") })
+                if b_id and is_b_best and p_score then
+                    local b_num = tonumber(b_id)
+                    local fn_key = b_num .. ":" .. fn:upper()
+                    if not seen_photos[fn_key] then
+                        seen_photos[fn_key] = true
+                        local score = (tonumber(p_score) or 0) * 100
+                        if not burst_map[b_num] then burst_map[b_num] = {} end
+                        table.insert(burst_map[b_num], { fn = fn, score = score, is_best = (is_b_best == "true") })
+                    end
+                end
             end
         end
 
