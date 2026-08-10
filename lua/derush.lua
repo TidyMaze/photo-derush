@@ -783,21 +783,7 @@ local map_stars_btn = dt.new_widget("button") {
     tooltip = "Apply star ratings (1 to 5) based on computed Derush ML scores",
     clicked_callback = function(widget)
         pcall(function()
-            local images = dt.gui.selection()
-            if not images or #images == 0 then
-                images = {}
-                local col_ok, col = pcall(function() return dt.collection end)
-                if col_ok and col then
-                    for i = 1, #col do
-                        table.insert(images, col[i])
-                    end
-                else
-                    for i = 1, #dt.database do
-                        table.insert(images, dt.database[i])
-                    end
-                end
-            end
-
+            local images, src_mode = get_target_images()
             if #images == 0 then
                 dt.print("Derush: No images found in current selection/view")
                 return
