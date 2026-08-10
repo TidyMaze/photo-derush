@@ -699,6 +699,64 @@ local map_stars_btn = dt.new_widget("button") {
     end
 }
 
+-- Clippy Sarcastic Negative Feedback Roast Generator
+math.randomseed(os.time())
+
+local clippy_roasts = {
+    "Your picture is trash / worst photo ever.",
+    "It looks like you're trying to take a photo. Have you tried turning the lens cap off?",
+    "Did you take this with a potato or a toaster?",
+    "Out of focus AND bad composition? Impressive combo!",
+    "The trash bin is eagerly waiting for this masterpiece.",
+    "Blurry, overexposed, and boring. 10/10 trash!",
+    "I've seen security camera footage with better lighting.",
+    "Is this a mistake or art? Definitely a mistake.",
+    "Are you culling photos or collecting artifacts of regret?",
+    "Focus? We don't know her.",
+    "My algorithms are crying looking at this ISO noise.",
+    "Even CatBoost refused to score this one higher than 0.10.",
+    "This photo has great potential... as a background for a deletion prompt.",
+    "I've analyzed millions of pixels. None of them look good here."
+}
+
+local function get_random_roast()
+    local idx = math.random(1, #clippy_roasts)
+    return clippy_roasts[idx]
+end
+
+-- Clippy Speech Label Widget
+local label_clippy_speech = dt.new_widget("label") {
+    label = "💬 \"Your picture is trash / worst photo ever.\"",
+}
+
+local btn_clippy_roast = dt.new_widget("button") {
+    label = "💬 New Clippy Roast",
+    tooltip = "Get a random sarcastic Clippy review of your current photo",
+    clicked_callback = function(widget)
+        pcall(function()
+            local r = get_random_roast()
+            label_clippy_speech.label = "💬 \"" .. r .. "\""
+        end)
+    end
+}
+
+-- Auto-update Clippy roast on selection change
+pcall(function()
+    dt.register_event("clippy_event_sel", "selection-changed", function()
+        pcall(function()
+            local r = get_random_roast()
+            label_clippy_speech.label = "💬 \"" .. r .. "\""
+        end)
+    end)
+end)
+
+local sec_clippy  = dt.new_widget("section_label") { label = "📎 CLIPPY'S CORNER OF JUDGMENT" }
+local box_clippy  = dt.new_widget("box") {
+    orientation = "vertical",
+    label_clippy_speech,
+    btn_clippy_roast,
+}
+
 local sec_actions = dt.new_widget("section_label") { label = "ML ACTIONS & SETTINGS" }
 local sec_summary = dt.new_widget("section_label") { label = "OVERVIEW STATS" }
 local box_summary = dt.new_widget("box") {
@@ -749,6 +807,8 @@ local box_table = dt.new_widget("box") {
 
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
+    sec_clippy,
+    box_clippy,
     sec_actions,
     target_ratio_cmb,
     predict_btn,

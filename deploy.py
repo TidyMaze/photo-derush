@@ -24,6 +24,8 @@ LUA_FILE = ROOT_DIR / "lua" / "derush.lua"
 CLI_BRIDGE = ROOT_DIR / "src" / "cli_bridge.py"
 TRAINING_CORE = ROOT_DIR / "src" / "training_core.py"
 
+CLIPPY_PNG = ROOT_DIR / "lua" / "clippy.png"
+
 LOCAL_APPDATA = os.environ.get("LOCALAPPDATA", "")
 TARGET_DIR = Path(LOCAL_APPDATA) / "darktable" / "lua" / "derush" if LOCAL_APPDATA else None
 
@@ -63,6 +65,7 @@ def main():
         (LUA_FILE, TARGET_DIR / "derush.lua"),
         (CLI_BRIDGE, TARGET_DIR / "cli_bridge.py"),
         (TRAINING_CORE, TARGET_DIR / "training_core.py"),
+        (CLIPPY_PNG, TARGET_DIR / "clippy.png"),
     ]
 
     for src, dst in files_to_deploy:
