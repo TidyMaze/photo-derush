@@ -793,13 +793,16 @@ local btn_group_bursts = dt.new_widget("button") {
     tooltip = "Group burst photos into Darktable stacks (dt.group) and set the #1 best photo as group leader!",
     clicked_callback = function(widget)
         pcall(function()
-            local images = dt.gui.selection()
-            if not images or #images == 0 then
-                images = {}
-                local col_ok, col = pcall(function() return dt.collection end)
-                if col_ok and col then
-                    for i = 1, #col do table.insert(images, col[i]) end
-                else
+            local images = {}
+            local col_ok, col = pcall(function() return dt.collection end)
+            if col_ok and col and #col > 0 then
+                for i = 1, #col do table.insert(images, col[i]) end
+            else
+                local sel_ok, sel = pcall(function() return dt.gui.selection() end)
+                if sel_ok and sel then
+                    for i = 1, #sel do table.insert(images, sel[i]) end
+                end
+                if #images == 0 then
                     for i = 1, #dt.database do table.insert(images, dt.database[i]) end
                 end
             end
@@ -808,6 +811,7 @@ local btn_group_bursts = dt.new_widget("button") {
                 return
             end
 
+            log_debug(string.format("AUTO-GROUP: Processing %d images from Darktable collection", #images))
             dt.print(string.format("Derush: Auto-grouping bursts across %d photos...", #images))
             local folder_path = get_collection_root_dir(images)
             local file_paths = {}
@@ -867,8 +871,10 @@ local btn_group_bursts = dt.new_widget("button") {
 
                 if #multi_clusters == 0 then
                     dt.print("Derush: No burst groups with >1 photo found.")
+                    log_debug("AUTO-GROUP: No burst groups with >1 photo found.")
                 else
                     dt.print(string.format("Derush: Found %d burst group(s) with >1 photo:", #multi_clusters))
+                    log_debug(string.format("AUTO-GROUP: Found %d multi-photo burst clusters across collection", #multi_clusters))
                     for idx, item in ipairs(multi_clusters) do
                         local bid = item.bid
                         local cluster = item.cluster
@@ -907,10 +913,13 @@ local btn_group_bursts = dt.new_widget("button") {
                         end)
 
                         local leader_fn = best_img.filename or "unknown"
-                        dt.print(string.format("  • Group #%d (burst_id=%d, %d photos, Leader: %s): %s",
-                            idx, bid, #cluster, leader_fn, table.concat(photo_names, ", ")))
+                        local grp_msg = string.format("  • Group #%d (burst_id=%d, %d photos, Leader: %s): %s",
+                            idx, bid, #cluster, leader_fn, table.concat(photo_names, ", "))
+                        dt.print(grp_msg)
+                        log_debug("AUTO-GROUP SUCCESS: " .. grp_msg)
                     end
                     dt.print(string.format("Derush: Auto-grouped %d burst stack(s) in Darktable!", #multi_clusters))
+                    log_debug(string.format("AUTO-GROUP COMPLETE: %d stacks formed", #multi_clusters))
                 end
             end
         end)
