@@ -186,33 +186,50 @@ end
 -- Cache for created tag handles to prevent redundant SQLite queries
 local created_tags_cache = {}
 
--- Function to attach Derush ML Score tag to image in Darktable (optimized for speed)
-local function set_image_derush_score(img, score)
-    local tag_name = string.format("derush|score_%0.2f", score)
+-- Function to attach Derush ML Score tag and Keep/Trash classification tag in Darktable
+local function set_image_derush_score(img, score, is_keep)
+    local score_tag_name = string.format("derush|score_%0.2f", score)
+    local class_tag_name = is_keep and "derush|keep" or "derush|trash"
 
-    -- 1. Reuse cached tag handle or create once
-    local score_tag = created_tags_cache[tag_name]
+    -- 1. Reuse cached tag handles or create once
+    local score_tag = created_tags_cache[score_tag_name]
     if not score_tag then
-        score_tag = dt.tags.create(tag_name)
-        created_tags_cache[tag_name] = score_tag
+        score_tag = dt.tags.create(score_tag_name)
+        created_tags_cache[score_tag_name] = score_tag
     end
 
-    -- 2. Detach outdated score tags if present
+    local class_tag = created_tags_cache[class_tag_name]
+    if not class_tag then
+        class_tag = dt.tags.create(class_tag_name)
+        created_tags_cache[class_tag_name] = class_tag
+    end
+
+    -- 2. Detach outdated score & classification tags if present
     local existing_tags = dt.tags.get_tags(img)
-    local already_attached = false
+    local score_already_attached = false
+    local class_already_attached = false
     if existing_tags then
         for _, t in ipairs(existing_tags) do
-            if t.name == tag_name then
-                already_attached = true
+            if t.name == score_tag_name then
+                score_already_attached = true
             elseif t.name:find("^derush|score_") then
+                dt.tags.detach(t, img)
+            end
+
+            if t.name == class_tag_name then
+                class_already_attached = true
+            elseif t.name == "derush|keep" or t.name == "derush|trash" then
                 dt.tags.detach(t, img)
             end
         end
     end
 
-    -- 3. Attach score tag if not already attached
-    if not already_attached and score_tag then
+    -- 3. Attach tags if not already attached (No color labels assigned to keep manual labels clean)
+    if not score_already_attached and score_tag then
         dt.tags.attach(score_tag, img)
+    end
+    if not class_already_attached and class_tag then
+        dt.tags.attach(class_tag, img)
     end
 end
 
@@ -226,9 +243,24 @@ local label_tbl_train_trash  = dt.new_widget("label") { label = "-" }
 local label_tbl_pred_keep    = dt.new_widget("label") { label = "-" }
 local label_tbl_pred_trash   = dt.new_widget("label") { label = "-" }
 
+-- Target Keep Ratio Dropdown Selector
+local target_ratio_cmb = dt.new_widget("combobox") {
+    label = "Target Keep Ratio",
+    tooltip = "Desired target keep ratio quantile (e.g. 25% keeps top 1/4 photos)",
+    "Auto (Model Threshold)",
+    "10% (Top 1/10)",
+    "20% (Top 1/5)",
+    "25% (Top 1/4 - Default)",
+    "33% (Top 1/3)",
+    "50% (Top 1/2)",
+    "75% (Top 3/4)",
+    selected = 4
+}
+
 -- Overview Status Labels
 local label_stats_selected   = dt.new_widget("label") { label = "Photos in View: -" }
 local label_stats_score      = dt.new_widget("label") { label = "Model Accuracy: -" }
+local label_stats_cutoff     = dt.new_widget("label") { label = "Cutoff Threshold: -" }
 local label_stats_avg        = dt.new_widget("label") { label = "Average Score: -" }
 
 -- UI Panel Buttons
@@ -299,13 +331,8 @@ local predict_btn = dt.new_widget("button") {
 
             local threshold = tonumber(raw_json:match('"threshold":%s*([%d%.]+)')) or 0.50
 
-            local count = 0
             local matched_count = 0
-            local count_keep = 0
-            local count_trash = 0
-            local sum_keep = 0
-            local sum_trash = 0
-            local sum_total = 0
+            local image_scores = {}
 
             for i, img in ipairs(images) do
                 local fn = img.filename or ""
@@ -335,7 +362,42 @@ local predict_btn = dt.new_widget("button") {
                     score = 0.50
                 end
 
-                if score >= threshold then
+                table.insert(image_scores, { img = img, score = score })
+            end
+
+            -- Determine classification threshold based on target ratio setting
+            local effective_threshold = threshold
+            local selected_idx = target_ratio_cmb.selected or 4
+            local ratio_map = { [2] = 0.10, [3] = 0.20, [4] = 0.25, [5] = 0.33, [6] = 0.50, [7] = 0.75 }
+            local target_ratio = ratio_map[selected_idx]
+
+            if target_ratio and #image_scores > 0 then
+                local sorted_scores = {}
+                for _, item in ipairs(image_scores) do
+                    table.insert(sorted_scores, item.score)
+                end
+                table.sort(sorted_scores, function(a, b) return a > b end)
+
+                local target_k_count = math.floor(#sorted_scores * target_ratio)
+                if target_k_count < 1 then target_k_count = 1 end
+                if target_k_count > #sorted_scores then target_k_count = #sorted_scores end
+
+                effective_threshold = sorted_scores[target_k_count]
+            end
+
+            local count = 0
+            local count_keep = 0
+            local count_trash = 0
+            local sum_keep = 0
+            local sum_trash = 0
+            local sum_total = 0
+
+            for _, item in ipairs(image_scores) do
+                local img = item.img
+                local score = item.score
+                local is_keep = (score >= effective_threshold)
+
+                if is_keep then
                     count_keep = count_keep + 1
                     sum_keep = sum_keep + score
                 else
@@ -344,10 +406,11 @@ local predict_btn = dt.new_widget("button") {
                 end
                 sum_total = sum_total + score
 
-                set_image_derush_score(img, score)
+                set_image_derush_score(img, score, is_keep)
+
                 count = count + 1
                 if count % 100 == 0 or count == total_count then
-                    dt.print(string.format("Derush: Tagging scores... %d/%d photos done", count, total_count))
+                    dt.print(string.format("Derush: Tagging photos... %d/%d done", count, total_count))
                 end
                 if job then
                     pcall(function() job.percent = 0.10 + 0.90 * (count / total_count) end)
@@ -357,16 +420,18 @@ local predict_btn = dt.new_widget("button") {
             if job then pcall(function() job.valid = false end) end
 
             local avg_total = count > 0 and (sum_total / count) or 0
+            local ratio_label_str = target_ratio and string.format("Top %d%%", math.floor(target_ratio * 100)) or "Auto"
 
             label_stats_selected.label = string.format("Photos in View: %d", count)
+            label_stats_cutoff.label   = string.format("Cutoff Threshold: %.2f (%s)", effective_threshold, ratio_label_str)
             label_tbl_pred_keep.label  = tostring(count_keep)
             label_tbl_pred_trash.label = tostring(count_trash)
             label_stats_avg.label      = string.format("Average Score: %.2f", avg_total)
 
-            log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d, Trash: %d, Avg Score: %.2f",
-                matched_count, count, count_keep, count_trash, avg_total))
-            dt.print(string.format("Derush: Analysed %d photos! %d Keep, %d Trash (Avg Score: %.2f)",
-                count, count_keep, count_trash, avg_total))
+            log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d, Trash: %d, Threshold: %.2f (%s), Avg Score: %.2f",
+                matched_count, count, count_keep, count_trash, effective_threshold, ratio_label_str, avg_total))
+            dt.print(string.format("Derush: Analysed %d photos! %d Keep, %d Trash (Cutoff: %.2f [%s], Avg Score: %.2f)",
+                count, count_keep, count_trash, effective_threshold, ratio_label_str, avg_total))
         end)
         if not ok then
             log_debug("SCORING ERROR: " .. tostring(err))
@@ -634,12 +699,13 @@ local map_stars_btn = dt.new_widget("button") {
     end
 }
 
-local sec_actions = dt.new_widget("section_label") { label = "ML ACTIONS" }
+local sec_actions = dt.new_widget("section_label") { label = "ML ACTIONS & SETTINGS" }
 local sec_summary = dt.new_widget("section_label") { label = "OVERVIEW STATS" }
 local box_summary = dt.new_widget("box") {
     orientation = "vertical",
     label_stats_selected,
     label_stats_score,
+    label_stats_cutoff,
     label_stats_avg,
 }
 
@@ -684,6 +750,7 @@ local box_table = dt.new_widget("box") {
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
     sec_actions,
+    target_ratio_cmb,
     predict_btn,
     train_btn,
     map_stars_btn,
