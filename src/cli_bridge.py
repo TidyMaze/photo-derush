@@ -20,6 +20,7 @@ if PROJECT_ROOT not in sys.path:
 
 from src.features import extract_features
 from src.grouping_service import compute_grouping_for_photos
+from src.image_cache import normalize_path
 from src.model import ImageModel as PhotoModel
 from src.repository import RatingsTagsRepository
 
@@ -76,10 +77,11 @@ def cmd_predict(args_or_dir, labels_file=None, files_json=None, burst_limit=Fals
                 sys.stderr.write(f"Failed reading files file: {e}\n")
         burst_limit = getattr(args_or_dir, "burst_limit", False) or burst_limit
 
+    directory = normalize_path(directory) if directory else directory
     model = PhotoModel(directory=directory, max_images=None)
     if file_list:
         image_names = [os.path.basename(f) for f in file_list]
-        image_paths = file_list
+        image_paths = [normalize_path(f) for f in file_list]
     else:
         image_names = model.get_image_files()
         image_paths = [model.get_image_path(fn) for fn in image_names if model.get_image_path(fn)]

@@ -4,7 +4,7 @@ import os
 from PIL import ExifTags, Image
 
 from .cache import ThumbnailCache
-from .image_cache import get_cached_image, get_cached_image_for_exif
+from .image_cache import get_cached_image, get_cached_image_for_exif, normalize_path
 from .repository import RatingsTagsRepository
 
 
@@ -24,7 +24,7 @@ class ImageModel:
         repo: RatingsTagsRepository | None = None,
         filtering_service=None,
     ):
-        self.directory = directory
+        self.directory = normalize_path(directory) if isinstance(directory, str) else directory
         self.max_images = max_images
         self.cache = cache or ThumbnailCache()
         self.allowed_exts = allowed_exts or list(DEFAULT_ALLOWED_EXTS)
@@ -106,8 +106,6 @@ class ImageModel:
         return files[: self.max_images]
 
     def get_image_path(self, filename):
-        # PERFORMANCE: Cache path lookups (21,861 calls -> significant savings)
-        # Use getattr instead of hasattr (faster)
         if not hasattr(self, "_image_path_cache"):
             self._image_path_cache = {}
         
@@ -119,7 +117,13 @@ class ImageModel:
             logging.error("Invalid filename provided to get_image_path.")
             return None
         
-        path = os.path.join(self.directory, filename)
+        if os.path.isabs(filename):
+            path = normalize_path(filename)
+        else:
+            path = os.path.join(self.directory, filename)
+            if not os.path.exists(path):
+                path = normalize_path(path)
+
         self._image_path_cache[filename] = path
         return path
 

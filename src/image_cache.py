@@ -22,8 +22,56 @@ RAW_EXTS = {".arw", ".cr2", ".nef", ".dng", ".orf", ".rw2", ".pef", ".srw"}
 RASTER_EXTS = [".JPG", ".jpg", ".jpeg", ".JPEG"]
 
 
+def normalize_path(path: str) -> str:
+    """
+    Normalize file path by resolving non-breaking spaces (\xa0) vs regular spaces (U+0020).
+    Handles path encoding mismatches between Darktable, Lua, and Windows OS filesystem.
+    """
+    if not path or not isinstance(path, str):
+        return path
+    if os.path.exists(path):
+        return path
+
+    norm_p = os.path.normpath(path)
+    parts = norm_p.split(os.sep)
+    if not parts:
+        return path
+
+    if parts[0].endswith(':'):
+        cur = parts[0] + os.sep
+        start_idx = 1
+    else:
+        cur = ''
+        start_idx = 0
+
+    for part in parts[start_idx:]:
+        if not part:
+            continue
+        cand = os.path.join(cur, part)
+        if os.path.exists(cand):
+            cur = cand
+            continue
+
+        alt_nbsp = os.path.join(cur, part.replace(' ', '\xa0'))
+        if os.path.exists(alt_nbsp):
+            cur = alt_nbsp
+            continue
+
+        alt_space = os.path.join(cur, part.replace('\xa0', ' '))
+        if os.path.exists(alt_space):
+            cur = alt_space
+            continue
+
+        cur = cand
+
+    return cur
+
+
 def find_paired_jpg(raw_path: str) -> Optional[str]:
     """Find rastered JPG version for a RAW file if it exists in the same directory."""
+    if not raw_path:
+        return None
+    raw_path = normalize_path(raw_path)
     stem, ext = os.path.splitext(raw_path)
     if ext.lower() in RAW_EXTS:
         for r_ext in RASTER_EXTS:
@@ -45,9 +93,10 @@ def get_cached_image(path: str):
     Prefers rastered JPG version (.JPG/.jpg) if path is RAW (.ARW).
     Includes fallback for RAW formats by extracting largest embedded JPEG preview if no JPG file exists.
     """
-    if path.lower().endswith((".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")):
+    if not path or path.lower().endswith((".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")):
         yield None
         return
+    path = normalize_path(path)
     paired_jpg = find_paired_jpg(path)
     actual_path = paired_jpg if paired_jpg else path
     img = None
@@ -101,6 +150,10 @@ def get_cached_image_for_exif(path: str):
     Open an image file for EXIF extraction with a context manager to ensure locks are released.
     Prefers rastered JPG version (.JPG/.jpg) if path is RAW (.ARW).
     """
+    if not path:
+        yield None
+        return
+    path = normalize_path(path)
     paired_jpg = find_paired_jpg(path)
     actual_path = paired_jpg if paired_jpg else path
     img = None
