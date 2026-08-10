@@ -824,10 +824,16 @@ local btn_group_bursts = dt.new_widget("button") {
                         if b_id and is_b_best then
                             local b_num = tonumber(b_id)
                             local b_best = (is_b_best == "true")
+                            local stem = fn:match("^(.-)%.[^%.]+$") or fn
                             burst_id_map[fn] = b_num
                             burst_id_map[fn:lower()] = b_num
+                            burst_id_map[stem] = b_num
+                            burst_id_map[stem:lower()] = b_num
+
                             is_burst_best_map[fn] = b_best
                             is_burst_best_map[fn:lower()] = b_best
+                            is_burst_best_map[stem] = b_best
+                            is_burst_best_map[stem:lower()] = b_best
                         end
                     end
                 end
@@ -835,7 +841,8 @@ local btn_group_bursts = dt.new_widget("button") {
                 local burst_clusters = {}
                 for _, img in ipairs(images) do
                     local fn = img.filename or ""
-                    local bid = burst_id_map[fn] or burst_id_map[fn:lower()]
+                    local stem = fn:match("^(.-)%.[^%.]+$") or fn
+                    local bid = burst_id_map[fn] or burst_id_map[fn:lower()] or burst_id_map[stem] or burst_id_map[stem:lower()]
                     if bid then
                         if not burst_clusters[bid] then burst_clusters[bid] = {} end
                         table.insert(burst_clusters[bid], img)
@@ -862,8 +869,9 @@ local btn_group_bursts = dt.new_widget("button") {
                         local photo_names = {}
                         for _, img in ipairs(cluster) do
                             local fn = img.filename or ""
+                            local stem = fn:match("^(.-)%.[^%.]+$") or fn
                             table.insert(photo_names, fn)
-                            if is_burst_best_map[fn] or is_burst_best_map[fn:lower()] then
+                            if is_burst_best_map[fn] or is_burst_best_map[fn:lower()] or is_burst_best_map[stem] or is_burst_best_map[stem:lower()] then
                                 best_img = img
                             end
                         end
@@ -871,13 +879,17 @@ local btn_group_bursts = dt.new_widget("button") {
 
                         for _, img in ipairs(cluster) do
                             if img ~= best_img then
-                                pcall(function()
+                                local ok, err = pcall(function()
                                     if best_img.group_with then
                                         best_img:group_with(img)
                                     elseif img.group_with then
                                         img:group_with(best_img)
                                     end
                                 end)
+                                if not ok then
+                                    log_debug(string.format("GROUP_WITH ERROR between %s and %s: %s",
+                                        tostring(best_img.filename), tostring(img.filename), tostring(err)))
+                                end
                             end
                         end
 

@@ -172,12 +172,33 @@ def cmd_predict(args_or_dir, labels_file=None, files_json=None, burst_limit=Fals
     except Exception as e:
         sys.stderr.write(f"Grouping computation error: {e}\n")
 
+    # Propagate group_info to stems, lowercase, and paired RAW/JPG files
+    from src.image_cache import find_paired_jpg
+    propagated_groups = {}
+    for fn, g_data in group_info.items():
+        stem = os.path.splitext(fn)[0]
+        propagated_groups[fn] = g_data
+        propagated_groups[fn.lower()] = g_data
+        propagated_groups[stem] = g_data
+        propagated_groups[stem.lower()] = g_data
+
+        path = model.get_image_path(fn)
+        if path:
+            paired = find_paired_jpg(path)
+            if paired:
+                paired_fn = os.path.basename(paired)
+                propagated_groups[paired_fn] = g_data
+                propagated_groups[paired_fn.lower()] = g_data
+                paired_stem = os.path.splitext(paired_fn)[0]
+                propagated_groups[paired_stem] = g_data
+                propagated_groups[paired_stem.lower()] = g_data
+
     output = {
         "status": "success",
         "total_images": len(image_names),
         "threshold": round(float(decision_threshold), 4),
         "predictions": probs,
-        "groups": group_info
+        "groups": propagated_groups
     }
     result_str = json.dumps(output)
     if isinstance(args_or_dir, str):
