@@ -753,11 +753,16 @@ end)
 local clippy_avatar = nil
 pcall(function()
     local img_path = (dt.configuration.config_dir .. "/lua/derush/clippy.png"):gsub("\\", "/")
-    -- GTK Pango Markup supports <img> tag inside label widget
-    local pango_img = string.format("<img src='%s'/>", img_path)
-    clippy_avatar = dt.new_widget("label") {
-        label = pango_img,
-        tooltip = "Clippy is judging your photography skills..."
+    clippy_avatar = dt.new_widget("button") {
+        image = img_path,
+        label = " 📎 Clippy Avatar ",
+        tooltip = "Click Clippy to get a random sarcastic roast!",
+        clicked_callback = function(widget)
+            pcall(function()
+                local r = get_random_roast()
+                label_clippy_speech.label = "💬 \"" .. r .. "\""
+            end)
+        end
     }
 end)
 
