@@ -628,19 +628,41 @@ local map_stars_btn = dt.new_widget("button") {
     end
 }
 
+local sec_actions   = dt.new_widget("section_label") { label = "ML ACTIONS" }
+local sec_selection = dt.new_widget("section_label") { label = "COLLECTION SELECTION" }
+local sec_model     = dt.new_widget("section_label") { label = "MODEL & TRAINING" }
+local sec_scoring   = dt.new_widget("section_label") { label = "SCORING RESULTS" }
+
+local box_selection = dt.new_widget("box") {
+    orientation = "vertical",
+    label_stats_selected,
+    label_stats_manual,
+}
+
+local box_model = dt.new_widget("box") {
+    orientation = "vertical",
+    label_stats_score,
+    label_stats_trained,
+}
+
+local box_scoring = dt.new_widget("box") {
+    orientation = "vertical",
+    label_stats_predictions,
+    label_stats_scores_detail,
+}
+
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
-    dt.new_widget("label") { label = "ACTIONS" },
+    sec_actions,
     predict_btn,
     train_btn,
     map_stars_btn,
-    dt.new_widget("label") { label = "COLLECTION & MODEL STATS" },
-    label_stats_selected,
-    label_stats_manual,
-    label_stats_predictions,
-    label_stats_trained,
-    label_stats_score,
-    label_stats_scores_detail
+    sec_selection,
+    box_selection,
+    sec_model,
+    box_model,
+    sec_scoring,
+    box_scoring,
 }
 
 dt.register_lib("derush_panel", "Photo-Derush", true, false, {
