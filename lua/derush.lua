@@ -624,11 +624,11 @@ local map_stars_btn = dt.new_widget("button") {
 
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
-    dt.new_widget("label") { label = "<b>ACTIONS</b>", halign = "start" },
+    dt.new_widget("label") { label = "<b>ACTIONS</b>", use_markup = true, halign = "start" },
     predict_btn,
     train_btn,
     map_stars_btn,
-    dt.new_widget("label") { label = "<b>COLLECTION & MODEL STATS</b>", halign = "start" },
+    dt.new_widget("label") { label = "<b>COLLECTION & MODEL STATS</b>", use_markup = true, halign = "start" },
     label_stats_selected,
     label_stats_manual,
     label_stats_predictions,
