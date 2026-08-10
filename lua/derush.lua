@@ -224,7 +224,7 @@ local label_stats_predictions       = dt.new_widget("label") { label = "Auto Pre
 local label_stats_trained           = dt.new_widget("label") { label = "Training Dataset: -" }
 local label_stats_trained_breakdown = dt.new_widget("label") { label = "Training Breakdown: -" }
 local label_stats_score             = dt.new_widget("label") { label = "Model Accuracy: -" }
-local label_stats_scores_detail     = dt.new_widget("label") { label = "Analysis Detail: -" }
+local label_stats_scores_detail     = dt.new_widget("label") { label = "Average Score: -" }
 
 -- UI Panel Buttons
 local predict_btn = dt.new_widget("button") {
@@ -350,17 +350,15 @@ local predict_btn = dt.new_widget("button") {
             if job then pcall(function() job.valid = false end) end
 
             local avg_total = count > 0 and (sum_total / count) or 0
-            local avg_keep  = count_keep > 0 and (sum_keep / count_keep) or 0
-            local avg_trash = count_trash > 0 and (sum_trash / count_trash) or 0
 
             label_stats_selected.label      = string.format("Analysed: %d (%d matched)", count, matched_count)
             label_stats_predictions.label   = string.format("Predicted: %d Keep / %d Trash", count_keep, count_trash)
-            label_stats_scores_detail.label = string.format("Avg Scores: Keep %.2f | Trash %.2f", avg_keep, avg_trash)
+            label_stats_scores_detail.label = string.format("Average Score: %.2f", avg_total)
 
-            log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d (avg %.2f), Trash: %d (avg %.2f)",
-                matched_count, count, count_keep, avg_keep, count_trash, avg_trash))
-            dt.print(string.format("Derush: Analysed %d photos! %d Keep (avg %.2f), %d Trash (avg %.2f)",
-                count, count_keep, avg_keep, count_trash, avg_trash))
+            log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d, Trash: %d, Avg Score: %.2f",
+                matched_count, count, count_keep, count_trash, avg_total))
+            dt.print(string.format("Derush: Analysed %d photos! %d Keep, %d Trash (Avg Score: %.2f)",
+                count, count_keep, count_trash, avg_total))
         end)
         if not ok then
             log_debug("SCORING ERROR: " .. tostring(err))
