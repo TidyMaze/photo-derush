@@ -81,7 +81,7 @@ def cmd_predict(args_or_dir, labels_file=None, files_json=None, burst_limit=Fals
     model = PhotoModel(directory=directory, max_images=None)
     if file_list:
         image_names = [os.path.basename(f) for f in file_list]
-        image_paths = [normalize_path(f) for f in file_list]
+        image_paths = [model.get_image_path(f) for f in file_list]
     else:
         image_names = model.get_image_files()
         image_paths = [model.get_image_path(fn) for fn in image_names if model.get_image_path(fn)]

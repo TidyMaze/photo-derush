@@ -105,6 +105,17 @@ class ImageModel:
             return files
         return files[: self.max_images]
 
+    def _get_filename_map(self):
+        if not hasattr(self, "_filename_map") or self._filename_map is None:
+            files = self.get_image_files()
+            self._filename_map = {}
+            for rel_p in files:
+                abs_p = normalize_path(os.path.join(self.directory, rel_p))
+                fname = os.path.basename(rel_p)
+                self._filename_map[fname] = abs_p
+                self._filename_map[fname.lower()] = abs_p
+        return self._filename_map
+
     def get_image_path(self, filename):
         if not hasattr(self, "_image_path_cache"):
             self._image_path_cache = {}
@@ -120,9 +131,20 @@ class ImageModel:
         if os.path.isabs(filename):
             path = normalize_path(filename)
         else:
-            path = os.path.join(self.directory, filename)
-            if not os.path.exists(path):
-                path = normalize_path(path)
+            path = normalize_path(os.path.join(self.directory, filename))
+
+        if os.path.exists(path):
+            self._image_path_cache[filename] = path
+            return path
+
+        # Fallback: if path does not exist on disk (e.g. darktable passed root directory + filename
+        # but image is located in a subfolder), resolve against directory scan map.
+        fname = os.path.basename(filename)
+        fn_map = self._get_filename_map()
+        resolved = fn_map.get(fname) or fn_map.get(fname.lower())
+        if resolved and os.path.exists(resolved):
+            self._image_path_cache[filename] = resolved
+            return resolved
 
         self._image_path_cache[filename] = path
         return path
