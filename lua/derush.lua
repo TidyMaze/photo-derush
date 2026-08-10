@@ -766,15 +766,21 @@ pcall(function()
     }
 end)
 
+local row_maxclippy = dt.new_widget("box") {
+    orientation = "horizontal",
+}
+
+if maxclippy_avatar then
+    table.insert(row_maxclippy, maxclippy_avatar)
+end
+table.insert(row_maxclippy, label_maxclippy_speech)
+
 local sec_maxclippy  = dt.new_widget("section_label") { label = "📎 MAXCLIPPY'S CORNER OF JUDGMENT" }
 local box_maxclippy  = dt.new_widget("box") {
     orientation = "vertical",
+    row_maxclippy,
+    btn_maxclippy_roast,
 }
-if maxclippy_avatar then
-    table.insert(box_maxclippy, maxclippy_avatar)
-end
-table.insert(box_maxclippy, label_maxclippy_speech)
-table.insert(box_maxclippy, btn_maxclippy_roast)
 
 local sec_actions = dt.new_widget("section_label") { label = "ML ACTIONS & SETTINGS" }
 local sec_summary = dt.new_widget("section_label") { label = "OVERVIEW STATS" }
