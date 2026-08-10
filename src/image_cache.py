@@ -67,11 +67,46 @@ def normalize_path(path: str) -> str:
     return cur
 
 
+_DIR_FILE_MAP_CACHE = {}
+
+
+def resolve_missing_path(path: str) -> str:
+    """
+    If path does not exist on disk (e.g. Darktable passed directory_root/filename.ext
+    but the image actually lives in a subfolder), recursively search the parent directory.
+    """
+    if not path:
+        return path
+    norm_path = normalize_path(path)
+    if os.path.exists(norm_path):
+        return norm_path
+
+    parent_dir, target_fname = os.path.split(norm_path)
+    if parent_dir:
+        parent_dir = normalize_path(parent_dir)
+        if os.path.exists(parent_dir):
+            if parent_dir not in _DIR_FILE_MAP_CACHE:
+                file_map = {}
+                for root, _, files in os.walk(parent_dir):
+                    for f in files:
+                        abs_p = normalize_path(os.path.join(root, f))
+                        file_map[f] = abs_p
+                        file_map[f.lower()] = abs_p
+                _DIR_FILE_MAP_CACHE[parent_dir] = file_map
+
+            file_map = _DIR_FILE_MAP_CACHE[parent_dir]
+            resolved = file_map.get(target_fname) or file_map.get(target_fname.lower())
+            if resolved and os.path.exists(resolved):
+                return resolved
+
+    return norm_path
+
+
 def find_paired_jpg(raw_path: str) -> Optional[str]:
     """Find rastered JPG version for a RAW file if it exists in the same directory."""
     if not raw_path:
         return None
-    raw_path = normalize_path(raw_path)
+    raw_path = resolve_missing_path(raw_path)
     stem, ext = os.path.splitext(raw_path)
     if ext.lower() in RAW_EXTS:
         for r_ext in RASTER_EXTS:
@@ -96,7 +131,7 @@ def get_cached_image(path: str):
     if not path or path.lower().endswith((".xmp", ".dop", ".xml", ".json", ".txt", ".db", ".joblib", ".pkl")):
         yield None
         return
-    path = normalize_path(path)
+    path = resolve_missing_path(path)
     paired_jpg = find_paired_jpg(path)
     actual_path = paired_jpg if paired_jpg else path
     img = None
@@ -153,7 +188,7 @@ def get_cached_image_for_exif(path: str):
     if not path:
         yield None
         return
-    path = normalize_path(path)
+    path = resolve_missing_path(path)
     paired_jpg = find_paired_jpg(path)
     actual_path = paired_jpg if paired_jpg else path
     img = None
