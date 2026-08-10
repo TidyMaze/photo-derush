@@ -151,7 +151,7 @@ local function format_human_readable_log(cmd_name, raw_output)
         local burst_map = {}
         for fn, details in groups_block:gmatch('"([^"]+)":%s*%{([^%}]+)%}') do
             local b_id = details:match('"burst_id":%s*(%d+)')
-            local is_b_best = details:match('"is_burst_best":%s*(true|false)')
+            local is_b_best = details:match('"is_burst_best":%s*(%a+)')
             local p_score = details:match('"pick_score":%s*([%d%.]+)')
 
             if b_id and is_b_best and p_score then
@@ -816,13 +816,20 @@ local btn_group_bursts = dt.new_widget("button") {
             if raw_json and raw_json ~= "" then
                 local burst_id_map = {}
                 local is_burst_best_map = {}
-                for fn, b_id, is_b_best in raw_json:gmatch('"([^"]+)":%s*%{[^%}]*"burst_id":%s*(%d+)[^%}]*"is_burst_best":%s*(true|false)') do
-                    local b_num = tonumber(b_id)
-                    local b_best = (is_b_best == "true")
-                    burst_id_map[fn] = b_num
-                    burst_id_map[fn:lower()] = b_num
-                    is_burst_best_map[fn] = b_best
-                    is_burst_best_map[fn:lower()] = b_best
+                local groups_block = raw_json:match('"groups":%s*{(.*)}')
+                if groups_block then
+                    for fn, details in groups_block:gmatch('"([^"]+)":%s*%{([^%}]+)%}') do
+                        local b_id = details:match('"burst_id":%s*(%d+)')
+                        local is_b_best = details:match('"is_burst_best":%s*(%a+)')
+                        if b_id and is_b_best then
+                            local b_num = tonumber(b_id)
+                            local b_best = (is_b_best == "true")
+                            burst_id_map[fn] = b_num
+                            burst_id_map[fn:lower()] = b_num
+                            is_burst_best_map[fn] = b_best
+                            is_burst_best_map[fn:lower()] = b_best
+                        end
+                    end
                 end
 
                 local burst_clusters = {}
