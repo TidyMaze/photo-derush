@@ -451,8 +451,11 @@ local train_btn = dt.new_widget("button") {
             local n_keep = tonumber(result and result:match('"n_keep":%s*(%d+)'))
             local n_trash = tonumber(result and result:match('"n_trash":%s*(%d+)'))
             local cv_acc = tonumber(result and result:match('"cv_accuracy_mean":%s*([%d%.]+)'))
+                or tonumber(result and result:match('"precision":%s*([%d%.]+)'))
+                or tonumber(result and result:match('"roc_auc":%s*([%d%.]+)'))
+                or tonumber(result and result:match('"f1":%s*([%d%.]+)'))
 
-            if err_msg and not cv_acc then
+            if err_msg and not (cv_acc or n_samples) then
                 label_stats_trained.label = "Training: Failed"
                 label_stats_score.label   = "Error: " .. err_msg
                 dt.print("Derush Error: " .. err_msg)
@@ -464,6 +467,8 @@ local train_btn = dt.new_widget("button") {
             end
             if cv_acc then
                 label_stats_score.label = string.format("Model Accuracy: %.1f%%", cv_acc * 100)
+            elseif n_samples then
+                label_stats_score.label = "Model Accuracy: Ready (Trained)"
             end
 
             local score_str = cv_acc and string.format(" (Accuracy: %.1f%%)", cv_acc * 100) or ""

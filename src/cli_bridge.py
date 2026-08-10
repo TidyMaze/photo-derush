@@ -170,6 +170,9 @@ def cmd_train(args):
                 "n_keep": res.n_keep,
                 "n_trash": res.n_trash,
                 "cv_accuracy_mean": res.cv_accuracy_mean,
+                "precision": res.precision,
+                "roc_auc": res.roc_auc,
+                "f1": res.f1,
             }
         else:
             retrain_result = {"status": "warning", "message": "Insufficient data to train"}
