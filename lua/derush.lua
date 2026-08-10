@@ -161,14 +161,16 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
         python_bin, script_path, cmd_name, temp_dir_path, extra_arg)
 
     local command = inner_cmd
+    local redir = " 2>&1"
     if is_windows then
-        -- Wrap with a single outer pair of quotes so Windows cmd.exe /c strips outer quotes cleanly
+        -- Add < NUL to prevent "stdin duplication failed" when spawned from darktable.exe GUI process
+        redir = " < NUL 2>&1"
         command = string.format('"%s"', inner_cmd)
     end
 
     log_debug("COMMAND: " .. command)
 
-    local handle = io.popen(command .. " 2>&1")
+    local handle = io.popen(command .. redir)
     if not handle then
         dt.print("Derush Error: Could not execute command handle")
         log_debug("ERROR: io.popen returned nil")
