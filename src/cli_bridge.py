@@ -158,6 +158,10 @@ def cmd_predict(args_or_dir, labels_file=None, files_json=None, burst_limit=Fals
     except Exception:
         pass
 
+    burst_gap_sec = 15.0
+    if isinstance(args_or_dir, argparse.Namespace):
+        burst_gap_sec = getattr(args_or_dir, "burst_gap_sec", 15.0) or 15.0
+
     # Compute grouping for images
     group_info = {}
     try:
@@ -167,7 +171,7 @@ def cmd_predict(args_or_dir, labels_file=None, files_json=None, burst_limit=Fals
             image_dir=directory,
             exif_data=exif_data,
             keep_probabilities=probs,
-            burst_gap_sec=2.0
+            burst_gap_sec=burst_gap_sec
         )
     except Exception as e:
         sys.stderr.write(f"Grouping computation error: {e}\n")
@@ -281,12 +285,14 @@ def main():
     group_parser = subparsers.add_parser("group")
     group_parser.add_argument("--directory", required=False, help="Path to photo directory")
     group_parser.add_argument("--directory-file", required=False, help="Path to file containing directory path")
+    group_parser.add_argument("--burst-gap-sec", type=float, default=15.0, help="Burst gap threshold in seconds")
 
     # Predict command
     predict_parser = subparsers.add_parser("predict")
     predict_parser.add_argument("--directory", required=False, help="Path to photo directory")
     predict_parser.add_argument("--directory-file", required=False, help="Path to file containing directory path")
     predict_parser.add_argument("--files-file", required=False, help="Path to JSON file containing list of image paths")
+    predict_parser.add_argument("--burst-gap-sec", type=float, default=15.0, help="Burst gap threshold in seconds")
 
     # Train command
     train_parser = subparsers.add_parser("train")

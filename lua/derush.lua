@@ -236,7 +236,7 @@ local function format_human_readable_log(cmd_name, raw_output)
     return table.concat(lines, "\n")
 end
 
-local function run_derush_command(cmd_name, folder_path, labels_json, files_json)
+local function run_derush_command(cmd_name, folder_path, labels_json, files_json, burst_gap_sec)
     local is_windows = (package.config:sub(1, 1) == "\\")
 
     local python_bin = os.getenv("USERPROFILE") .. "\\AppData\\Local\\pypoetry\\Cache\\virtualenvs\\photo-app-rBz6-pE0-py3.12\\Scripts\\python.exe"
@@ -270,6 +270,10 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
             ff:close()
             extra_arg = extra_arg .. string.format(' --files-file "%s"', temp_files_path)
         end
+    end
+
+    if burst_gap_sec and tonumber(burst_gap_sec) then
+        extra_arg = extra_arg .. string.format(" --burst-gap-sec %.1f", tonumber(burst_gap_sec))
     end
 
     local inner_cmd = string.format('"%s" "%s" %s --directory-file "%s"%s',
@@ -374,6 +378,31 @@ local target_ratio_cmb = dt.new_widget("combobox") {
     selected = 4
 }
 
+-- Burst Interval Dropdown Selector
+local cmb_burst_gap = dt.new_widget("combobox") {
+    label = "Burst Interval",
+    tooltip = "Maximum time gap threshold in seconds that separates burst clusters",
+    "2s (Fast Action)",
+    "5s (Sports/Wildlife)",
+    "10s (Portraits/Events)",
+    "15s (Balanced - Default)",
+    "30s (Loose Scene)",
+    "60s (Location)",
+    selected = 4
+}
+
+local function get_selected_burst_gap_sec()
+    local val = cmb_burst_gap.value or cmb_burst_gap.selected or 4
+    if val == 1 then return 2.0
+    elseif val == 2 then return 5.0
+    elseif val == 3 then return 10.0
+    elseif val == 4 then return 15.0
+    elseif val == 5 then return 30.0
+    elseif val == 6 then return 60.0
+    end
+    return 15.0
+end
+
 -- Overview Status Labels
 local label_stats_selected   = dt.new_widget("label") { label = "Photos in View: -" }
 local label_stats_score      = dt.new_widget("label") { label = "Model Accuracy: -" }
@@ -415,7 +444,8 @@ local predict_btn = dt.new_widget("button") {
             log_debug("SCORING: folder=" .. tostring(folder_path) .. " images=" .. total_count)
 
             if job then pcall(function() job.percent = 0.10 end) end
-            local raw_json = run_derush_command("predict", folder_path, nil, files_json)
+            local burst_gap_sec = get_selected_burst_gap_sec()
+            local raw_json = run_derush_command("predict", folder_path, nil, files_json, burst_gap_sec)
 
             if not raw_json or raw_json == "" then
                 if job then pcall(function() job.valid = false end) end
@@ -817,7 +847,8 @@ local btn_group_bursts = dt.new_widget("button") {
                 table.insert(file_paths, string.format('"%s"', full_p:gsub("\\", "/")))
             end
             local files_json = "[" .. table.concat(file_paths, ",") .. "]"
-            local raw_json = run_derush_command("predict", folder_path, nil, files_json)
+            local burst_gap_sec = get_selected_burst_gap_sec()
+            local raw_json = run_derush_command("predict", folder_path, nil, files_json, burst_gap_sec)
 
             if raw_json and raw_json ~= "" then
                 local burst_id_map = {}
@@ -974,6 +1005,7 @@ local widget_box = dt.new_widget("box") {
     orientation = "vertical",
     sec_actions,
     target_ratio_cmb,
+    cmb_burst_gap,
     chk_burst_limit,
     predict_btn,
     btn_group_bursts,
