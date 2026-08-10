@@ -752,9 +752,11 @@ end)
 
 local clippy_avatar = nil
 pcall(function()
-    local img_path = dt.configuration.config_dir .. "/lua/derush/clippy.png"
-    clippy_avatar = dt.new_widget("image") {
-        filename = img_path,
+    local img_path = (dt.configuration.config_dir .. "/lua/derush/clippy.png"):gsub("\\", "/")
+    -- GTK Pango Markup supports <img> tag inside label widget
+    local pango_img = string.format("<img src='%s'/>", img_path)
+    clippy_avatar = dt.new_widget("label") {
+        label = pango_img,
         tooltip = "Clippy is judging your photography skills..."
     }
 end)
