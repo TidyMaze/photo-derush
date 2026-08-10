@@ -334,12 +334,19 @@ end
 -- Cache for created tag handles to prevent redundant SQLite queries
 local created_tags_cache = {}
 
--- Function to attach Derush ML Score tag and Keep/Trash classification tag in Darktable
+-- Function to attach Derush ML Score tag, Title/Description metadata, and Keep/Trash classification tag in Darktable
 local function set_image_derush_score(img, score, is_keep)
     local score_tag_name = string.format("derush|score_%0.2f", score)
     local class_tag_name = is_keep and "derush|keep" or "derush|trash"
 
-    -- 1. Reuse cached tag handles or create once
+    -- 1. Synchronize Darktable Title and Description metadata with exact score and status
+    pcall(function()
+        local status_str = is_keep and "KEEP" or "TRASH"
+        img.title = string.format("Derush: %s (%d%%)", status_str, math.floor(score * 100 + 0.5))
+        img.description = string.format("Derush Score: %0.4f | Status: %s", score, status_str)
+    end)
+
+    -- 2. Reuse cached tag handles or create once
     local score_tag = created_tags_cache[score_tag_name]
     if not score_tag then
         score_tag = dt.tags.create(score_tag_name)
@@ -352,7 +359,7 @@ local function set_image_derush_score(img, score, is_keep)
         created_tags_cache[class_tag_name] = class_tag
     end
 
-    -- 2. Detach outdated score & classification tags if present
+    -- 3. Detach outdated score & classification tags if present
     local existing_tags = dt.tags.get_tags(img)
     local score_already_attached = false
     local class_already_attached = false
@@ -372,7 +379,7 @@ local function set_image_derush_score(img, score, is_keep)
         end
     end
 
-    -- 3. Attach tags if not already attached (No color labels assigned to keep manual labels clean)
+    -- 4. Attach tags if not already attached (No color labels assigned to keep manual labels clean)
     if not score_already_attached and score_tag then
         dt.tags.attach(score_tag, img)
     end
