@@ -5,7 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import time
+import warnings
 from dataclasses import dataclass
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 import joblib
 import numpy as np
@@ -1173,7 +1177,14 @@ def train_keep_trash_model(
                 # Note: clf is already fitted on full X; CalibratedClassifierCV with cv='prefit'
                 # will use clf.predict_proba on X_calib to fit the calibrator.
                 try:
-                    calibrator = CalibratedClassifierCV(clf, cv="prefit", method="sigmoid")
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=FutureWarning)
+                        try:
+                            from sklearn.frozen import FrozenEstimator
+                            calibrator = CalibratedClassifierCV(FrozenEstimator(clf), method="sigmoid")
+                        except (ImportError, AttributeError):
+                            calibrator = CalibratedClassifierCV(clf, cv="prefit", method="sigmoid")
                     calibrator.fit(X_calib, y_calib)
                     calib_path = model_path + ".calib.joblib"
                     joblib.dump(calibrator, calib_path)
