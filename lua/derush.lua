@@ -761,15 +761,29 @@ local btn_group_bursts = dt.new_widget("button") {
                     end
                 end
 
-                local grouped_count = 0
+                local multi_clusters = {}
                 for bid, cluster in pairs(burst_clusters) do
                     if #cluster > 1 then
+                        table.insert(multi_clusters, { bid = bid, cluster = cluster })
+                    end
+                end
+
+                table.sort(multi_clusters, function(a, b) return a.bid < b.bid end)
+
+                if #multi_clusters == 0 then
+                    dt.print("Derush: No burst groups with >1 photo found.")
+                else
+                    dt.print(string.format("Derush: Found %d burst group(s) with >1 photo:", #multi_clusters))
+                    for idx, item in ipairs(multi_clusters) do
+                        local bid = item.bid
+                        local cluster = item.cluster
                         local best_img = nil
+                        local photo_names = {}
                         for _, img in ipairs(cluster) do
                             local fn = img.filename or ""
+                            table.insert(photo_names, fn)
                             if is_burst_best_map[fn] or is_burst_best_map[fn:lower()] then
                                 best_img = img
-                                break
                             end
                         end
                         if not best_img then best_img = cluster[1] end
@@ -791,10 +805,13 @@ local btn_group_bursts = dt.new_widget("button") {
                                 best_img:make_group_leader()
                             end
                         end)
-                        grouped_count = grouped_count + 1
+
+                        local leader_fn = best_img.filename or "unknown"
+                        dt.print(string.format("  • Group #%d (burst_id=%d, %d photos, Leader: %s): %s",
+                            idx, bid, #cluster, leader_fn, table.concat(photo_names, ", ")))
                     end
+                    dt.print(string.format("Derush: Auto-grouped %d burst stack(s) in Darktable!", #multi_clusters))
                 end
-                dt.print(string.format("Derush: Auto-grouped %d burst stacks in Darktable!", grouped_count))
             end
         end)
     end

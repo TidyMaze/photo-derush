@@ -459,7 +459,22 @@ def compute_grouping_for_photos(
     final_group_count = len(set(g.get('group_id', 0) for g in result.values() if g.get('group_id') is not None))
     final_best_count = sum(1 for g in result.values() if g.get('is_group_best', False))
     grouping_elapsed = time.perf_counter() - grouping_start_time
-    logging.info(f"[grouping_service] ✅ Completed: {final_group_count} groups, {final_best_count} best picks, {len(result)} total photos in {grouping_elapsed:.2f}s")
+
+    # Log multi-photo groups (>1 photo)
+    multi_photo_groups: dict[int, list[tuple[str, bool]]] = defaultdict(list)
+    for fn, info in result.items():
+        gid = info.get("burst_id")
+        if gid is not None:
+            multi_photo_groups[gid].append((fn, info.get("is_burst_best", False)))
+
+    multi_groups = {gid: photos_list for gid, photos_list in multi_photo_groups.items() if len(photos_list) > 1}
+    logging.info(f"[grouping_service] 📊 MULTI-PHOTO BURST GROUPS: Found {len(multi_groups)} groups with >1 image:")
+    for group_num, (gid, photos_list) in enumerate(sorted(multi_groups.items(), key=lambda x: x[0]), start=1):
+        best_photo = next((fn for fn, is_best in photos_list if is_best), photos_list[0][0])
+        photo_names = [fn for fn, _ in photos_list]
+        logging.info(f"  • Group #{group_num} (burst_id={gid}): {len(photos_list)} photos [Leader: {best_photo}] -> {photo_names}")
+
+    logging.info(f"[grouping_service] ✅ Completed: {final_group_count} groups ({len(multi_groups)} multi-photo), {final_best_count} best picks, {len(result)} total photos in {grouping_elapsed:.2f}s")
     if grouping_elapsed > 60:
         logging.warning(f"[grouping_service] ⚠️  Grouping took {grouping_elapsed:.2f}s (exceeds 60s limit)")
     return result
