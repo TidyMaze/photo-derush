@@ -145,38 +145,50 @@ local function format_human_readable_log(cmd_name, raw_output)
         table.insert(lines, string.format("  Keep Decision Threshold: %.1f%%", thresh_num * 100))
     end
 
-    local burst_map = {}
-    for fn, b_id, is_b_best, p_score in raw_output:gmatch('"([^"]+)":%s*%{[^%}]*"burst_id":%s*(%d+)[^%}]*"is_burst_best":%s*(true|false)[^%}]*"pick_score":%s*([%d%.]+)') do
-        local b_num = tonumber(b_id)
-        local score = (tonumber(p_score) or 0) * 100
-        if not burst_map[b_num] then burst_map[b_num] = {} end
-        table.insert(burst_map[b_num], { fn = fn, score = score, is_best = (is_b_best == "true") })
-    end
+    -- Extract "groups": { ... } block
+    local groups_block = raw_output:match('"groups":%s*{(.*)}')
+    if groups_block then
+        local burst_map = {}
+        for fn, details in groups_block:gmatch('"([^"]+)":%s*%{([^%}]+)%}') do
+            local b_id = details:match('"burst_id":%s*(%d+)')
+            local is_b_best = details:match('"is_burst_best":%s*(true|false)')
+            local p_score = details:match('"pick_score":%s*([%d%.]+)')
 
-    local multi_groups = {}
-    for b_num, cluster in pairs(burst_map) do
-        if #cluster > 1 then
-            table.insert(multi_groups, { bid = b_num, cluster = cluster })
+            if b_id and is_b_best and p_score then
+                local b_num = tonumber(b_id)
+                local score = (tonumber(p_score) or 0) * 100
+                if not burst_map[b_num] then burst_map[b_num] = {} end
+                table.insert(burst_map[b_num], { fn = fn, score = score, is_best = (is_b_best == "true") })
+            end
         end
-    end
-    table.sort(multi_groups, function(a, b) return a.bid < b.bid end)
 
-    if #multi_groups > 0 then
-        table.insert(lines, string.format("  Multi-Photo Burst Groups Found: %d", #multi_groups))
-        for idx, item in ipairs(multi_groups) do
-            local leader_fn = "unknown"
-            local item_strs = {}
-            for _, photo in ipairs(item.cluster) do
-                table.insert(item_strs, string.format("%s (%.1f%%)", photo.fn, photo.score))
-                if photo.is_best then
-                    leader_fn = photo.fn
+        local multi_groups = {}
+        for b_num, cluster in pairs(burst_map) do
+            if #cluster > 1 then
+                table.insert(multi_groups, { bid = b_num, cluster = cluster })
+            end
+        end
+        table.sort(multi_groups, function(a, b) return a.bid < b.bid end)
+
+        if #multi_groups > 0 then
+            table.insert(lines, string.format("  Multi-Photo Burst Groups Found: %d", #multi_groups))
+            for idx, item in ipairs(multi_groups) do
+                local leader_fn = "unknown"
+                local item_strs = {}
+                for _, photo in ipairs(item.cluster) do
+                    table.insert(item_strs, string.format("%s (%.1f%%)", photo.fn, photo.score))
+                    if photo.is_best then
+                        leader_fn = photo.fn
+                    end
                 end
+                if leader_fn == "unknown" and #item.cluster > 0 then
+                    leader_fn = item.cluster[1].fn
+                end
+                table.insert(lines, string.format("    • Group #%d (burst_id=%d, %d photos, Leader: %s): %s",
+                    idx, item.bid, #item.cluster, leader_fn, table.concat(item_strs, ", ")))
             end
-            if leader_fn == "unknown" and #item.cluster > 0 then
-                leader_fn = item.cluster[1].fn
-            end
-            table.insert(lines, string.format("    • Group #%d (burst_id=%d, %d photos, Leader: %s): %s",
-                idx, item.bid, #item.cluster, leader_fn, table.concat(item_strs, ", ")))
+        else
+            table.insert(lines, "  Multi-Photo Burst Groups Found: 0 (all single photos)")
         end
     end
 
