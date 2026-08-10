@@ -29,14 +29,39 @@ local function get_target_images()
     return {}
 end
 
--- Helper to get target images (Prioritize selection if non-empty, fallback to active collection, then database)
+-- Helper to get target images (Prioritize selection if non-empty with group expansion, fallback to active collection, then database)
 local function get_target_images()
-    local images = nil
-    pcall(function() images = dt.gui.selection() end)
-    if images and #images > 0 then
-        return images, "selection"
+    local raw_sel = nil
+    pcall(function() raw_sel = dt.gui.selection() end)
+    if raw_sel and #raw_sel > 0 then
+        local expanded_images = {}
+        local seen_ids = {}
+        for _, img in ipairs(raw_sel) do
+            local group_members = nil
+            pcall(function()
+                if img.get_group_members then
+                    group_members = img:get_group_members()
+                end
+            end)
+            if group_members and #group_members > 0 then
+                for _, m in ipairs(group_members) do
+                    local id = m.id or m.filename
+                    if not seen_ids[id] then
+                        seen_ids[id] = true
+                        table.insert(expanded_images, m)
+                    end
+                end
+            else
+                local id = img.id or img.filename
+                if not seen_ids[id] then
+                    seen_ids[id] = true
+                    table.insert(expanded_images, img)
+                end
+            end
+        end
+        return expanded_images, "selection"
     end
-    images = {}
+    local images = {}
     local col_ok, col = pcall(function() return dt.collection end)
     if col_ok and col and #col > 0 then
         for i = 1, #col do table.insert(images, col[i]) end
