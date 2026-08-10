@@ -209,15 +209,15 @@ local function set_image_derush_score(img, score)
     end)
 end
 
--- Panel Status Labels
-local label_stats_selected       = dt.new_widget("label") { label = "Photos in View: -" }
-local label_stats_manual         = dt.new_widget("label") { label = "Manual Labels: -" }
-local label_stats_predictions    = dt.new_widget("label") { label = "Auto Predicted: -" }
-local label_stats_trained        = dt.new_widget("label") { label = "Training Samples: -" }
-local label_stats_score          = dt.new_widget("label") { label = "Model Accuracy: -" }
-local label_stats_scores_detail  = dt.new_widget("label") { label = "Avg Scores: -" }
+---- Panel Status Labels (left-aligned for native Darktable sidebar fit)
+local label_stats_selected       = dt.new_widget("label") { label = "Photos in View: -", halign = "start" }
+local label_stats_manual         = dt.new_widget("label") { label = "Manual Labels: -", halign = "start" }
+local label_stats_predictions    = dt.new_widget("label") { label = "Auto Predicted: -", halign = "start" }
+local label_stats_trained        = dt.new_widget("label") { label = "Training Data: -", halign = "start" }
+local label_stats_score          = dt.new_widget("label") { label = "Model Accuracy: -", halign = "start" }
+local label_stats_scores_detail  = dt.new_widget("label") { label = "Analysis Detail: -", halign = "start" }
 
--- UI Panel Widget in Lighttable
+-- UI Panel Buttons
 local predict_btn = dt.new_widget("button") {
     label = "✨ Predict / Score Photos",
     tooltip = "Compute ML prediction scores for photos in active collection",
@@ -344,9 +344,9 @@ local predict_btn = dt.new_widget("button") {
             local avg_keep  = count_keep > 0 and (sum_keep / count_keep) or 0
             local avg_trash = count_trash > 0 and (sum_trash / count_trash) or 0
 
-            label_stats_selected.label      = string.format("Analysed Photos: %d (%d matched)", count, matched_count)
-            label_stats_predictions.label   = string.format("Predictions: %d Keep / %d Trash", count_keep, count_trash)
-            label_stats_scores_detail.label = string.format("Avg Scores: Total %.2f (Keep %.2f | Trash %.2f)", avg_total, avg_keep, avg_trash)
+            label_stats_selected.label      = string.format("Analysed: %d (%d matched)", count, matched_count)
+            label_stats_predictions.label   = string.format("Predicted: %d Keep / %d Trash", count_keep, count_trash)
+            label_stats_scores_detail.label = string.format("Avg Scores: Keep %.2f | Trash %.2f", avg_keep, avg_trash)
 
             log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d (avg %.2f), Trash: %d (avg %.2f)",
                 matched_count, count, count_keep, avg_keep, count_trash, avg_trash))
@@ -361,7 +361,7 @@ local predict_btn = dt.new_widget("button") {
 }
 
 local train_btn = dt.new_widget("button") {
-    label = "🎓 Retrain Model with Darktable Labels",
+    label = "🎓 Retrain Model with Labels",
     tooltip = "Train ML model using Green Color Labels (Keep) and Red Color Labels (Trash)",
     clicked_callback = function(widget)
         local ok, err = pcall(function()
@@ -460,7 +460,7 @@ local train_btn = dt.new_widget("button") {
             end
 
             if n_samples and n_keep and n_trash then
-                label_stats_trained.label = string.format("Training Samples: %d unique JPGs (%d Keep, %d Trash)", n_samples, n_keep, n_trash)
+                label_stats_trained.label = string.format("Training Data: %d unique JPGs (%d Keep, %d Trash)", n_samples, n_keep, n_trash)
             end
             if cv_acc then
                 label_stats_score.label = string.format("Model Accuracy: %.1f%%", cv_acc * 100)
@@ -619,11 +619,11 @@ local map_stars_btn = dt.new_widget("button") {
 
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
-    dt.new_widget("label") { label = "Photo-Derush ML Assistant" },
+    dt.new_widget("label") { label = "<b>ACTIONS</b>", halign = "start" },
     predict_btn,
     train_btn,
     map_stars_btn,
-    dt.new_widget("label") { label = "--- Live Image & Model Stats ---" },
+    dt.new_widget("label") { label = "<b>COLLECTION & MODEL STATS</b>", halign = "start" },
     label_stats_selected,
     label_stats_manual,
     label_stats_predictions,
