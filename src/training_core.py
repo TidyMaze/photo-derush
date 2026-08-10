@@ -802,6 +802,7 @@ def _save_model(
     n_trash: int,
     filenames: list,
     xgb_params: dict | None = None,
+    decision_threshold: float = 0.5,
 ) -> None:
     """Save model with metadata header for drift detection."""
     try:
@@ -824,6 +825,7 @@ def _save_model(
         if feature_indices:
             metadata["feature_indices"] = feature_indices
 
+        keep_ratio = float(n_keep / n_samples) if n_samples > 0 else 0.5
         data = {
             "__metadata__": metadata,
             "model": clf,
@@ -834,6 +836,8 @@ def _save_model(
             "filenames": filenames,
             "precision": None,
             "feature_importances": None,
+            "decision_threshold": float(decision_threshold),
+            "keep_ratio": keep_ratio,
         }
         joblib.dump(data, model_path)
         logging.info(
@@ -1203,7 +1207,7 @@ def train_keep_trash_model(
             except Exception:
                 logging.exception("Error pruning old checkpoints")
                 raise
-        _save_model(clf, model_path, X, n_samples, n_keep, n_trash, filenames, xgb_params=xgb_params)
+        _save_model(clf, model_path, X, n_samples, n_keep, n_trash, filenames, xgb_params=xgb_params, decision_threshold=test_threshold)
         _check_cancel("saved")
 
         if progress_callback:

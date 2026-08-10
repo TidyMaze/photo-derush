@@ -122,9 +122,23 @@ def cmd_predict(args):
                 probs[os.path.basename(path)] = p_val
                 probs[os.path.basename(path).lower()] = p_val
 
+    decision_threshold = 0.50
+    try:
+        from src.inference import load_model
+        bundle = load_model()
+        if bundle and bundle.meta:
+            raw_thresh = bundle.meta.get("decision_threshold")
+            if raw_thresh is None:
+                raw_thresh = bundle.meta.get("keep_ratio", 0.50)
+            if raw_thresh and raw_thresh > 0:
+                decision_threshold = float(raw_thresh)
+    except Exception:
+        pass
+
     output = {
         "status": "success",
         "total_images": len(image_names),
+        "threshold": round(float(decision_threshold), 4),
         "predictions": probs
     }
     print(json.dumps(output))

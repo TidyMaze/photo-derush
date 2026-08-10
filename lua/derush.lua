@@ -297,6 +297,8 @@ local predict_btn = dt.new_widget("button") {
                 end
             end
 
+            local threshold = tonumber(raw_json:match('"threshold":%s*([%d%.]+)')) or 0.50
+
             local count = 0
             local matched_count = 0
             local count_keep = 0
@@ -333,7 +335,7 @@ local predict_btn = dt.new_widget("button") {
                     score = 0.50
                 end
 
-                if score >= 0.50 then
+                if score >= threshold then
                     count_keep = count_keep + 1
                     sum_keep = sum_keep + score
                 else
