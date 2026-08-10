@@ -35,7 +35,7 @@ class PhotoMetadata:
 
 # Default thresholds
 SESSION_GAP_MIN = 10  # minutes
-BURST_GAP_SEC = 15.0  # seconds
+BURST_GAP_SEC = 30.0  # seconds
 PHASH_HAMMING_THRESHOLD = 8  # bits (for near-duplicate detection) - balanced to avoid over-grouping
 
 # Feature flag for LSH optimization
