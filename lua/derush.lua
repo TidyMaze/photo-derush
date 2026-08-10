@@ -273,7 +273,8 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
     end
 
     if burst_gap_sec and tonumber(burst_gap_sec) then
-        extra_arg = extra_arg .. string.format(" --burst-gap-sec %.1f", tonumber(burst_gap_sec))
+        local gap_str = string.format("%.1f", tonumber(burst_gap_sec)):gsub(",", ".")
+        extra_arg = extra_arg .. string.format(' --burst-gap-sec %s', gap_str)
     end
 
     local inner_cmd = string.format('"%s" "%s" %s --directory-file "%s"%s',

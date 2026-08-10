@@ -272,6 +272,12 @@ def cmd_train(args):
     print(json.dumps(output))
 
 
+def float_locale_safe(val):
+    if isinstance(val, str):
+        val = val.replace(",", ".")
+    return float(val)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Derush Darktable CLI Bridge")
     subparsers = parser.add_subparsers(dest="command")
@@ -285,14 +291,14 @@ def main():
     group_parser = subparsers.add_parser("group")
     group_parser.add_argument("--directory", required=False, help="Path to photo directory")
     group_parser.add_argument("--directory-file", required=False, help="Path to file containing directory path")
-    group_parser.add_argument("--burst-gap-sec", type=float, default=15.0, help="Burst gap threshold in seconds")
+    group_parser.add_argument("--burst-gap-sec", type=float_locale_safe, default=15.0, help="Burst gap threshold in seconds")
 
     # Predict command
     predict_parser = subparsers.add_parser("predict")
     predict_parser.add_argument("--directory", required=False, help="Path to photo directory")
     predict_parser.add_argument("--directory-file", required=False, help="Path to file containing directory path")
     predict_parser.add_argument("--files-file", required=False, help="Path to JSON file containing list of image paths")
-    predict_parser.add_argument("--burst-gap-sec", type=float, default=15.0, help="Burst gap threshold in seconds")
+    predict_parser.add_argument("--burst-gap-sec", type=float_locale_safe, default=15.0, help="Burst gap threshold in seconds")
 
     # Train command
     train_parser = subparsers.add_parser("train")
