@@ -750,12 +750,24 @@ pcall(function()
     end)
 end)
 
+local clippy_avatar = nil
+pcall(function()
+    local img_path = dt.configuration.config_dir .. "/lua/derush/clippy.png"
+    clippy_avatar = dt.new_widget("image") {
+        filename = img_path,
+        tooltip = "Clippy is judging your photography skills..."
+    }
+end)
+
 local sec_clippy  = dt.new_widget("section_label") { label = "📎 CLIPPY'S CORNER OF JUDGMENT" }
 local box_clippy  = dt.new_widget("box") {
     orientation = "vertical",
-    label_clippy_speech,
-    btn_clippy_roast,
 }
+if clippy_avatar then
+    table.insert(box_clippy, clippy_avatar)
+end
+table.insert(box_clippy, label_clippy_speech)
+table.insert(box_clippy, btn_clippy_roast)
 
 local sec_actions = dt.new_widget("section_label") { label = "ML ACTIONS & SETTINGS" }
 local sec_summary = dt.new_widget("section_label") { label = "OVERVIEW STATS" }
