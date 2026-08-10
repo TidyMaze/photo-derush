@@ -216,15 +216,20 @@ local function set_image_derush_score(img, score)
     end
 end
 
--- Panel Status Labels
-local label_stats_selected          = dt.new_widget("label") { label = "Photos in View: -" }
-local label_stats_manual            = dt.new_widget("label") { label = "Manual Labels: -" }
-local label_stats_manual_breakdown  = dt.new_widget("label") { label = "Manual Breakdown: -" }
-local label_stats_predictions       = dt.new_widget("label") { label = "Auto Predicted: -" }
-local label_stats_trained           = dt.new_widget("label") { label = "Training Dataset: -" }
-local label_stats_trained_breakdown = dt.new_widget("label") { label = "Training Breakdown: -" }
-local label_stats_score             = dt.new_widget("label") { label = "Model Accuracy: -" }
-local label_stats_scores_detail     = dt.new_widget("label") { label = "Average Score: -" }
+-- Table Cell Labels for Keep / Trash Breakdown Grid Table
+local label_tbl_manual_keep  = dt.new_widget("label") { label = "-" }
+local label_tbl_manual_trash = dt.new_widget("label") { label = "-" }
+
+local label_tbl_train_keep   = dt.new_widget("label") { label = "-" }
+local label_tbl_train_trash  = dt.new_widget("label") { label = "-" }
+
+local label_tbl_pred_keep    = dt.new_widget("label") { label = "-" }
+local label_tbl_pred_trash   = dt.new_widget("label") { label = "-" }
+
+-- Overview Status Labels
+local label_stats_selected   = dt.new_widget("label") { label = "Photos in View: -" }
+local label_stats_score      = dt.new_widget("label") { label = "Model Accuracy: -" }
+local label_stats_avg        = dt.new_widget("label") { label = "Average Score: -" }
 
 -- UI Panel Buttons
 local predict_btn = dt.new_widget("button") {
@@ -351,9 +356,10 @@ local predict_btn = dt.new_widget("button") {
 
             local avg_total = count > 0 and (sum_total / count) or 0
 
-            label_stats_selected.label      = string.format("Analysed: %d (%d matched)", count, matched_count)
-            label_stats_predictions.label   = string.format("Predicted: %d Keep / %d Trash", count_keep, count_trash)
-            label_stats_scores_detail.label = string.format("Average Score: %.2f", avg_total)
+            label_stats_selected.label = string.format("Photos in View: %d", count)
+            label_tbl_pred_keep.label  = tostring(count_keep)
+            label_tbl_pred_trash.label = tostring(count_trash)
+            label_stats_avg.label      = string.format("Average Score: %.2f", avg_total)
 
             log_debug(string.format("SCORING COMPLETE: Matched %d/%d. Keep: %d, Trash: %d, Avg Score: %.2f",
                 matched_count, count, count_keep, count_trash, avg_total))
@@ -393,7 +399,7 @@ local train_btn = dt.new_widget("button") {
                 return
             end
 
-            label_stats_selected.label = string.format("Selected Photos: %d", total_images)
+            label_stats_selected.label = string.format("Photos in View: %d", total_images)
 
             local job = nil
             pcall(function()
@@ -419,19 +425,15 @@ local train_btn = dt.new_widget("button") {
                 end
             end
 
+            label_tbl_manual_keep.label  = tostring(keep_count)
+            label_tbl_manual_trash.label = tostring(trash_count)
+
             if keep_count == 0 or trash_count == 0 then
                 if job then pcall(function() job.valid = false end) end
-                label_stats_manual.label           = string.format("Manual Labels: %d photos", keep_count + trash_count)
-                label_stats_manual_breakdown.label = string.format("Manual Breakdown: %d Keep / %d Trash", keep_count, trash_count)
-                label_stats_trained.label          = "Training: Failed (Insufficient Labels)"
-                label_stats_trained_breakdown.label= "Need >=1 Keep (Green/5⭐) & >=1 Trash (Red/1⭐)"
-                label_stats_score.label            = "Error: Insufficient Labels"
+                label_stats_score.label = "Error: Insufficient Labels"
                 dt.print(string.format("Derush Error: Need at least 1 Keep and 1 Trash label! Found: %d Keep, %d Trash.", keep_count, trash_count))
                 return
             end
-
-            label_stats_manual.label           = string.format("Manual Labels: %d photos", keep_count + trash_count)
-            label_stats_manual_breakdown.label = string.format("Manual Breakdown: %d Keep / %d Trash", keep_count, trash_count)
 
             dt.print(string.format("Derush: Extracting features & fitting CatBoost model (%d Keep + %d Trash)...", keep_count, trash_count))
 
@@ -465,15 +467,14 @@ local train_btn = dt.new_widget("button") {
                 or tonumber(result and result:match('"roc_auc":%s*([%d%.]+)'))
 
             if err_msg and not (cv_acc or n_samples) then
-                label_stats_trained.label = "Training: Failed"
-                label_stats_score.label   = "Error: " .. err_msg
+                label_stats_score.label = "Error: " .. err_msg
                 dt.print("Derush Error: " .. err_msg)
                 return
             end
 
             if n_samples and n_keep and n_trash then
-                label_stats_trained.label           = string.format("Training Dataset: %d JPGs", n_samples)
-                label_stats_trained_breakdown.label = string.format("Training Breakdown: %d Keep / %d Trash", n_keep, n_trash)
+                label_tbl_train_keep.label  = tostring(n_keep)
+                label_tbl_train_trash.label = tostring(n_trash)
             end
             if cv_acc then
                 label_stats_score.label = string.format("Model Accuracy: %.1f%%", cv_acc * 100)
@@ -514,10 +515,9 @@ update_panel_stats = function()
 
         local total_images = #images
         if total_images == 0 then
-            label_stats_selected.label         = "Photos in View: 0"
-            label_stats_manual.label           = "Manual Labels: 0 photos"
-            label_stats_manual_breakdown.label = "Manual Breakdown: 0 Keep / 0 Trash"
-            label_stats_predictions.label      = "Auto Predicted: 0 photos"
+            label_stats_selected.label   = "Photos in View: 0"
+            label_tbl_manual_keep.label  = "0"
+            label_tbl_manual_trash.label = "0"
             return
         end
 
@@ -545,11 +545,9 @@ update_panel_stats = function()
             end
         end
 
-        local manual_total = keep_count + trash_count
-        label_stats_selected.label         = string.format("Photos in View: %d", total_images)
-        label_stats_manual.label           = string.format("Manual Labels: %d photos", manual_total)
-        label_stats_manual_breakdown.label = string.format("Manual Breakdown: %d Keep / %d Trash", keep_count, trash_count)
-        label_stats_predictions.label      = string.format("Auto Predicted: %d photos", predicted_count)
+        label_stats_selected.label   = string.format("Photos in View: %d", total_images)
+        label_tbl_manual_keep.label  = tostring(keep_count)
+        label_tbl_manual_trash.label = tostring(trash_count)
     end)
 end
 
@@ -634,29 +632,51 @@ local map_stars_btn = dt.new_widget("button") {
     end
 }
 
-local sec_actions   = dt.new_widget("section_label") { label = "ML ACTIONS" }
-local sec_selection = dt.new_widget("section_label") { label = "COLLECTION SELECTION" }
-local sec_model     = dt.new_widget("section_label") { label = "MODEL & TRAINING" }
-local sec_scoring   = dt.new_widget("section_label") { label = "SCORING RESULTS" }
-
-local box_selection = dt.new_widget("box") {
+local sec_actions = dt.new_widget("section_label") { label = "ML ACTIONS" }
+local sec_summary = dt.new_widget("section_label") { label = "OVERVIEW STATS" }
+local box_summary = dt.new_widget("box") {
     orientation = "vertical",
     label_stats_selected,
-    label_stats_manual,
-    label_stats_manual_breakdown,
-}
-
-local box_model = dt.new_widget("box") {
-    orientation = "vertical",
     label_stats_score,
-    label_stats_trained,
-    label_stats_trained_breakdown,
+    label_stats_avg,
 }
 
-local box_scoring = dt.new_widget("box") {
+local sec_table = dt.new_widget("section_label") { label = "KEEP & TRASH DATA TABLE" }
+
+local row_hdr = dt.new_widget("box") {
+    orientation = "horizontal",
+    dt.new_widget("label") { label = "Category  " },
+    dt.new_widget("label") { label = "Keep  " },
+    dt.new_widget("label") { label = "Trash" },
+}
+
+local row_manual = dt.new_widget("box") {
+    orientation = "horizontal",
+    dt.new_widget("label") { label = "Manual:   " },
+    label_tbl_manual_keep,
+    label_tbl_manual_trash,
+}
+
+local row_train = dt.new_widget("box") {
+    orientation = "horizontal",
+    dt.new_widget("label") { label = "Trained:  " },
+    label_tbl_train_keep,
+    label_tbl_train_trash,
+}
+
+local row_pred = dt.new_widget("box") {
+    orientation = "horizontal",
+    dt.new_widget("label") { label = "Predicted:" },
+    label_tbl_pred_keep,
+    label_tbl_pred_trash,
+}
+
+local box_table = dt.new_widget("box") {
     orientation = "vertical",
-    label_stats_predictions,
-    label_stats_scores_detail,
+    row_hdr,
+    row_manual,
+    row_train,
+    row_pred,
 }
 
 local widget_box = dt.new_widget("box") {
@@ -665,12 +685,10 @@ local widget_box = dt.new_widget("box") {
     predict_btn,
     train_btn,
     map_stars_btn,
-    sec_selection,
-    box_selection,
-    sec_model,
-    box_model,
-    sec_scoring,
-    box_scoring,
+    sec_summary,
+    box_summary,
+    sec_table,
+    box_table,
 }
 
 dt.register_lib("derush_panel", "Photo-Derush", true, false, {
