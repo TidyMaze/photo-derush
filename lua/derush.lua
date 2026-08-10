@@ -183,30 +183,37 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
     return result
 end
 
--- Function to attach Derush ML Score to image metadata in Darktable
+-- Cache for created tag handles to prevent redundant SQLite queries
+local created_tags_cache = {}
+
+-- Function to attach Derush ML Score tag to image in Darktable (optimized for speed)
 local function set_image_derush_score(img, score)
-    -- Remove previous derush score tags if re-predicting
+    local tag_name = string.format("derush|score_%0.2f", score)
+
+    -- 1. Reuse cached tag handle or create once
+    local score_tag = created_tags_cache[tag_name]
+    if not score_tag then
+        score_tag = dt.tags.create(tag_name)
+        created_tags_cache[tag_name] = score_tag
+    end
+
+    -- 2. Detach outdated score tags if present
     local existing_tags = dt.tags.get_tags(img)
+    local already_attached = false
     if existing_tags then
         for _, t in ipairs(existing_tags) do
-            if t.name:find("^derush|score_") or t.name == "derush|predicted" then
+            if t.name == tag_name then
+                already_attached = true
+            elseif t.name:find("^derush|score_") then
                 dt.tags.detach(t, img)
             end
         end
     end
 
-    -- 1. Attach new standard Darktable Score Tag
-    local tag_name = string.format("derush|score_%0.2f", score)
-    local score_tag = dt.tags.create(tag_name)
-    dt.tags.attach(score_tag, img)
-
-    -- 2. Set Title & Description for Image Information panel
-    pcall(function()
-        img.description = string.format("Derush Score: %0.2f", score)
-    end)
-    pcall(function()
-        img.title = string.format("Derush Score %0.2f", score)
-    end)
+    -- 3. Attach score tag if not already attached
+    if not already_attached and score_tag then
+        dt.tags.attach(score_tag, img)
+    end
 end
 
 -- Panel Status Labels
