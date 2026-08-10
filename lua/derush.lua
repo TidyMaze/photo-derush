@@ -121,6 +121,68 @@ local function log_debug(msg)
     end
 end
 
+local function format_human_readable_log(cmd_name, raw_output)
+    if not raw_output or raw_output == "" then
+        return "OUTPUT: (empty)"
+    end
+
+    local status = raw_output:match('"status":%s*"([^"]+)"')
+    local total_images = raw_output:match('"total_images":%s*(%d+)')
+    local threshold = raw_output:match('"threshold":%s*([%d%.]+)')
+
+    if not status and not total_images then
+        return "OUTPUT:\n" .. raw_output
+    end
+
+    local lines = {}
+    table.insert(lines, string.format("OUTPUT SUMMARY (%s):", tostring(cmd_name):upper()))
+    table.insert(lines, string.format("  Status: %s", status or "success"))
+    if total_images then
+        table.insert(lines, string.format("  Total Photos: %s", total_images))
+    end
+    if threshold then
+        local thresh_num = tonumber(threshold) or 0.5
+        table.insert(lines, string.format("  Keep Decision Threshold: %.1f%%", thresh_num * 100))
+    end
+
+    local burst_map = {}
+    for fn, b_id, is_b_best, p_score in raw_output:gmatch('"([^"]+)":%s*%{[^%}]*"burst_id":%s*(%d+)[^%}]*"is_burst_best":%s*(true|false)[^%}]*"pick_score":%s*([%d%.]+)') do
+        local b_num = tonumber(b_id)
+        local score = (tonumber(p_score) or 0) * 100
+        if not burst_map[b_num] then burst_map[b_num] = {} end
+        table.insert(burst_map[b_num], { fn = fn, score = score, is_best = (is_b_best == "true") })
+    end
+
+    local multi_groups = {}
+    for b_num, cluster in pairs(burst_map) do
+        if #cluster > 1 then
+            table.insert(multi_groups, { bid = b_num, cluster = cluster })
+        end
+    end
+    table.sort(multi_groups, function(a, b) return a.bid < b.bid end)
+
+    if #multi_groups > 0 then
+        table.insert(lines, string.format("  Multi-Photo Burst Groups Found: %d", #multi_groups))
+        for idx, item in ipairs(multi_groups) do
+            local leader_fn = "unknown"
+            local item_strs = {}
+            for _, photo in ipairs(item.cluster) do
+                table.insert(item_strs, string.format("%s (%.1f%%)", photo.fn, photo.score))
+                if photo.is_best then
+                    leader_fn = photo.fn
+                end
+            end
+            if leader_fn == "unknown" and #item.cluster > 0 then
+                leader_fn = item.cluster[1].fn
+            end
+            table.insert(lines, string.format("    • Group #%d (burst_id=%d, %d photos, Leader: %s): %s",
+                idx, item.bid, #item.cluster, leader_fn, table.concat(item_strs, ", ")))
+        end
+    end
+
+    return table.concat(lines, "\n")
+end
+
 local function run_derush_command(cmd_name, folder_path, labels_json, files_json)
     local is_windows = (package.config:sub(1, 1) == "\\")
 
@@ -180,7 +242,7 @@ local function run_derush_command(cmd_name, folder_path, labels_json, files_json
     local result = handle:read("*a")
     handle:close()
 
-    log_debug("OUTPUT:\n" .. tostring(result))
+    log_debug(format_human_readable_log(cmd_name, result))
 
     return result
 end
