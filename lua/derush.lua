@@ -699,10 +699,10 @@ local map_stars_btn = dt.new_widget("button") {
     end
 }
 
--- Clippy Sarcastic Negative Feedback Roast Generator
+-- MaxClippy Sarcastic Negative Feedback Roast Generator
 math.randomseed(os.time())
 
-local clippy_roasts = {
+local maxclippy_roasts = {
     "Your picture is trash / worst photo ever.",
     "It looks like you're trying to take a photo. Have you tried turning the lens cap off?",
     "Did you take this with a potato or a toaster?",
@@ -720,61 +720,61 @@ local clippy_roasts = {
 }
 
 local function get_random_roast()
-    local idx = math.random(1, #clippy_roasts)
-    return clippy_roasts[idx]
+    local idx = math.random(1, #maxclippy_roasts)
+    return maxclippy_roasts[idx]
 end
 
--- Clippy Speech Label Widget
-local label_clippy_speech = dt.new_widget("label") {
+-- MaxClippy Speech Label Widget
+local label_maxclippy_speech = dt.new_widget("label") {
     label = "💬 \"Your picture is trash / worst photo ever.\"",
 }
 
-local btn_clippy_roast = dt.new_widget("button") {
-    label = "💬 New Clippy Roast",
-    tooltip = "Get a random sarcastic Clippy review of your current photo",
+local btn_maxclippy_roast = dt.new_widget("button") {
+    label = "💬 New MaxClippy Roast",
+    tooltip = "Get a random sarcastic MaxClippy review of your current photo",
     clicked_callback = function(widget)
         pcall(function()
             local r = get_random_roast()
-            label_clippy_speech.label = "💬 \"" .. r .. "\""
+            label_maxclippy_speech.label = "💬 \"" .. r .. "\""
         end)
     end
 }
 
--- Auto-update Clippy roast on selection change
+-- Auto-update MaxClippy roast on selection change
 pcall(function()
-    dt.register_event("clippy_event_sel", "selection-changed", function()
+    dt.register_event("maxclippy_event_sel", "selection-changed", function()
         pcall(function()
             local r = get_random_roast()
-            label_clippy_speech.label = "💬 \"" .. r .. "\""
+            label_maxclippy_speech.label = "💬 \"" .. r .. "\""
         end)
     end)
 end)
 
-local clippy_avatar = nil
+local maxclippy_avatar = nil
 pcall(function()
     local img_path = (dt.configuration.config_dir .. "/lua/derush/clippy.png"):gsub("\\", "/")
-    clippy_avatar = dt.new_widget("button") {
+    maxclippy_avatar = dt.new_widget("button") {
         image = img_path,
-        label = " 📎 Clippy Avatar ",
-        tooltip = "Click Clippy to get a random sarcastic roast!",
+        label = " 📎 MaxClippy Avatar ",
+        tooltip = "Click MaxClippy to get a random sarcastic roast!",
         clicked_callback = function(widget)
             pcall(function()
                 local r = get_random_roast()
-                label_clippy_speech.label = "💬 \"" .. r .. "\""
+                label_maxclippy_speech.label = "💬 \"" .. r .. "\""
             end)
         end
     }
 end)
 
-local sec_clippy  = dt.new_widget("section_label") { label = "📎 CLIPPY'S CORNER OF JUDGMENT" }
-local box_clippy  = dt.new_widget("box") {
+local sec_maxclippy  = dt.new_widget("section_label") { label = "📎 MAXCLIPPY'S CORNER OF JUDGMENT" }
+local box_maxclippy  = dt.new_widget("box") {
     orientation = "vertical",
 }
-if clippy_avatar then
-    table.insert(box_clippy, clippy_avatar)
+if maxclippy_avatar then
+    table.insert(box_maxclippy, maxclippy_avatar)
 end
-table.insert(box_clippy, label_clippy_speech)
-table.insert(box_clippy, btn_clippy_roast)
+table.insert(box_maxclippy, label_maxclippy_speech)
+table.insert(box_maxclippy, btn_maxclippy_roast)
 
 local sec_actions = dt.new_widget("section_label") { label = "ML ACTIONS & SETTINGS" }
 local sec_summary = dt.new_widget("section_label") { label = "OVERVIEW STATS" }
@@ -826,8 +826,8 @@ local box_table = dt.new_widget("box") {
 
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
-    sec_clippy,
-    box_clippy,
+    sec_maxclippy,
+    box_maxclippy,
     sec_actions,
     target_ratio_cmb,
     predict_btn,
