@@ -294,13 +294,16 @@ local predict_btn = dt.new_widget("button") {
             for i, img in ipairs(images) do
                 local fn = img.filename or ""
                 local pth = img.path or ""
+                local fn_stem = fn:match("^(.+)%..+$") or fn
+
                 local score = predictions[fn]
                     or predictions[fn:lower()]
+                    or predictions[fn_stem]
+                    or predictions[fn_stem:lower()]
                     or predictions[pth]
                     or predictions[pth:lower()]
 
                 if not score then
-                    local fn_stem = fn:match("^(.+)%..+$") or fn
                     for k, v in pairs(predictions) do
                         local k_stem = k:match("^(.+)%..+$") or k
                         if k_stem:lower() == fn_stem:lower() then
