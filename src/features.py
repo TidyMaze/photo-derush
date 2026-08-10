@@ -402,20 +402,13 @@ def _preprocess_image(path: str) -> ImagePreprocessResult | None:
         if open_time > 0.5:
             logging.info(f"[features] SLOW image open for {basename}: {open_time:.2f}s")
         
-        # Downsample very large images early to speed up all subsequent operations
-        # For images > 0.5MP, downsample to ~0.5MP (very aggressive for speed)
-        # Use thumbnail() for very large images (faster than resize), LANCZOS otherwise
-        max_pixels_prep = 512 * 1024  # 0.5MP - very aggressive downsampling for speed
+        # Downsample very large images early to speed up operations while preserving micro-sharpness
+        max_pixels_prep = 1024 * 1024  # 1.0MP - preserves fine edge and sharpness details
         if w_orig * h_orig > max_pixels_prep:
             scale = np.sqrt(max_pixels_prep / (w_orig * h_orig))
             w, h = int(w_orig * scale), int(h_orig * scale)
-            # Use thumbnail() for very large images (>4MP) - it's faster and modifies in-place
-            if w_orig * h_orig > 4 * 1024 * 1024:
-                img_original.thumbnail((w, h), Image.Resampling.NEAREST)
-                w, h = img_original.size  # thumbnail may adjust aspect ratio
-            else:
-                img_original = img_original.resize((w, h), Image.Resampling.LANCZOS)
-            logging.debug(f"[features] Downsampled {basename} from {w_orig}x{h_orig} to {w}x{h} for faster processing")
+            img_original = img_original.resize((w, h), Image.Resampling.LANCZOS)
+            logging.debug(f"[features] Downsampled {basename} from {w_orig}x{h_orig} to {w}x{h} with LANCZOS")
         else:
             w, h = w_orig, h_orig
         
@@ -920,11 +913,10 @@ def _do_feature_extraction(prep: ImagePreprocessResult, path: str) -> list[float
     shadow_clip = float(np.sum(prep.gray_arr <= 5) / prep.gray_arr.size * 100)
     clip_time = time.perf_counter() - clip_start
 
-    # Sharpness: Fixed - use padding instead of roll to avoid boundary wraparound artifacts
+    # Sharpness: Standard 4-neighbor 2D Laplacian operator
     h, w = prep.gray_arr.shape
     p = np.pad(prep.gray_arr, 1, mode="edge").astype(np.float32)
-    # Ensure all slices have same shape (h, w)
-    laplacian = p[0:h, 0:w] + p[0:h, 2:w+2] + p[2:h+2, 0:w] + p[2:h+2, 2:w+2] - 4 * p[1:h+1, 1:w+1]
+    laplacian = (p[0:h, 1:w+1] + p[2:h+2, 1:w+1] + p[1:h+1, 0:w] + p[1:h+1, 2:w+2]) - 4 * p[1:h+1, 1:w+1]
     sharpness = float(laplacian.var())
 
     # Noise Level: high-frequency component via gaussian blur

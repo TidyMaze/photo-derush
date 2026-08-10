@@ -397,6 +397,30 @@ def compute_grouping_for_photos(
         progress_reporter.update(7, 8)
         progress_reporter.detail("Computing pick scores...")
     logging.info("[grouping_service] Step 7/8: Computing pick scores...")
+
+    if quality_metrics is None:
+        quality_metrics = {}
+        try:
+            import glob
+            from src.features import extract_features
+            for photo in photos:
+                pth = photo.path
+                if not pth or not os.path.exists(pth):
+                    if image_dir:
+                        candidates = glob.glob(os.path.join(image_dir, "**", photo.filename), recursive=True)
+                        if candidates:
+                            pth = candidates[0]
+                if pth and os.path.exists(pth):
+                    feats = extract_features(pth)
+                    if feats and len(feats) > 36:
+                        quality_metrics[photo.filename] = {
+                            "sharpness": float(feats[36]),
+                            "noise_level": float(feats[43]) if len(feats) > 43 else 0.0,
+                            "motion_blur": float(feats[71]) if len(feats) > 71 else 0.0,
+                        }
+        except Exception as e:
+            logging.warning(f"[grouping_service] Could not extract quality_metrics: {e}")
+
     pick_scores: list[float] = []
     timestamps: list[datetime] = []
 

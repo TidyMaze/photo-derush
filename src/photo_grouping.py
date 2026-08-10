@@ -374,23 +374,26 @@ def compute_pick_score(
     motion_blur: float | None = None,
     weights: dict[str, float] | None = None,
 ) -> float:
-    """Compute pick_score for best-pick recommendation.
+    """Compute pick_score for best-pick recommendation inside burst clusters.
 
-    Uses the keep/trash score directly (no heuristic).
-
-    Args:
-        global_keep_score: Model's keep probability (0-1)
-        sharpness: Unused (kept for API compatibility)
-        exposure_quality: Unused (kept for API compatibility)
-        noise_level: Unused (kept for API compatibility)
-        face_quality: Unused (kept for API compatibility)
-        motion_blur: Unused (kept for API compatibility)
-        weights: Unused (kept for API compatibility)
-
-    Returns:
-        Pick score (same as global_keep_score, higher = better candidate for best pick)
+    Combines ML keep probability with image quality metrics (sharpness, blur, exposure).
     """
-    return float(global_keep_score)
+    import numpy as np
+
+    score = float(global_keep_score)
+
+    if sharpness is not None and sharpness > 0:
+        s_val = float(sharpness)
+        # Logarithmic edge sharpness bonus (e.g. 39.7 vs 12.9) rewarding sharp frames and penalizing blurry frames
+        sharp_bonus = float((np.log1p(s_val) - 2.5) * 0.12)
+        sharp_bonus = float(np.clip(sharp_bonus, -0.30, 0.30))
+        score += sharp_bonus
+
+    if motion_blur is not None and motion_blur > 0:
+        blur_penalty = float(motion_blur * -0.05)
+        score += blur_penalty
+
+    return float(np.clip(score, 0.0, 1.0))
 
 
 def recommend_best_pick(

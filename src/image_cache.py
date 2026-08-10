@@ -132,6 +132,42 @@ def get_cached_image(path: str):
         yield None
         return
     path = resolve_missing_path(path)
+    ext = os.path.splitext(path)[1].lower()
+
+    # For RAW files (.ARW, .CR2, .NEF, etc.): try extracting largest embedded JPEG preview first
+    if ext in RAW_EXTS:
+        try:
+            import io
+            with open(path, "rb") as f:
+                data = f.read()
+
+            largest_img = None
+            largest_area = 0
+            pos = 0
+            while True:
+                idx = data.find(b"\xff\xd8\xff", pos)
+                if idx == -1:
+                    break
+                end_idx = data.find(b"\xff\xd9", idx)
+                if end_idx != -1:
+                    try:
+                        candidate = Image.open(io.BytesIO(data[idx : end_idx + 2]))
+                        area = candidate.size[0] * candidate.size[1]
+                        if area > largest_area:
+                            largest_area = area
+                            largest_img = candidate
+                    except Exception:
+                        pass
+                    pos = end_idx + 2
+                else:
+                    break
+
+            if largest_img is not None:
+                yield largest_img
+                return
+        except Exception as ex:
+            logger.debug(f"RAW embedded preview extraction notice for {path}: {ex}")
+
     paired_jpg = find_paired_jpg(path)
     actual_path = paired_jpg if paired_jpg else path
     img = None
