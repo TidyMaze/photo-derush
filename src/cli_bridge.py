@@ -6,6 +6,7 @@ Provides JSON-RPC style interface to expose photo-derush ML, grouping, and featu
 
 import argparse
 import json
+import logging
 import os
 import sys
 import warnings
@@ -17,6 +18,21 @@ warnings.filterwarnings("ignore", category=UserWarning)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+# Configure log file in Darktable AppData folder
+DARKTABLE_DIR = os.path.join(os.getenv("LOCALAPPDATA", os.path.expanduser("~")), "darktable")
+os.makedirs(DARKTABLE_DIR, exist_ok=True)
+PYTHON_LOG_PATH = os.path.join(DARKTABLE_DIR, "derush_python.log")
+
+file_handler = logging.FileHandler(PYTHON_LOG_PATH, mode="a", encoding="utf-8")
+file_handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
+
+stderr_handler = logging.StreamHandler(sys.stderr)
+stderr_handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.handlers = [file_handler, stderr_handler]
 
 from src.features import extract_features
 from src.grouping_service import compute_grouping_for_photos
@@ -260,6 +276,7 @@ def main():
     train_parser.add_argument("--files-file", required=False, help="Path to JSON file containing list of image paths")
 
     args = parser.parse_args()
+    logging.info(f"=== CLI BRIDGE COMMAND: {args.command} | PID: {os.getpid()} ===")
 
     # Resolve directory from file if --directory-file is provided
     directory_file = getattr(args, "directory_file", None)
