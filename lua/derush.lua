@@ -1021,6 +1021,32 @@ local box_table = dt.new_widget("box") {
     row_pred,
 }
 
+local btn_reload_xmp = dt.new_widget("button") {
+    label = "🔄 Reload XMP Sidecars from Disk",
+    tooltip = "Reload clean XMP sidecars from disk into Darktable for selected/collection photos",
+    clicked_callback = function(widget)
+        pcall(function()
+            local images, src_mode = get_target_images()
+            if #images == 0 then
+                dt.print("Derush Error: No images found to reload")
+                return
+            end
+            local count = 0
+            for _, img in ipairs(images) do
+                pcall(function()
+                    if img.read_xmp then
+                        img:read_xmp()
+                    end
+                end)
+                count = count + 1
+            end
+            pcall(function() dt.gui.action("lib/selected_images/read_xmp", {}, "on") end)
+            dt.print(string.format("Derush: Reloaded XMP sidecars for %d photos (%s)!", count, src_mode))
+            refresh_darktable_lighttable_view()
+        end)
+    end
+}
+
 local widget_box = dt.new_widget("box") {
     orientation = "vertical",
     sec_actions,
@@ -1031,6 +1057,7 @@ local widget_box = dt.new_widget("box") {
     btn_group_bursts,
     train_btn,
     map_stars_btn,
+    btn_reload_xmp,
     sec_summary,
     box_summary,
     sec_table,
