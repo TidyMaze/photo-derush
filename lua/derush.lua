@@ -334,16 +334,20 @@ end
 -- Cache for created tag handles to prevent redundant SQLite queries
 local created_tags_cache = {}
 
--- Function to attach Derush ML Score tag, Title/Description metadata, and Keep/Trash classification tag in Darktable
-local function set_image_derush_score(img, score, is_keep)
+-- Function to attach Derush ML Score tag, Group Pick Score tag, Title/Description metadata, and Keep/Trash classification tag in Darktable
+local function set_image_derush_score(img, score, pick_score, is_keep, is_leader)
+    local effective_pick = pick_score or score
     local score_tag_name = string.format("derush|score_%0.2f", score)
+    local pick_tag_name  = string.format("derush|pick_%0.2f", effective_pick)
     local class_tag_name = is_keep and "derush|keep" or "derush|trash"
+    local leader_str = is_leader and " 🏆 [LEADER]" or ""
 
-    -- 1. Synchronize Darktable Title and Description metadata with exact score and status
+    -- 1. Synchronize Darktable Title and Description metadata with exact scores and status
     pcall(function()
         local status_str = is_keep and "KEEP" or "TRASH"
-        img.title = string.format("Derush: %s (%d%%)", status_str, math.floor(score * 100 + 0.5))
-        img.description = string.format("Derush Score: %0.4f | Status: %s", score, status_str)
+        img.title = string.format("Derush: %s (%d%%)%s", status_str, math.floor(effective_pick * 100 + 0.5), leader_str)
+        img.description = string.format("Derush ML Score: %0.4f | Group Pick Score: %0.4f%s | Status: %s", 
+            score, effective_pick, leader_str, status_str)
     end)
 
     -- 2. Reuse cached tag handles or create once
@@ -353,21 +357,35 @@ local function set_image_derush_score(img, score, is_keep)
         created_tags_cache[score_tag_name] = score_tag
     end
 
+    local pick_tag = created_tags_cache[pick_tag_name]
+    if not pick_tag then
+        pick_tag = dt.tags.create(pick_tag_name)
+        created_tags_cache[pick_tag_name] = pick_tag
+    end
+
     local class_tag = created_tags_cache[class_tag_name]
     if not class_tag then
         class_tag = dt.tags.create(class_tag_name)
         created_tags_cache[class_tag_name] = class_tag
     end
 
-    -- 3. Detach outdated score & classification tags if present
+    -- 3. Detach outdated score, pick & classification tags if present
     local existing_tags = dt.tags.get_tags(img)
     local score_already_attached = false
+    local pick_already_attached = false
     local class_already_attached = false
+
     if existing_tags then
         for _, t in ipairs(existing_tags) do
             if t.name == score_tag_name then
                 score_already_attached = true
             elseif t.name:find("^derush|score_") then
+                dt.tags.detach(t, img)
+            end
+
+            if t.name == pick_tag_name then
+                pick_already_attached = true
+            elseif t.name:find("^derush|pick_") then
                 dt.tags.detach(t, img)
             end
 
@@ -379,9 +397,12 @@ local function set_image_derush_score(img, score, is_keep)
         end
     end
 
-    -- 4. Attach tags if not already attached (No color labels assigned to keep manual labels clean)
+    -- 4. Attach tags if not already attached
     if not score_already_attached and score_tag then
         dt.tags.attach(score_tag, img)
+    end
+    if not pick_already_attached and pick_tag then
+        dt.tags.attach(pick_tag, img)
     end
     if not class_already_attached and class_tag then
         dt.tags.attach(class_tag, img)
@@ -496,6 +517,31 @@ local predict_btn = dt.new_widget("button") {
                 end
             end
 
+            local pick_scores = {}
+            local is_leader_map = {}
+            local groups_block = raw_json:match('"groups":%s*{(.*)}')
+            if groups_block then
+                for fn, details in groups_block:gmatch('"([^"]+)":%s*%{([^%}]+)%}') do
+                    local p_score = details:match('"pick_score":%s*([%d%.]+)')
+                    local is_b_best = details:match('"is_burst_best":%s*(%a+)')
+                    local stem = fn:match("^(.-)%.[^%.]+$") or fn
+                    if p_score then
+                        local val = tonumber(p_score)
+                        pick_scores[fn] = val
+                        pick_scores[fn:lower()] = val
+                        pick_scores[stem] = val
+                        pick_scores[stem:lower()] = val
+                    end
+                    if is_b_best then
+                        local b_best = (is_b_best == "true")
+                        is_leader_map[fn] = b_best
+                        is_leader_map[fn:lower()] = b_best
+                        is_leader_map[stem] = b_best
+                        is_leader_map[stem:lower()] = b_best
+                    end
+                end
+            end
+
             local threshold = tonumber(raw_json:match('"threshold":%s*([%d%.]+)')) or 0.50
 
             local matched_count = 0
@@ -562,18 +608,25 @@ local predict_btn = dt.new_widget("button") {
             for _, item in ipairs(image_scores) do
                 local img = item.img
                 local score = item.score
-                local is_keep = (score >= effective_threshold)
+                local fn = img.filename or ""
+                local stem = fn:match("^(.-)%.[^%.]+$") or fn
+
+                local pick_score = pick_scores[fn] or pick_scores[fn:lower()] or pick_scores[stem] or pick_scores[stem:lower()] or score
+                local is_leader = is_leader_map[fn] or is_leader_map[fn:lower()] or is_leader_map[stem] or is_leader_map[stem:lower()] or false
+
+                local effective_score = pick_score
+                local is_keep = (effective_score >= effective_threshold)
 
                 if is_keep then
                     count_keep = count_keep + 1
-                    sum_keep = sum_keep + score
+                    sum_keep = sum_keep + effective_score
                 else
                     count_trash = count_trash + 1
-                    sum_trash = sum_trash + score
+                    sum_trash = sum_trash + effective_score
                 end
-                sum_total = sum_total + score
+                sum_total = sum_total + effective_score
 
-                set_image_derush_score(img, score, is_keep)
+                set_image_derush_score(img, score, pick_score, is_keep, is_leader)
 
                 count = count + 1
                 if count % 100 == 0 or count == total_count then
