@@ -989,6 +989,14 @@ local btn_group_bursts = dt.new_widget("button") {
                         end
                         if not best_img then best_img = cluster[1] end
 
+                        -- 1. Detach/ungroup best_img so it establishes a new independent group leader
+                        pcall(function()
+                            if best_img.ungroup then
+                                best_img:ungroup()
+                            end
+                        end)
+
+                        -- 2. Group all cluster members (and RAW/JPG pairs) into best_img stack
                         for _, img in ipairs(cluster) do
                             local members = nil
                             pcall(function() members = img:get_group_members() end)
