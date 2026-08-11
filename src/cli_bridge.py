@@ -185,6 +185,10 @@ def cmd_predict(args_or_dir, labels_file=None, files_json=None, burst_limit=Fals
         propagated_groups[fn.lower()] = g_data
         propagated_groups[stem] = g_data
         propagated_groups[stem.lower()] = g_data
+        propagated_groups[f"{stem}.ARW"] = g_data
+        propagated_groups[f"{stem}.arw"] = g_data
+        propagated_groups[f"{stem}.JPG"] = g_data
+        propagated_groups[f"{stem}.jpg"] = g_data
 
         path = model.get_image_path(fn)
         if path:

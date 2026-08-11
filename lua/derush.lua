@@ -984,13 +984,13 @@ local btn_group_bursts = dt.new_widget("button") {
                         for _, img in ipairs(cluster) do
                             local fn = img.filename or ""
                             local stem = fn:match("^(.-)%.[^%.]+$") or fn
-                            table.insert(photo_names, fn)
+                            local p_score = pick_scores[fn] or pick_scores[fn:lower()] or pick_scores[stem] or pick_scores[stem:lower()] or 0.0
+                            table.insert(photo_names, string.format("%s (Pick: %.1f%%)", fn, p_score * 100))
 
                             if is_burst_best_map[fn] or is_burst_best_map[fn:lower()] or is_burst_best_map[stem] or is_burst_best_map[stem:lower()] then
                                 best_img = img
                             end
 
-                            local p_score = pick_scores[fn] or pick_scores[fn:lower()] or pick_scores[stem] or pick_scores[stem:lower()] or 0.0
                             if p_score > max_pick and not best_img then
                                 max_pick = p_score
                                 best_img = img
