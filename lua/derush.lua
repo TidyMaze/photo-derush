@@ -937,17 +937,18 @@ local btn_group_bursts = dt.new_widget("button") {
                         if not best_img then best_img = cluster[1] end
 
                         for _, img in ipairs(cluster) do
-                            if img ~= best_img then
-                                local ok, err = pcall(function()
-                                    if img.group_with then
-                                        img:group_with(best_img)
-                                    elseif best_img.group_with then
-                                        best_img:group_with(img)
+                            local members = nil
+                            pcall(function() members = img:get_group_members() end)
+
+                            if members and #members > 0 then
+                                for _, member in ipairs(members) do
+                                    if member ~= best_img then
+                                        pcall(function() member:group_with(best_img) end)
                                     end
-                                end)
-                                if not ok then
-                                    log_debug(string.format("GROUP_WITH ERROR putting %s into %s group: %s",
-                                        tostring(img.filename), tostring(best_img.filename), tostring(err)))
+                                end
+                            else
+                                if img ~= best_img then
+                                    pcall(function() img:group_with(best_img) end)
                                 end
                             end
                         end
@@ -1021,6 +1022,43 @@ local box_table = dt.new_widget("box") {
     row_pred,
 }
 
+local btn_pair_raw_jpg = dt.new_widget("button") {
+    label = "🔗 Group RAW + JPEG Pairs",
+    tooltip = "Rejoin all separated RAW (.ARW) and JPEG (.JPG) file variants sharing the same filename stem into Darktable stacks",
+    clicked_callback = function(widget)
+        pcall(function()
+            local images, src_mode = get_target_images()
+            if #images == 0 then
+                dt.print("Derush Error: No images found to pair")
+                return
+            end
+
+            local stems = {}
+            for _, img in ipairs(images) do
+                local fn = img.filename or ""
+                local stem = fn:match("^(.-)%.[^%.]+$") or fn
+                if not stems[stem] then stems[stem] = {} end
+                table.insert(stems[stem], img)
+            end
+
+            local paired_count = 0
+            for stem, pair_list in pairs(stems) do
+                if #pair_list > 1 then
+                    local primary = pair_list[1]
+                    for i = 2, #pair_list do
+                        local secondary = pair_list[i]
+                        pcall(function() secondary:group_with(primary) end)
+                    end
+                    paired_count = paired_count + 1
+                end
+            end
+
+            dt.print(string.format("Derush: Rejoined %d RAW + JPEG pairs into Darktable stacks (%s)!", paired_count, src_mode))
+            refresh_darktable_lighttable_view()
+        end)
+    end
+}
+
 local btn_reload_xmp = dt.new_widget("button") {
     label = "🔄 Reload XMP Sidecars from Disk",
     tooltip = "Reload clean XMP sidecars from disk into Darktable for selected/collection photos",
@@ -1055,6 +1093,7 @@ local widget_box = dt.new_widget("box") {
     chk_burst_limit,
     predict_btn,
     btn_group_bursts,
+    btn_pair_raw_jpg,
     train_btn,
     map_stars_btn,
     btn_reload_xmp,
