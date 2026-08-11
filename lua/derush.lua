@@ -930,20 +930,21 @@ local btn_group_bursts = dt.new_widget("button") {
                 if groups_block then
                     for fn, details in groups_block:gmatch('"([^"]+)":%s*%{([^%}]+)%}') do
                         local b_id = details:match('"burst_id":%s*(%d+)')
-                        local is_b_best = details:match('"is_burst_best":%s*(%a+)')
-                        if b_id and is_b_best then
+                        local is_b_best = details:match('"is_burst_best":%s*(true)')
+                        if b_id then
                             local b_num = tonumber(b_id)
-                            local b_best = (is_b_best == "true")
                             local stem = fn:match("^(.-)%.[^%.]+$") or fn
                             burst_id_map[fn] = b_num
                             burst_id_map[fn:lower()] = b_num
                             burst_id_map[stem] = b_num
                             burst_id_map[stem:lower()] = b_num
 
-                            is_burst_best_map[fn] = b_best
-                            is_burst_best_map[fn:lower()] = b_best
-                            is_burst_best_map[stem] = b_best
-                            is_burst_best_map[stem:lower()] = b_best
+                            if is_b_best then
+                                is_burst_best_map[fn] = true
+                                is_burst_best_map[fn:lower()] = true
+                                is_burst_best_map[stem] = true
+                                is_burst_best_map[stem:lower()] = true
+                            end
                         end
                     end
                 end
@@ -978,12 +979,20 @@ local btn_group_bursts = dt.new_widget("button") {
                         local bid = item.bid
                         local cluster = item.cluster
                         local best_img = nil
+                        local max_pick = -1.0
                         local photo_names = {}
                         for _, img in ipairs(cluster) do
                             local fn = img.filename or ""
                             local stem = fn:match("^(.-)%.[^%.]+$") or fn
                             table.insert(photo_names, fn)
+
                             if is_burst_best_map[fn] or is_burst_best_map[fn:lower()] or is_burst_best_map[stem] or is_burst_best_map[stem:lower()] then
+                                best_img = img
+                            end
+
+                            local p_score = pick_scores[fn] or pick_scores[fn:lower()] or pick_scores[stem] or pick_scores[stem:lower()] or 0.0
+                            if p_score > max_pick and not best_img then
+                                max_pick = p_score
                                 best_img = img
                             end
                         end
