@@ -112,6 +112,7 @@ class PhotoViewModel(QObject):
         self._cmd_stack = CommandStack()
         self._filter_ctrl = FilterController()
         self._filtered_images = []
+        self._filtered_images_initialized = False
         # Initialize AutoLabelManager with brain interface
         from .brain_interface import BrainAdapter, BrainCallbacks
 
@@ -819,6 +820,7 @@ class PhotoViewModel(QObject):
                     # else: No images left after filtering, new_selected_filename stays None
         
         self._filtered_images = filtered
+        self._filtered_images_initialized = True
         
         # Update selection if needed (after setting _filtered_images to avoid recursion)
         if selected_was_filtered and new_selected_filename:
@@ -867,11 +869,10 @@ class PhotoViewModel(QObject):
             self._emit_state_snapshot()
 
     def current_filtered_images(self):
-        """Get current filtered images list, ensuring it's always a list."""
-        if not hasattr(self, "_filtered_images"):
-            # Initialize if not set (shouldn't happen, but defensive)
-            self._filtered_images = []
-        return list(self._filtered_images) if self._filtered_images else []
+        """Get current filtered images list, or None if not initialized yet."""
+        if not getattr(self, "_filtered_images_initialized", False):
+            return None
+        return list(self._filtered_images) if self._filtered_images is not None else []
     
     def _ensure_selection(self):
         """Ensure at least one image is always selected. Selects first filtered image if none selected."""
@@ -880,9 +881,8 @@ class PhotoViewModel(QObject):
             return
         self._ensuring_selection = True
         try:
-            # Ensure _filtered_images is initialized
-            if not hasattr(self, "_filtered_images"):
-                self._filtered_images = []
+            if not getattr(self, "_filtered_images_initialized", False):
+                return
             if not self._filtered_images:
                 # No images available, clear selection
                 if self.selected_image:

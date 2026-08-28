@@ -1304,16 +1304,17 @@ class PhotoView(QMainWindow):
         cols_per_row = self._calculate_images_per_row()
 
         # Get filtered images from viewmodel BEFORE skip check to detect sort order changes
-        filtered_images = []
+        filtered_images = None
         if hasattr(self.viewmodel, 'current_filtered_images'):
-            filtered_images = list(self.viewmodel.current_filtered_images())
+            res = self.viewmodel.current_filtered_images()
+            filtered_images = list(res) if res is not None else None
 
         # Collect widgets that should be visible based on filtered_images
         # CRITICAL: Iterate filtered_images in order to preserve uncertainty-based sorting
         items = []
         seen_labels = set()  # Track labels to prevent duplicates
         label_to_first_filename = {}  # Track which filename each label was first seen under
-        if filtered_images:
+        if filtered_images is not None:
             # Use filtered_images to determine visibility AND order (preserves uncertainty sort)
             for f_name in filtered_images:
                 if f_name in self._all_widgets:
@@ -1326,7 +1327,7 @@ class PhotoView(QMainWindow):
                     label_to_first_filename[label] = f_name
                     items.append(label)
         else:
-            # Fallback: if no filtered_images, use ALL widgets (for initial display)
+            # Fallback: if filtered_images is None (initial display)
             # This ensures images are displayed even if filters haven't been applied yet
             # CRITICAL: Deduplicate - same label might be stored under multiple filenames (bug)
             label_to_first_filename = {}  # Track which filename each label was first seen under
